@@ -22,7 +22,7 @@ The original Memori project is "an open-source SQL-Native memory engine for AI t
 
 - **Port Author**: mrorigo
 - **AI Assistant**: Roo Code (code-supernova model)
-- **Repository**: [https://github.com/mrorigo/memori-port](https://github.com/mrorigo/memori-port)
+- **Repository**: [https://github.com/mrorigo/memorits](https://github.com/mrorigo/memorits)
 - **NPM Package**: [https://npmjs.com/package/memorits](https://npmjs.com/package/memorits)
 
 This TypeScript port maintains compatibility with the original Apache License 2.0 and preserves the core functionality and architecture of the original implementation while leveraging TypeScript's type safety and modern JavaScript ecosystem.
@@ -84,7 +84,7 @@ const memories = await memori.searchMemories('world', 5);
 
 ## API Reference
 
-See detailed API documentation in `docs/API.md` or visit the [project repository](https://github.com/mrorigo/memori-port).
+See detailed API documentation in `docs/API.md` or visit the [project repository](https://github.com/mrorigo/memorits).
 
 ## Development
 
