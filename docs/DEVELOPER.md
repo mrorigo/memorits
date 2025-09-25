@@ -92,17 +92,30 @@ class Memori {
   async recordConversation(
     userInput: string,
     aiOutput: string,
-    options?: {
-      model?: string;
-      metadata?: any;
-    }
+    options?: RecordConversationOptions
   ): Promise<string>
-  async searchMemories(query: string, limit?: number): Promise<any[]>
+  async searchMemories(query: string, options?: SearchOptions): Promise<MemorySearchResult[]>
   async close(): Promise<void>
   getSessionId(): string
   isEnabled(): boolean
 }
 ```
+
+#### Advanced Interface System
+
+Memorits now features a comprehensive interface system with **15+ clean interfaces**:
+
+- **Core Interfaces**: `MemorySearchResult`, `ConversationMetadata`, `RecordConversationOptions`
+- **Search Interfaces**: `SearchOptions` with filtering by importance, categories, and metadata
+- **Processing Interfaces**: `MemoryProcessingParams`, `MemoryProcessingResult`
+- **Configuration Interfaces**: `UserContext`, `MemoriConfig`, `LogContext`
+- **Provider Interfaces**: `LLMProviderConfig`, `EmbeddingResult`, `ConsciousMemory`
+
+**Benefits:**
+- **Self-documenting APIs** with clear method signatures
+- **Enhanced IDE support** with rich autocomplete
+- **Compile-time type safety** replacing runtime errors
+- **Better maintainability** with centralized type definitions
 
 #### Implementation Details
 
@@ -179,8 +192,36 @@ class DatabaseManager {
   async initializeSchema(): Promise<void>
   async storeChatHistory(data: ChatHistoryData): Promise<string>
   async storeLongTermMemory(memoryData: any, chatId: string, namespace: string): Promise<string>
-  async searchMemories(query: string, options: SearchOptions): Promise<any[]>
+  async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]>
   async close(): Promise<void>
+}
+```
+
+#### Enhanced Search Capabilities
+
+The `searchMemories` method now supports advanced filtering options:
+
+```typescript
+interface SearchOptions {
+  namespace?: string;                    // Memory namespace (default: 'default')
+  limit?: number;                       // Number of results (default: 5)
+  minImportance?: MemoryImportanceLevel; // Filter by importance level
+  categories?: MemoryClassification[];   // Filter by memory categories
+  includeMetadata?: boolean;            // Include additional metadata
+}
+
+interface MemorySearchResult {
+  id: string;
+  content: string;
+  summary: string;
+  classification: MemoryClassification;
+  importance: MemoryImportanceLevel;
+  topic?: string;
+  entities: string[];
+  keywords: string[];
+  confidenceScore: number;
+  classificationReason: string;
+  metadata?: Record<string, unknown>;
 }
 ```
 
@@ -388,39 +429,77 @@ async processConversation(params: ConversationParams): Promise<ProcessedLongTerm
 
 ### Type System Implementation
 
-#### Zod Schema Design
-```typescript
-export const ProcessedLongTermMemorySchema = z.object({
-  content: z.string(),
-  summary: z.string(),
-  classification: z.nativeEnum(MemoryClassification),
-  importance: z.nativeEnum(MemoryImportanceLevel),
-  topic: z.string().optional(),
-  entities: z.array(z.string()).default([]),
-  keywords: z.array(z.string()).default([]),
-  conversationId: z.string(),
-  confidenceScore: ConfidenceScore.default(0.8),
-  classificationReason: z.string(),
-  promotionEligible: z.boolean().default(false)
-});
-```
+#### Enhanced Interface Architecture
 
-#### Memory Classification Enums
+Memorits features a comprehensive type system with **three layers**:
+
+1. **Zod Schemas** (`src/core/types/schemas.ts`) - Runtime validation and TypeScript inference
+2. **Clean Interfaces** (`src/core/types/models.ts`) - Developer-friendly API contracts
+3. **Prisma Generated Types** - Database schema types
+
+#### Core Interface Definitions
+
+**Memory Classification System:**
 ```typescript
 export enum MemoryClassification {
-  ESSENTIAL = "essential",
-  CONTEXTUAL = "contextual",
-  CONVERSATIONAL = "conversational",
-  REFERENCE = "reference",
-  PERSONAL = "personal",
-  CONSCIOUS_INFO = "conscious-info"
+  ESSENTIAL = "essential",        // Critical information
+  CONTEXTUAL = "contextual",      // Supporting context
+  CONVERSATIONAL = "conversational", // General conversation
+  REFERENCE = "reference",        // Reference material
+  PERSONAL = "personal",          // Personal information
+  CONSCIOUS_INFO = "conscious-info" // Conscious context
 }
 
 export enum MemoryImportanceLevel {
-  CRITICAL = "critical",
-  HIGH = "high",
-  MEDIUM = "medium",
-  LOW = "low"
+  CRITICAL = "critical",  // 0.9 score - Must remember
+  HIGH = "high",          // 0.7 score - Important information
+  MEDIUM = "medium",      // 0.5 score - Useful information
+  LOW = "low"             // 0.3 score - Background information
+}
+```
+
+**Advanced Search Interface:**
+```typescript
+interface SearchOptions {
+  namespace?: string;                    // Memory namespace
+  limit?: number;                       // Number of results
+  minImportance?: MemoryImportanceLevel; // Filter by importance
+  categories?: MemoryClassification[];   // Filter by categories
+  includeMetadata?: boolean;            // Include additional data
+}
+
+interface MemorySearchResult {
+  id: string;
+  content: string;
+  summary: string;
+  classification: MemoryClassification;
+  importance: MemoryImportanceLevel;
+  topic?: string;
+  entities: string[];
+  keywords: string[];
+  confidenceScore: number;
+  classificationReason: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+#### Memory Processing Interfaces
+```typescript
+interface MemoryProcessingParams {
+  chatId: string;
+  userInput: string;
+  aiOutput: string;
+  context: ConversationContext;
+}
+
+interface ConversationContext {
+  conversationId: string;
+  sessionId: string;
+  modelUsed: string;
+  userPreferences: string[];
+  currentProjects: string[];
+  relevantSkills: string[];
+  userId?: string;
 }
 ```
 
@@ -772,45 +851,114 @@ MemoryImportanceLevel {
 ### Main Classes
 
 #### Memori
-Primary class for memory management operations.
+Primary class for memory management operations with enhanced interface support.
 
 **Constructor**:
 ```typescript
 constructor(config?: Partial<MemoriConfig>)
 ```
 
-**Methods**:
+**Core Methods**:
 - `enable(): Promise<void>` - Initialize database and enable memory processing
 - `recordConversation(userInput, aiOutput, options?): Promise<string>` - Record a conversation
-- `searchMemories(query, limit?): Promise<any[]>` - Search stored memories
+- `searchMemories(query, options?): Promise<MemorySearchResult[]>` - Search stored memories
 - `close(): Promise<void>` - Close database connections
 
+**Advanced Methods**:
+- `isConsciousModeEnabled(): boolean` - Check if conscious mode is active
+- `isAutoModeEnabled(): boolean` - Check if auto-ingestion mode is active
+- `checkForConsciousContextUpdates(): Promise<void>` - Update conscious context
+- `getBackgroundUpdateInterval(): number` - Get monitoring interval
+
 #### DatabaseManager
-Handles all database operations with type safety.
+Handles all database operations with advanced search capabilities.
 
 **Key Methods**:
 - `initializeSchema(): Promise<void>` - Set up database schema
 - `storeChatHistory(data): Promise<string>` - Store conversation data
 - `storeLongTermMemory(memory, chatId, namespace): Promise<string>` - Store processed memory
-- `searchMemories(query, options): Promise<any[]>` - Search memories
+- `searchMemories(query, options): Promise<MemorySearchResult[]>` - Advanced search with filtering
 - `close(): Promise<void>` - Close database connection
 
+**Enhanced Search Features**:
+- **Importance filtering** - Filter by memory importance levels
+- **Category filtering** - Filter by memory classification types
+- **Metadata inclusion** - Optional additional data in results
+- **Namespace isolation** - Multi-tenant memory separation
+
 #### MemoryAgent
-Processes conversational data using LLM analysis.
+Processes conversational data using LLM analysis with structured interfaces.
 
 **Key Methods**:
 - `processConversation(params): Promise<ProcessedLongTermMemory>` - Analyze conversation
 
+**Processing Features**:
+- **Structured parameter interfaces** - Clean, typed input parameters
+- **Enhanced context handling** - Rich conversation context
+- **Fallback processing** - Graceful error handling
+- **Confidence scoring** - Memory quality assessment
+
 ### Type Definitions
 
-#### MemoryClassification
-Enumeration of memory classification types.
+#### Comprehensive Interface System
 
-#### MemoryImportanceLevel
-Enumeration of memory importance levels.
+Memorits features a **three-layer type system**:
 
-#### ProcessedLongTermMemory
-Schema for processed memory data structure.
+1. **Zod Schemas** (`src/core/types/schemas.ts`) - Runtime validation and type inference
+2. **Clean Interfaces** (`src/core/types/models.ts`) - Developer-friendly API contracts
+3. **Generated Types** (Prisma) - Database schema types
+
+#### Core Interface Categories
+
+**API Interfaces:**
+- `MemorySearchResult` - Structured search results with full typing
+- `ConversationMetadata` - Rich conversation metadata
+- `RecordConversationOptions` - Conversation recording options
+
+**Search & Filtering Interfaces:**
+- `SearchOptions` - Advanced search with importance and category filtering
+- `DatabaseStats` - Database statistics and metrics
+
+**Processing Interfaces:**
+- `MemoryProcessingParams` - Structured memory processing parameters
+- `MemoryProcessingResult` - Processing results with status information
+
+**Configuration Interfaces:**
+- `UserContext` - User-specific context data
+- `MemoriConfig` - Main configuration with type safety
+- `LogContext` - Structured logging context
+- `LoggerConfig` - Logger configuration options
+
+#### Memory Classification Enums
+
+**MemoryClassification:**
+```typescript
+enum MemoryClassification {
+  ESSENTIAL = "essential",        // Critical information
+  CONTEXTUAL = "contextual",      // Supporting context
+  CONVERSATIONAL = "conversational", // General conversation
+  REFERENCE = "reference",        // Reference material
+  PERSONAL = "personal",          // Personal information
+  CONSCIOUS_INFO = "conscious-info" // Conscious context
+}
+```
+
+**MemoryImportanceLevel:**
+```typescript
+enum MemoryImportanceLevel {
+  CRITICAL = "critical",  // 0.9 score - Must remember
+  HIGH = "high",          // 0.7 score - Important information
+  MEDIUM = "medium",      // 0.5 score - Useful information
+  LOW = "low"             // 0.3 score - Background information
+}
+```
+
+#### Advanced Type Features
+
+- **Self-documenting APIs** - Interface names clearly indicate purpose
+- **Enhanced IDE support** - Rich autocomplete and IntelliSense
+- **Compile-time safety** - Type errors caught before runtime
+- **Consistent patterns** - Uniform interface design across components
 
 ### Error Handling
 

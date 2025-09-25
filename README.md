@@ -29,7 +29,9 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 
 ## Features
 
-- 100% type safety with TypeScript + Zod + Prisma
+- **100% type safety** with TypeScript + Zod + Prisma + Clean Interfaces
+- **Advanced API interfaces** with self-documenting method signatures
+- **Enhanced search capabilities** with filtering by importance and categories
 - OpenAI integration with automatic memory recording
 - SQLite database for easy testing and development
 - Structured memory processing with classification
@@ -78,8 +80,76 @@ const response = await openaiClient.chat.completions.create({
   messages: [{ role: 'user', content: 'Hello world!' }],
 });
 
-// Search memories
-const memories = await memori.searchMemories('world', 5);
+// Search memories with advanced options
+const memories = await memori.searchMemories('world', {
+  limit: 5,
+  minImportance: 'high',
+  categories: ['essential', 'contextual']
+});
+
+// Search with basic options
+const basicSearch = await memori.searchMemories('world', { limit: 10 });
+
+// Advanced search with filtering
+const filteredMemories = await memori.searchMemories('programming', {
+  limit: 20,
+  minImportance: 'high', // Only show high+ importance memories
+  categories: ['essential', 'contextual'], // Filter by memory categories
+  includeMetadata: true // Include additional metadata
+});
+```
+
+## Advanced Features
+
+### Enhanced Search API
+
+The search API now supports advanced filtering options:
+
+```typescript
+interface SearchOptions {
+  limit?: number;                    // Number of results (default: 5)
+  minImportance?: MemoryImportanceLevel; // Filter by importance level
+  categories?: MemoryClassification[];   // Filter by memory categories
+  includeMetadata?: boolean;         // Include additional metadata
+}
+
+// Search with importance filtering
+const importantMemories = await memori.searchMemories('critical', {
+  minImportance: 'high' // Only show high importance and above
+});
+
+// Search specific categories
+const technicalMemories = await memori.searchMemories('code', {
+  categories: ['essential', 'reference'] // Only technical memories
+});
+```
+
+### Clean Interface System
+
+Memorits now features a comprehensive interface system with:
+- **15+ Clean Interfaces** replacing inline types
+- **Self-documenting APIs** with clear method signatures
+- **Enhanced Type Safety** with compile-time error detection
+- **Better IDE Support** with rich autocomplete and IntelliSense
+
+### Memory Classification System
+
+```typescript
+enum MemoryClassification {
+  ESSENTIAL = 'essential',        // Critical information
+  CONTEXTUAL = 'contextual',      // Supporting context
+  CONVERSATIONAL = 'conversational', // General conversation
+  REFERENCE = 'reference',        // Reference material
+  PERSONAL = 'personal',          // Personal information
+  CONSCIOUS_INFO = 'conscious-info' // Conscious context
+}
+
+enum MemoryImportanceLevel {
+  CRITICAL = 'critical',  // Must remember
+  HIGH = 'high',          // Important information
+  MEDIUM = 'medium',      // Useful information
+  LOW = 'low'             // Background information
+}
 ```
 
 ## API Reference

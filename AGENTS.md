@@ -13,7 +13,8 @@ This file provides guidance to agents when working with code in this repository.
 
 - Import strategy: Use relative imports only (e.g., `../../../src/core/agents/MemoryAgent`)
 - Error handling: Always use structured logging with component context (see src/core/utils/Logger.ts patterns)
-- Type definitions: Prefer Zod schemas for runtime validation over TypeScript interfaces
+- Type definitions: Use comprehensive interface system (src/core/types/models.ts) for clean APIs + Zod schemas for runtime validation
+- Interface-first: All public APIs should use clean interfaces from models.ts for better IDE support
 - Module system: CommonJS required (non-standard for TypeScript, affects import/export patterns)
 
 ## Project-Specific Patterns
