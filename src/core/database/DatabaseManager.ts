@@ -1,7 +1,62 @@
 // src/core/database/DatabaseManager.ts
 import { PrismaClient } from '@prisma/client';
-import { MemoryImportanceLevel, MemoryClassification } from '../types/schemas';
+import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } from '../types/schemas';
 import { MemorySearchResult, SearchOptions } from '../types/models';
+
+// Type definitions for database operations
+export interface ChatHistoryData {
+  chatId: string;
+  userInput: string;
+  aiOutput: string;
+  model: string;
+  sessionId: string;
+  namespace: string;
+  metadata?: unknown;
+}
+
+
+export interface ConsciousMemoryData {
+  id: string;
+  chatId?: string;
+  content: string;
+  summary: string;
+  classification: MemoryClassification;
+  importance: MemoryImportanceLevel;
+  topic?: string;
+  entities: string[];
+  keywords: string[];
+  confidenceScore: number;
+  classificationReason: string;
+  processedAt?: Date;
+  isConsciousContext?: boolean;
+}
+
+export interface ShortTermMemoryData {
+  chatId: string;
+  processedData: unknown;
+  importanceScore: number;
+  categoryPrimary: string;
+  retentionType: string;
+  namespace: string;
+  searchableContent: string;
+  summary: string;
+  isPermanentContext: boolean;
+}
+
+export interface DatabaseWhereClause {
+  namespace: string;
+  OR?: Array<{
+    searchableContent?: { contains: string };
+    summary?: { contains: string };
+    topic?: { contains: string };
+  }>;
+  importanceScore?: { gte: number };
+  classification?: { in: MemoryClassification[] };
+  categoryPrimary?: string;
+  consciousProcessed?: boolean;
+  createdAt?: { gte: Date };
+  isPermanentContext?: boolean;
+}
 
 export class DatabaseManager {
   private prisma: PrismaClient;
@@ -13,15 +68,7 @@ export class DatabaseManager {
   }
 
 
-  async storeChatHistory(data: {
-    chatId: string;
-    userInput: string;
-    aiOutput: string;
-    model: string;
-    sessionId: string;
-    namespace: string;
-    metadata?: any;
-  }): Promise<string> {
+  async storeChatHistory(data: ChatHistoryData): Promise<string> {
     const result = await this.prisma.chatHistory.create({
       data: {
         id: data.chatId,
@@ -30,14 +77,14 @@ export class DatabaseManager {
         model: data.model,
         sessionId: data.sessionId,
         namespace: data.namespace,
-        metadata: data.metadata,
+        metadata: data.metadata as any,
       },
     });
     return result.id;
   }
 
   async storeLongTermMemory(
-    memoryData: any,
+    memoryData: ProcessedLongTermMemory,
     chatId: string,
     namespace: string,
   ): Promise<string> {
@@ -77,7 +124,7 @@ export class DatabaseManager {
 
   async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
     // Simple SQLite FTS implementation with enhanced filtering
-    const whereClause: any = {
+    const whereClause: DatabaseWhereClause = {
       namespace: options.namespace || 'default',
       OR: [
         { searchableContent: { contains: query } },
@@ -111,8 +158,8 @@ export class DatabaseManager {
       id: memory.id,
       content: memory.searchableContent,
       summary: memory.summary,
-      classification: memory.classification as MemoryClassification,
-      importance: memory.memoryImportance as MemoryImportanceLevel,
+      classification: memory.classification as unknown as MemoryClassification,
+      importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
       topic: memory.topic || undefined,
       entities: (memory.entitiesJson as string[]) || [],
       keywords: (memory.keywordsJson as string[]) || [],
@@ -133,7 +180,7 @@ export class DatabaseManager {
 
   // Conscious Memory Operations
 
-  async getUnprocessedConsciousMemories(namespace: string = 'default'): Promise<any[]> {
+  async getUnprocessedConsciousMemories(namespace: string = 'default'): Promise<ConsciousMemoryData[]> {
     // Get long-term memories with "conscious-info" classification
     // that haven't been processed yet
     const memories = await this.prisma.longTermMemory.findMany({
@@ -150,17 +197,17 @@ export class DatabaseManager {
       id: memory.id,
       content: memory.searchableContent,
       summary: memory.summary,
-      classification: memory.classification,
-      importance: memory.memoryImportance,
+      classification: memory.classification as unknown as MemoryClassification,
+      importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
       topic: memory.topic,
-      entities: memory.entitiesJson as string[] || [],
-      keywords: memory.keywordsJson as string[] || [],
+      entities: (memory.entitiesJson as unknown[]) as string[] || [],
+      keywords: (memory.keywordsJson as unknown[]) as string[] || [],
       confidenceScore: memory.confidenceScore,
       classificationReason: memory.classificationReason || '',
     }));
   }
 
-  async getNewConsciousMemories(since: Date = new Date(Date.now() - 24 * 60 * 60 * 1000), namespace: string = 'default'): Promise<any[]> {
+  async getNewConsciousMemories(since: Date = new Date(Date.now() - 24 * 60 * 60 * 1000), namespace: string = 'default'): Promise<ConsciousMemoryData[]> {
     // Get conscious memories created since the specified time that haven't been processed
     const memories = await this.prisma.longTermMemory.findMany({
       where: {
@@ -178,34 +225,34 @@ export class DatabaseManager {
       id: memory.id,
       content: memory.searchableContent,
       summary: memory.summary,
-      classification: memory.classification,
-      importance: memory.memoryImportance,
+      classification: memory.classification as unknown as MemoryClassification,
+      importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
       topic: memory.topic,
-      entities: memory.entitiesJson as string[] || [],
-      keywords: memory.keywordsJson as string[] || [],
+      entities: (memory.entitiesJson as unknown[]) as string[] || [],
+      keywords: (memory.keywordsJson as unknown[]) as string[] || [],
       confidenceScore: memory.confidenceScore,
       classificationReason: memory.classificationReason || '',
     }));
   }
 
-  async storeConsciousMemoryInShortTerm(memoryData: any, namespace: string): Promise<string> {
+  async storeConsciousMemoryInShortTerm(memoryData: ShortTermMemoryData, namespace: string): Promise<string> {
     const result = await this.prisma.shortTermMemory.create({
       data: {
-        chatId: memoryData.chatId || memoryData.id,
-        processedData: memoryData,
-        importanceScore: this.calculateImportanceScore(memoryData.importance),
-        categoryPrimary: memoryData.classification,
-        retentionType: 'short_term',
+        chatId: memoryData.chatId,
+        processedData: memoryData.processedData as any,
+        importanceScore: memoryData.importanceScore,
+        categoryPrimary: memoryData.categoryPrimary,
+        retentionType: memoryData.retentionType,
         namespace,
-        searchableContent: memoryData.content,
+        searchableContent: memoryData.searchableContent,
         summary: memoryData.summary,
-        isPermanentContext: true, // Conscious memories are permanent context
+        isPermanentContext: memoryData.isPermanentContext,
       },
     });
     return result.id;
   }
 
-  async getConsciousMemoriesFromShortTerm(namespace: string): Promise<any[]> {
+  async getConsciousMemoriesFromShortTerm(namespace: string): Promise<ConsciousMemoryData[]> {
     const memories = await this.prisma.shortTermMemory.findMany({
       where: {
         namespace,
@@ -218,13 +265,13 @@ export class DatabaseManager {
       id: memory.id,
       content: memory.searchableContent,
       summary: memory.summary,
-      classification: memory.categoryPrimary,
-      importance: this.getImportanceLevel(memory.importanceScore),
-      topic: (memory.processedData as any)?.topic,
-      entities: (memory.processedData as any)?.entities || [],
-      keywords: (memory.processedData as any)?.keywords || [],
-      confidenceScore: (memory.processedData as any)?.confidenceScore || 0.8,
-      classificationReason: (memory.processedData as any)?.classificationReason || '',
+      classification: memory.categoryPrimary as unknown as MemoryClassification,
+      importance: this.getImportanceLevel(memory.importanceScore) as unknown as MemoryImportanceLevel,
+      topic: (memory.processedData as Record<string, unknown>)?.topic as string,
+      entities: (memory.processedData as Record<string, unknown>)?.entities as string[] || [],
+      keywords: (memory.processedData as Record<string, unknown>)?.keywords as string[] || [],
+      confidenceScore: (memory.processedData as Record<string, unknown>)?.confidenceScore as number || 0.8,
+      classificationReason: (memory.processedData as Record<string, unknown>)?.classificationReason as string || '',
     }));
   }
 
@@ -242,7 +289,7 @@ export class DatabaseManager {
     });
   }
 
-  async getProcessedConsciousMemories(namespace: string = 'default'): Promise<any[]> {
+  async getProcessedConsciousMemories(namespace: string = 'default'): Promise<ConsciousMemoryData[]> {
     const memories = await this.prisma.longTermMemory.findMany({
       where: {
         namespace,
@@ -256,11 +303,11 @@ export class DatabaseManager {
       id: memory.id,
       content: memory.searchableContent,
       summary: memory.summary,
-      classification: memory.classification,
-      importance: memory.memoryImportance,
+      classification: memory.classification as unknown as MemoryClassification,
+      importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
       topic: memory.topic,
-      entities: memory.entitiesJson as string[] || [],
-      keywords: memory.keywordsJson as string[] || [],
+      entities: (memory.entitiesJson as unknown[]) as string[] || [],
+      keywords: (memory.keywordsJson as unknown[]) as string[] || [],
       confidenceScore: memory.confidenceScore,
       classificationReason: memory.classificationReason || '',
       processedAt: memory.extractionTimestamp,
