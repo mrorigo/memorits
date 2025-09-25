@@ -21,8 +21,8 @@ DATABASE_URL="file:./memori.db"
 MEMORI_NAMESPACE="development"
 
 # Memory Processing Settings
-MEMORI_CONSCIOUS_INGEST="false"
-MEMORI_AUTO_INGEST="false"
+MEMORI_CONSCIOUS_INGEST="false"  # Enable conscious ingestion mode
+MEMORI_AUTO_INGEST="true"        # Enable automatic memory processing
 
 # AI Model Configuration
 MEMORI_MODEL="gpt-4o-mini"
@@ -82,6 +82,9 @@ npm run example:openai
 
 # Memory search and retrieval example
 npm run example:search
+
+# Dual memory mode demonstration
+npm run example:dual-memory
 ```
 
 ### Running Individual Examples Directly
@@ -100,6 +103,9 @@ npx tsx examples/openai-integration.ts
 
 # Memory search
 npx tsx examples/memory-search.ts
+
+# Dual memory mode
+npx tsx examples/dual-memory-mode.ts
 ```
 
 ## Example Descriptions
@@ -160,6 +166,20 @@ Advanced memory search and retrieval demonstration:
 - Multiple search demonstrations across different topics
 - Category analysis and memory relationships
 - Semantic search capabilities showcase
+
+### 5. Dual Memory Mode (`dual-memory-mode.ts`)
+
+Comprehensive demonstration of Memori's dual memory processing modes:
+- **Auto-ingestion mode**: Automatic conversation processing into memories
+- **Conscious ingestion mode**: Manual processing with background monitoring
+- **Mode status checking**: Query current processing state
+- **Background processing**: Configurable monitoring intervals
+
+**Expected Output:**
+- Auto-ingestion mode demonstration with automatic memory processing
+- Conscious ingestion mode with manual processing triggers
+- Background monitoring configuration and status
+- Mode status verification and comparison
 
 ## Expected Output Examples
 

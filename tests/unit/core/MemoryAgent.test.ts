@@ -1,5 +1,6 @@
 // tests/unit/core/MemoryAgent.test.ts
 import { MemoryAgent } from '../../../src/core/agents/MemoryAgent';
+import { OpenAIProvider } from '../../../src/core/providers/OpenAIProvider';
 
 // Mock OpenAI
 jest.mock('openai', () => {
@@ -17,6 +18,7 @@ const MockOpenAI = require('openai');
 
 describe('MemoryAgent', () => {
     let memoryAgent: MemoryAgent;
+    let mockOpenAIProvider: jest.Mocked<OpenAIProvider>;
 
     beforeEach(() => {
         // Mock the OpenAI client
@@ -39,7 +41,7 @@ describe('MemoryAgent', () => {
             }]
         };
 
-        MockOpenAI.mockReturnValue({
+        const mockOpenAI = MockOpenAI.mockReturnValue({
             chat: {
                 completions: {
                     create: jest.fn().mockResolvedValue(mockChatCompletion)
@@ -47,11 +49,14 @@ describe('MemoryAgent', () => {
             }
         });
 
-        memoryAgent = new MemoryAgent({
-            baseUrl: 'https://api.openai.com/v1',
-            apiKey: 'test-key',
-            model: 'gpt-4o-mini',
-        });
+        // Create a simple mock OpenAIProvider
+        mockOpenAIProvider = {
+            getClient: jest.fn().mockReturnValue(mockOpenAI()),
+            getModel: jest.fn().mockReturnValue('gpt-4o-mini'),
+            createEmbedding: jest.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+        } as any;
+
+        memoryAgent = new MemoryAgent(mockOpenAIProvider);
     });
 
     it('should process conversation', async () => {

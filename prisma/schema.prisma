@@ -79,6 +79,9 @@ model LongTermMemory {
   extractionTimestamp   DateTime @default(now())
   classificationReason  String?
 
+  // Conscious Processing
+  consciousProcessed    Boolean  @default(false)
+
   chat ChatHistory? @relation(fields: [originalChatId], references: [id], onDelete: SetNull)
 
   @@map("long_term_memory")

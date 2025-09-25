@@ -51,7 +51,8 @@
     "example:basic": "tsx examples/basic-usage.ts",
     "example:ollama": "tsx examples/ollama-integration.ts",
     "example:openai": "tsx examples/openai-integration.ts",
-    "example:search": "tsx examples/memory-search.ts"
+    "example:search": "tsx examples/memory-search.ts",
+    "example:dual-memory": "tsx examples/dual-memory-mode.ts"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

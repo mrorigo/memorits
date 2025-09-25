@@ -1,12 +1,14 @@
 import { Memori } from '../../../src/core/Memori';
 import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
 import { MemoryAgent } from '../../../src/core/agents/MemoryAgent';
+import { ConsciousAgent } from '../../../src/core/agents/ConsciousAgent';
 import { OpenAIProvider } from '../../../src/core/providers/OpenAIProvider';
 import { ConfigManager } from '../../../src/core/utils/ConfigManager';
 
 // Mock dependencies
 jest.mock('../../../src/core/database/DatabaseManager');
 jest.mock('../../../src/core/agents/MemoryAgent');
+jest.mock('../../../src/core/agents/ConsciousAgent');
 jest.mock('../../../src/core/providers/OpenAIProvider');
 jest.mock('../../../src/core/utils/ConfigManager');
 jest.mock('uuid', () => ({
@@ -15,6 +17,7 @@ jest.mock('uuid', () => ({
 
 const MockDatabaseManager = DatabaseManager as jest.MockedClass<typeof DatabaseManager>;
 const MockMemoryAgent = MemoryAgent as jest.MockedClass<typeof MemoryAgent>;
+const MockConsciousAgent = ConsciousAgent as jest.MockedClass<typeof ConsciousAgent>;
 const MockOpenAIProvider = OpenAIProvider as jest.MockedClass<typeof OpenAIProvider>;
 const mockLoadConfig = jest.fn();
 (ConfigManager.loadConfig as jest.Mock) = mockLoadConfig;
@@ -55,6 +58,15 @@ describe('Memori', () => {
     memori = new Memori();
   });
 
+  afterEach(async () => {
+    // Clean up any background intervals
+    if (memori.isEnabled()) {
+      await memori.close();
+    }
+    // Clear any pending timers
+    jest.clearAllTimers();
+  });
+
   describe('constructor', () => {
     it('should initialize with default config', () => {
       expect(mockLoadConfig).toHaveBeenCalled();
@@ -64,11 +76,7 @@ describe('Memori', () => {
         model: mockConfig.model,
         baseUrl: mockConfig.baseUrl,
       });
-      expect(MockMemoryAgent).toHaveBeenCalledWith({
-        apiKey: mockConfig.apiKey,
-        model: mockConfig.model,
-        baseUrl: mockConfig.baseUrl,
-      });
+      expect(MockMemoryAgent).toHaveBeenCalledWith(expect.any(MockOpenAIProvider));
     });
 
     it('should merge provided config with default', () => {
@@ -134,8 +142,15 @@ describe('Memori', () => {
       });
     });
 
-    it('should process memory asynchronously', async () => {
-      await memori.recordConversation('Hello', 'Hi there');
+    it('should process memory asynchronously when autoIngest is enabled', async () => {
+      // Enable auto ingestion for this test
+      const autoConfig = { ...mockConfig, autoIngest: true };
+      mockLoadConfig.mockReturnValue(autoConfig);
+
+      const autoMemori = new Memori();
+      await autoMemori.enable();
+
+      await autoMemori.recordConversation('Hello', 'Hi there');
 
       // Wait for async processing
       await new Promise(resolve => setTimeout(resolve, 10));
@@ -203,6 +218,289 @@ describe('Memori', () => {
     it('should return true after enabling', async () => {
       await memori.enable();
       expect(memori.isEnabled()).toBe(true);
+    });
+  });
+
+  describe('conscious ingestion', () => {
+    beforeEach(() => {
+      // Setup ConsciousAgent mock
+      MockConsciousAgent.prototype.run_conscious_ingest = jest.fn().mockResolvedValue(undefined);
+      MockConsciousAgent.prototype.initialize_existing_conscious_memories = jest.fn().mockResolvedValue([]);
+      MockConsciousAgent.prototype.check_for_context_updates = jest.fn().mockResolvedValue([]);
+    });
+
+    it('should initialize ConsciousAgent when consciousIngest is enabled', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      expect(MockConsciousAgent).toHaveBeenCalledWith(expect.any(MockDatabaseManager), consciousConfig.namespace);
+      expect(MockConsciousAgent.prototype.run_conscious_ingest).toHaveBeenCalled();
+    });
+
+    it('should not initialize ConsciousAgent when consciousIngest is disabled', async () => {
+      const nonConsciousConfig = { ...mockConfig, consciousIngest: false };
+      mockLoadConfig.mockReturnValue(nonConsciousConfig);
+
+      const nonConsciousMemori = new Memori();
+      await nonConsciousMemori.enable();
+
+      expect(MockConsciousAgent).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors in conscious ingestion gracefully', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      MockConsciousAgent.prototype.run_conscious_ingest.mockRejectedValue(new Error('Ingestion error'));
+
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      expect(consciousMemori.isEnabled()).toBe(true); // Should still be enabled despite error
+      expect(consoleSpy).toHaveBeenCalledWith('Error during initial conscious memory ingestion:', expect.any(Error));
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should provide access to ConsciousAgent when enabled', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      const consciousAgent = consciousMemori.getConsciousAgent();
+      expect(consciousAgent).toBeInstanceOf(MockConsciousAgent);
+    });
+
+    it('should return undefined for ConsciousAgent when not enabled', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+
+      const consciousAgent = consciousMemori.getConsciousAgent();
+      expect(consciousAgent).toBeUndefined();
+    });
+
+    it('should check for conscious context updates', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      await consciousMemori.checkForConsciousContextUpdates();
+
+      expect(MockConsciousAgent.prototype.check_for_context_updates).toHaveBeenCalled();
+    });
+
+    it('should not check for conscious context updates when disabled', async () => {
+      const nonConsciousConfig = { ...mockConfig, consciousIngest: false };
+      mockLoadConfig.mockReturnValue(nonConsciousConfig);
+
+      const nonConsciousMemori = new Memori();
+      await nonConsciousMemori.enable();
+
+      await nonConsciousMemori.checkForConsciousContextUpdates();
+
+      expect(MockConsciousAgent.prototype.check_for_context_updates).not.toHaveBeenCalled();
+    });
+
+    it('should initialize conscious context', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      await consciousMemori.initializeConsciousContext();
+
+      expect(MockConsciousAgent.prototype.initialize_existing_conscious_memories).toHaveBeenCalled();
+    });
+  });
+
+  describe('dual memory mode functionality', () => {
+    it('should return true for isConsciousModeEnabled when conscious mode is active', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      expect(consciousMemori.isConsciousModeEnabled()).toBe(true);
+    });
+
+    it('should return false for isConsciousModeEnabled when not enabled', () => {
+      expect(memori.isConsciousModeEnabled()).toBe(false);
+    });
+
+    it('should return false for isConsciousModeEnabled when consciousIngest is false', async () => {
+      const nonConsciousConfig = { ...mockConfig, consciousIngest: false };
+      mockLoadConfig.mockReturnValue(nonConsciousConfig);
+
+      const nonConsciousMemori = new Memori();
+      await nonConsciousMemori.enable();
+
+      expect(nonConsciousMemori.isConsciousModeEnabled()).toBe(false);
+    });
+
+    it('should return true for isAutoModeEnabled when autoIngest is enabled', async () => {
+      const autoConfig = { ...mockConfig, autoIngest: true };
+      mockLoadConfig.mockReturnValue(autoConfig);
+
+      const autoMemori = new Memori();
+      await autoMemori.enable();
+
+      expect(autoMemori.isAutoModeEnabled()).toBe(true);
+    });
+
+    it('should return false for isAutoModeEnabled when autoIngest is disabled', async () => {
+      const nonAutoConfig = { ...mockConfig, autoIngest: false };
+      mockLoadConfig.mockReturnValue(nonAutoConfig);
+
+      const nonAutoMemori = new Memori();
+      await nonAutoMemori.enable();
+
+      expect(nonAutoMemori.isAutoModeEnabled()).toBe(false);
+    });
+
+    it('should process memory automatically in auto ingestion mode', async () => {
+      const autoConfig = { ...mockConfig, autoIngest: true };
+      mockLoadConfig.mockReturnValue(autoConfig);
+
+      const autoMemori = new Memori();
+      await autoMemori.enable();
+
+      await autoMemori.recordConversation('Hello', 'Hi there');
+
+      // Wait for async processing
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(MockMemoryAgent.prototype.processConversation).toHaveBeenCalled();
+    });
+
+    it('should not process memory automatically in conscious ingestion mode', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      await consciousMemori.recordConversation('Hello', 'Hi there');
+
+      expect(consoleSpy).toHaveBeenCalledWith('Conversation stored for conscious processing: mock-uuid');
+      expect(MockMemoryAgent.prototype.processConversation).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should not process memory when neither mode is enabled', async () => {
+      const noModeConfig = { ...mockConfig, autoIngest: false, consciousIngest: false };
+      mockLoadConfig.mockReturnValue(noModeConfig);
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const noModeMemori = new Memori();
+      await noModeMemori.enable();
+
+      await noModeMemori.recordConversation('Hello', 'Hi there');
+
+      expect(consoleSpy).toHaveBeenCalledWith('Conversation stored without processing: mock-uuid');
+      expect(MockMemoryAgent.prototype.processConversation).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('background processing', () => {
+    beforeEach(() => {
+      // Mock setInterval and clearInterval for testing
+      jest.useFakeTimers();
+      jest.spyOn(global, 'setInterval');
+      jest.spyOn(global, 'clearInterval');
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    });
+
+    it('should start background monitoring when conscious mode is enabled', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      expect(setInterval).toHaveBeenCalledWith(expect.any(Function), 30000);
+      expect(consciousMemori.isBackgroundMonitoringActive()).toBe(true);
+    });
+
+    it('should not start background monitoring when not in conscious mode', async () => {
+      const nonConsciousConfig = { ...mockConfig, consciousIngest: false };
+      mockLoadConfig.mockReturnValue(nonConsciousConfig);
+
+      const nonConsciousMemori = new Memori();
+      await nonConsciousMemori.enable();
+
+      expect(setInterval).not.toHaveBeenCalled();
+      expect(nonConsciousMemori.isBackgroundMonitoringActive()).toBe(false);
+    });
+
+    it('should stop background monitoring on close', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      await consciousMemori.close();
+
+      expect(clearInterval).toHaveBeenCalled();
+      expect(consciousMemori.isBackgroundMonitoringActive()).toBe(false);
+    });
+
+    it('should configure background update interval', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      // Stop initial monitoring
+      await consciousMemori.close();
+
+      // Configure new interval
+      consciousMemori.setBackgroundUpdateInterval(60000);
+
+      expect(consciousMemori.getBackgroundUpdateInterval()).toBe(60000);
+    });
+
+    it('should restart monitoring with new interval when already running', async () => {
+      const consciousConfig = { ...mockConfig, consciousIngest: true };
+      mockLoadConfig.mockReturnValue(consciousConfig);
+
+      const consciousMemori = new Memori();
+      await consciousMemori.enable();
+
+      // Configure new interval while monitoring is active
+      consciousMemori.setBackgroundUpdateInterval(60000);
+
+      expect(clearInterval).toHaveBeenCalled();
+      expect(setInterval).toHaveBeenCalledWith(expect.any(Function), 60000);
+    });
+
+    it('should throw error for invalid background update interval', () => {
+      expect(() => memori.setBackgroundUpdateInterval(-1000)).toThrow('Background update interval must be positive');
+      expect(() => memori.setBackgroundUpdateInterval(0)).toThrow('Background update interval must be positive');
     });
   });
 });

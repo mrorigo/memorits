@@ -12,7 +12,7 @@ This document provides comprehensive developer documentation for Memorits (publi
 This is a TypeScript port of the original [Memori Python project](https://github.com/GibsonAI/memori) created by GibsonAI. The core concepts, architecture, and functionality are derived from the original implementation.
 
 #### Port Attribution and AI-Assisted Development
-This specific TypeScript port was created by 'mrorigo' with AI assistance from Roo Code using the code-supernova model. The development process leveraged advanced AI capabilities for:
+This specific TypeScript port was created by @mrorigo with AI assistance from Roo Code using the code-supernova model. The development process leveraged advanced AI capabilities for:
 - Code generation and refactoring
 - Architecture design and optimization
 - Testing strategy implementation

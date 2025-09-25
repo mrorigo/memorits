@@ -1,6 +1,6 @@
 // src/core/agents/MemoryAgent.ts
-import OpenAI from 'openai';
 import { z } from 'zod';
+import { OpenAIProvider } from '../providers/OpenAIProvider';
 import {
   ProcessedLongTermMemorySchema,
   ConversationContextSchema,
@@ -9,18 +9,10 @@ import {
 } from '../types/schemas';
 
 export class MemoryAgent {
-  private openai: OpenAI;
-  private model: string;
+  private openaiProvider: OpenAIProvider;
 
-  constructor(config: { apiKey: string; model?: string; baseUrl?: string }) {
-    // Handle dummy API key for Ollama
-    const apiKey = config.apiKey === 'ollama-local' ? 'sk-dummy-key-for-ollama' : config.apiKey;
-
-    this.openai = new OpenAI({
-      apiKey: apiKey,
-      baseURL: config.baseUrl
-    });
-    this.model = config.model || 'gpt-4o-mini';
+  constructor(openaiProvider: OpenAIProvider) {
+    this.openaiProvider = openaiProvider;
   }
 
   async processConversation(params: {
@@ -57,8 +49,8 @@ Context: ${JSON.stringify(params.context)}
 Extract and classify this memory:`;
 
     try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
+      const response = await this.openaiProvider.getClient().chat.completions.create({
+        model: this.openaiProvider.getModel(),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
