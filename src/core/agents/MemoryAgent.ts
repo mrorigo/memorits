@@ -49,6 +49,68 @@ export class MemoryAgent {
     this.openaiProvider = openaiProvider;
   }
 
+  /**
+   * Process LLM response and return validated memory object
+   * This method can be tested independently of OpenAI API calls
+   */
+  static processLLMResponse(
+    content: string,
+    chatId: string,
+  ): z.infer<typeof ProcessedLongTermMemorySchema> {
+    // Clean up the content - remove markdown code blocks if present
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith('```json')) {
+      cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    let parsedMemory;
+    try {
+      parsedMemory = JSON.parse(cleanContent);
+    } catch {
+      console.warn('Failed to parse JSON response, using fallback:', cleanContent.substring(0, 100));
+      throw new Error('Invalid JSON response from model');
+    }
+
+    // Convert uppercase enum values to lowercase to match schema expectations
+    const normalizedClassification = parsedMemory.classification?.toLowerCase();
+    const normalizedImportance = parsedMemory.importance?.toLowerCase();
+
+    // Validate with Zod schema
+    return ProcessedLongTermMemorySchema.parse({
+      ...parsedMemory,
+      conversationId: chatId,
+      classification: normalizedClassification || MemoryClassification.CONVERSATIONAL,
+      importance: normalizedImportance || MemoryImportanceLevel.MEDIUM,
+      entities: parsedMemory.entities || [],
+      keywords: parsedMemory.keywords || [],
+    });
+  }
+
+  /**
+   * Create fallback memory structure for error cases
+   * This method can be tested independently
+   */
+  static createFallbackMemory(
+    userInput: string,
+    aiOutput: string,
+    chatId: string,
+  ): z.infer<typeof ProcessedLongTermMemorySchema> {
+    return ProcessedLongTermMemorySchema.parse({
+      content: userInput + ' ' + aiOutput,
+      summary: userInput.slice(0, 100) + '...',
+      classification: MemoryClassification.CONVERSATIONAL,
+      importance: MemoryImportanceLevel.MEDIUM,
+      entities: [],
+      keywords: [],
+      conversationId: chatId,
+      confidenceScore: 0.5,
+      classificationReason: 'Fallback processing due to error',
+      promotionEligible: false,
+    });
+  }
+
   async processConversation(params: MemoryProcessingParams): Promise<z.infer<typeof ProcessedLongTermMemorySchema>> {
     const systemPrompt = `You are a memory processing agent specializing in conversational analysis.
 
@@ -104,52 +166,10 @@ Extract and classify this memory:`;
         throw new Error('No response from OpenAI');
       }
 
-      // Clean up the content - remove markdown code blocks if present
-      let cleanContent = content.trim();
-      if (cleanContent.startsWith('```json')) {
-        cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-      } else if (cleanContent.startsWith('```')) {
-        cleanContent = cleanContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
-      }
-
-      let parsedMemory;
-      try {
-        parsedMemory = JSON.parse(cleanContent);
-      } catch {
-        console.warn('Failed to parse JSON response, using fallback:', cleanContent.substring(0, 100));
-        throw new Error('Invalid JSON response from model');
-      }
-
-      // Convert uppercase enum values to lowercase to match schema expectations
-      const normalizedClassification = parsedMemory.classification?.toLowerCase();
-      const normalizedImportance = parsedMemory.importance?.toLowerCase();
-
-      // Validate with Zod schema
-      const validatedMemory = ProcessedLongTermMemorySchema.parse({
-        ...parsedMemory,
-        conversationId: params.chatId,
-        classification: normalizedClassification || MemoryClassification.CONVERSATIONAL,
-        importance: normalizedImportance || MemoryImportanceLevel.MEDIUM,
-        entities: parsedMemory.entities || [],
-        keywords: parsedMemory.keywords || [],
-      });
-
-      return validatedMemory;
+      return MemoryAgent.processLLMResponse(content, params.chatId);
     } catch (error) {
       console.error('Memory processing failed:', error);
-      // Return fallback memory structure
-      return ProcessedLongTermMemorySchema.parse({
-        content: params.userInput + ' ' + params.aiOutput,
-        summary: params.userInput.slice(0, 100) + '...',
-        classification: MemoryClassification.CONVERSATIONAL,
-        importance: MemoryImportanceLevel.MEDIUM,
-        entities: [],
-        keywords: [],
-        conversationId: params.chatId,
-        confidenceScore: 0.5,
-        classificationReason: 'Fallback processing due to error',
-        promotionEligible: false,
-      });
+      return MemoryAgent.createFallbackMemory(params.userInput, params.aiOutput, params.chatId);
     }
   }
 }
