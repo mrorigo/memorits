@@ -1,6 +1,5 @@
 // src/core/agents/ConsciousAgent.ts
 import { DatabaseManager } from '../database/DatabaseManager';
-import { MemoryClassification } from '../types/schemas';
 
 export interface ConsciousMemory {
   id: string;

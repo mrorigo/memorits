@@ -11,7 +11,7 @@ export class OpenAIProvider {
 
     this.client = new OpenAI({
       apiKey: apiKey,
-      baseURL: config.baseUrl
+      baseURL: config.baseUrl,
     });
     this.model = config.model || 'gpt-4o-mini';
   }
@@ -26,7 +26,7 @@ export class OpenAIProvider {
 
   async createEmbedding(input: string): Promise<number[]> {
     const response = await this.client.embeddings.create({
-      model: "text-embedding-ada-002",
+      model: 'text-embedding-ada-002',
       input: input,
     });
     return response.data[0].embedding;

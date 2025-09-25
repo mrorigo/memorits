@@ -46,14 +46,13 @@ export class MemoriOpenAI {
                     tokensUsed: response.usage?.total_tokens || 0,
                   },
                 });
-              } catch (error) {
-                console.warn('Failed to record conversation:', error);
+              } catch {
+                // Failed to record conversation - silently continue
               }
             }
           } else {
             // Streaming response - we can't record memory for streaming
             // as the content comes in chunks and we don't know the final result
-            console.warn('Memory recording not supported for streaming responses');
           }
 
           return response;
@@ -66,7 +65,7 @@ export class MemoriOpenAI {
 export function createMemoriOpenAI(
   memori: Memori,
   apiKey: string,
-  options?: OpenAI.RequestOptions & { baseUrl?: string }
+  options?: OpenAI.RequestOptions & { baseUrl?: string },
 ): MemoriOpenAI {
   return new MemoriOpenAI(memori, apiKey, options);
 }

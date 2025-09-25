@@ -26,12 +26,12 @@ async function autoIngestionExample(): Promise<void> {
   // Record conversations - they will be automatically processed
   await memori.recordConversation(
     'What is the capital of France?',
-    'The capital of France is Paris.'
+    'The capital of France is Paris.',
   );
 
   await memori.recordConversation(
     'What is 15 + 27?',
-    '15 + 27 equals 42.'
+    '15 + 27 equals 42.',
   );
 
   console.log('✅ Conversations automatically processed into memories');
@@ -56,12 +56,12 @@ async function consciousIngestionExample(): Promise<void> {
   // Record conversations - they will be stored for conscious processing
   await memori.recordConversation(
     'What are the benefits of renewable energy?',
-    'Renewable energy sources like solar and wind power reduce greenhouse gas emissions, decrease dependence on fossil fuels, and provide sustainable long-term energy solutions.'
+    'Renewable energy sources like solar and wind power reduce greenhouse gas emissions, decrease dependence on fossil fuels, and provide sustainable long-term energy solutions.',
   );
 
   await memori.recordConversation(
     'How does machine learning work?',
-    'Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed.'
+    'Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed.',
   );
 
   console.log('✅ Conversations stored for conscious processing');
@@ -101,7 +101,7 @@ async function dualModeComparison(): Promise<void> {
   // Record conversation without automatic processing
   await memori.recordConversation(
     'What is the weather like today?',
-    'The weather is sunny and warm with a temperature of 25°C.'
+    'The weather is sunny and warm with a temperature of 25°C.',
   );
 
   console.log('✅ Conversation stored without automatic processing');

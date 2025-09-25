@@ -255,3 +255,16 @@ describe('ConsciousAgent', () => {
     });
   });
 });
+
+// Global cleanup after all tests
+afterAll(async () => {
+  // Clear any pending timers
+  jest.clearAllTimers();
+  jest.useRealTimers();
+
+  // Restore any global mocks
+  jest.restoreAllMocks();
+
+  // Small delay to ensure any pending async operations complete
+  await new Promise(resolve => setTimeout(resolve, 100));
+});

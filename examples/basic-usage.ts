@@ -34,7 +34,7 @@ async function basicUsageExample(): Promise<void> {
     console.log('💬 Recording conversation...');
     const chatId = await memori.recordConversation(
       'What is TypeScript and why should I use it?',
-      'TypeScript is a superset of JavaScript that adds static typing. It helps catch errors early, improves code maintainability, and provides better IDE support.'
+      'TypeScript is a superset of JavaScript that adds static typing. It helps catch errors early, improves code maintainability, and provides better IDE support.',
     );
     console.log(`✅ Conversation recorded with ID: ${chatId}\n`);
 
@@ -42,12 +42,12 @@ async function basicUsageExample(): Promise<void> {
     console.log('💬 Recording more conversations...');
     await memori.recordConversation(
       'How do I declare variables in TypeScript?',
-      'You can declare variables using let, const, or var. TypeScript also supports type annotations like: let name: string = "John";'
+      'You can declare variables using let, const, or var. TypeScript also supports type annotations like: let name: string = "John";',
     );
 
     await memori.recordConversation(
       'What are interfaces in TypeScript?',
-      'Interfaces define the structure of objects. They help with type checking and can be implemented by classes or used for object shapes.'
+      'Interfaces define the structure of objects. They help with type checking and can be implemented by classes or used for object shapes.',
     );
 
     // Wait a moment for memory processing (asynchronous)
@@ -63,7 +63,7 @@ async function basicUsageExample(): Promise<void> {
       memories.forEach((memory, index) => {
         console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
         if (memory.metadata) {
-          console.log(`   Metadata:`, memory.metadata);
+          console.log('   Metadata:', memory.metadata);
         }
       });
     } else {

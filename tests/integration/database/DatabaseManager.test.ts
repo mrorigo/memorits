@@ -1,6 +1,7 @@
 // tests/integration/database/DatabaseManager.test.ts
 import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
 import { execSync } from 'child_process';
+import { unlinkSync, existsSync } from 'fs';
 
 beforeAll(async () => {
   // Generate Prisma client and push schema to ensure database is ready
@@ -9,20 +10,40 @@ beforeAll(async () => {
 
 describe('DatabaseManager', () => {
   let dbManager: DatabaseManager;
+  let dbPath: string;
 
   beforeEach(async () => {
-    const dbPath = `file:./test-${Date.now()}.db`;
+    dbPath = `./test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.db`;
     // Set DATABASE_URL environment variable for this test
-    process.env.DATABASE_URL = dbPath;
+    process.env.DATABASE_URL = `file:${dbPath}`;
     // Push schema to the specific database
-    execSync(`DATABASE_URL=${dbPath} npx prisma db push --accept-data-loss --force-reset`, { stdio: 'inherit' });
+    execSync(`DATABASE_URL=file:${dbPath} npx prisma db push --accept-data-loss --force-reset`, {
+      stdio: 'inherit',
+      env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
+    });
 
-    dbManager = new DatabaseManager(dbPath);
+    dbManager = new DatabaseManager(`file:${dbPath}`);
     await dbManager.initializeSchema();
   });
 
   afterEach(async () => {
-    await dbManager.close();
+    // Properly close database connection first
+    if (dbManager) {
+      try {
+        await dbManager.close();
+      } catch {
+        // Ignore close errors in cleanup
+      }
+    }
+
+    // Clean up test database file
+    if (existsSync(dbPath)) {
+      try {
+        unlinkSync(dbPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   });
 
   it('should store chat history', async () => {

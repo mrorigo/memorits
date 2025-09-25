@@ -42,7 +42,7 @@ export class DatabaseManager {
   async storeLongTermMemory(
     memoryData: any,
     chatId: string,
-    namespace: string
+    namespace: string,
   ): Promise<string> {
     const result = await this.prisma.longTermMemory.create({
       data: {
@@ -50,7 +50,7 @@ export class DatabaseManager {
         processedData: memoryData,
         importanceScore: this.calculateImportanceScore(memoryData.importance),
         categoryPrimary: memoryData.classification,
-        retentionType: "long_term",
+        retentionType: 'long_term',
         namespace,
         searchableContent: memoryData.content,
         summary: memoryData.summary,
@@ -81,7 +81,19 @@ export class DatabaseManager {
   async searchMemories(query: string, options: {
     namespace?: string;
     limit?: number;
-  }): Promise<any[]> {
+  }): Promise<Array<{
+    id: string;
+    content: string;
+    summary: string;
+    classification: string;
+    importance: string;
+    topic?: string;
+    entities: string[];
+    keywords: string[];
+    confidenceScore: number;
+    classificationReason: string;
+    metadata?: Record<string, unknown>;
+  }>> {
     // Simple SQLite FTS implementation
     const memories = await this.prisma.longTermMemory.findMany({
       where: {
@@ -95,7 +107,26 @@ export class DatabaseManager {
       take: options.limit || 5,
       orderBy: { importanceScore: 'desc' },
     });
-    return memories;
+
+    // Transform the raw Prisma results to match the expected interface
+    return memories.map((memory: any) => ({
+      id: memory.id,
+      content: memory.searchableContent,
+      summary: memory.summary,
+      classification: memory.classification,
+      importance: memory.memoryImportance,
+      topic: memory.topic || undefined,
+      entities: (memory.entitiesJson as string[]) || [],
+      keywords: (memory.keywordsJson as string[]) || [],
+      confidenceScore: memory.confidenceScore,
+      classificationReason: memory.classificationReason,
+      metadata: {
+        modelUsed: 'unknown',
+        category: memory.categoryPrimary,
+        originalChatId: memory.originalChatId,
+        extractionTimestamp: memory.extractionTimestamp,
+      },
+    }));
   }
 
   async close(): Promise<void> {
@@ -202,14 +233,14 @@ export class DatabaseManager {
   async markConsciousMemoryAsProcessed(memoryId: string): Promise<void> {
     await this.prisma.longTermMemory.update({
       where: { id: memoryId },
-      data: { consciousProcessed: true }
+      data: { consciousProcessed: true },
     });
   }
 
   async markMultipleMemoriesAsProcessed(memoryIds: string[]): Promise<void> {
     await this.prisma.longTermMemory.updateMany({
       where: { id: { in: memoryIds } },
-      data: { consciousProcessed: true }
+      data: { consciousProcessed: true },
     });
   }
 
@@ -245,14 +276,14 @@ export class DatabaseManager {
   }> {
     const [total, processed, unprocessed] = await Promise.all([
       this.prisma.longTermMemory.count({
-        where: { namespace, categoryPrimary: 'conscious-info' }
+        where: { namespace, categoryPrimary: 'conscious-info' },
       }),
       this.prisma.longTermMemory.count({
-        where: { namespace, categoryPrimary: 'conscious-info', consciousProcessed: true }
+        where: { namespace, categoryPrimary: 'conscious-info', consciousProcessed: true },
       }),
       this.prisma.longTermMemory.count({
-        where: { namespace, categoryPrimary: 'conscious-info', consciousProcessed: false }
-      })
+        where: { namespace, categoryPrimary: 'conscious-info', consciousProcessed: false },
+      }),
     ]);
 
     return { total, processed, unprocessed };

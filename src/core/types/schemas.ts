@@ -1,27 +1,27 @@
 import { z } from 'zod';
 
 export enum MemoryCategoryType {
-  FACT = "fact",
-  PREFERENCE = "preference",
-  SKILL = "skill",
-  CONTEXT = "context",
-  RULE = "rule"
+  FACT = 'fact',
+  PREFERENCE = 'preference',
+  SKILL = 'skill',
+  CONTEXT = 'context',
+  RULE = 'rule'
 }
 
 export enum MemoryClassification {
-  ESSENTIAL = "essential",
-  CONTEXTUAL = "contextual",
-  CONVERSATIONAL = "conversational",
-  REFERENCE = "reference",
-  PERSONAL = "personal",
-  CONSCIOUS_INFO = "conscious-info"
+  ESSENTIAL = 'essential',
+  CONTEXTUAL = 'contextual',
+  CONVERSATIONAL = 'conversational',
+  REFERENCE = 'reference',
+  PERSONAL = 'personal',
+  CONSCIOUS_INFO = 'conscious-info'
 }
 
 export enum MemoryImportanceLevel {
-  CRITICAL = "critical",
-  HIGH = "high",
-  MEDIUM = "medium",
-  LOW = "low"
+  CRITICAL = 'critical',
+  HIGH = 'high',
+  MEDIUM = 'medium',
+  LOW = 'low'
 }
 
 // Constrained types
@@ -40,7 +40,7 @@ export const ProcessedLongTermMemorySchema = z.object({
   conversationId: z.string(),
   confidenceScore: ConfidenceScore.default(0.8),
   classificationReason: z.string(),
-  promotionEligible: z.boolean().default(false)
+  promotionEligible: z.boolean().default(false),
 });
 
 export const ConversationContextSchema = z.object({
@@ -50,7 +50,7 @@ export const ConversationContextSchema = z.object({
   modelUsed: z.string(),
   userPreferences: z.array(z.string()).default([]),
   currentProjects: z.array(z.string()).default([]),
-  relevantSkills: z.array(z.string()).default([])
+  relevantSkills: z.array(z.string()).default([]),
 });
 
 export type ProcessedLongTermMemory = z.infer<typeof ProcessedLongTermMemorySchema>;

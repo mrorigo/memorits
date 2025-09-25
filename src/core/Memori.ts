@@ -5,7 +5,22 @@ import { MemoryAgent } from './agents/MemoryAgent';
 import { ConsciousAgent } from './agents/ConsciousAgent';
 import { OpenAIProvider } from './providers/OpenAIProvider';
 import { ConfigManager, MemoriConfig } from './utils/ConfigManager';
-import { ProcessedLongTermMemory } from './types/schemas';
+
+// Types for metadata and search results
+type ConversationMetadata = Record<string, unknown>;
+type MemorySearchResult = {
+  id: string;
+  content: string;
+  summary: string;
+  classification: string;
+  importance: string;
+  topic?: string;
+  entities: string[];
+  keywords: string[];
+  confidenceScore: number;
+  classificationReason: string;
+  metadata?: ConversationMetadata;
+};
 
 export class Memori {
   private dbManager: DatabaseManager;
@@ -15,7 +30,7 @@ export class Memori {
   private config: MemoriConfig;
   private enabled: boolean = false;
   private sessionId: string;
-  private backgroundInterval?: NodeJS.Timeout;
+  private backgroundInterval?: ReturnType<typeof setInterval>;
   private backgroundUpdateInterval: number = 30000; // 30 seconds default
 
   constructor(config?: Partial<MemoriConfig>) {
@@ -71,8 +86,8 @@ export class Memori {
     aiOutput: string,
     options?: {
       model?: string;
-      metadata?: any;
-    }
+      metadata?: ConversationMetadata;
+    },
   ): Promise<string> {
     if (!this.enabled) {
       throw new Error('Memori is not enabled');
@@ -108,7 +123,7 @@ export class Memori {
   private async processMemory(
     chatId: string,
     userInput: string,
-    aiOutput: string
+    aiOutput: string,
   ): Promise<void> {
     try {
       const processedMemory = await this.memoryAgent.processConversation({
@@ -127,7 +142,7 @@ export class Memori {
       await this.dbManager.storeLongTermMemory(
         processedMemory,
         chatId,
-        this.config.namespace
+        this.config.namespace,
       );
 
       console.log(`Memory processed for chat ${chatId}`);
@@ -136,7 +151,7 @@ export class Memori {
     }
   }
 
-  async searchMemories(query: string, limit: number = 5): Promise<any[]> {
+  async searchMemories(query: string, limit: number = 5): Promise<MemorySearchResult[]> {
     return this.dbManager.searchMemories(query, {
       namespace: this.config.namespace,
       limit,

@@ -170,7 +170,7 @@ describe('Memori', () => {
       expect(MockDatabaseManager.prototype.storeLongTermMemory).toHaveBeenCalledWith(
         { content: 'processed' },
         'mock-uuid',
-        mockConfig.namespace
+        mockConfig.namespace,
       );
     });
   });
@@ -193,6 +193,19 @@ describe('Memori', () => {
         limit: 10,
       });
     });
+  });
+  
+  // Global cleanup after all tests
+  afterAll(async () => {
+    // Ensure all timers are cleared
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  
+    // Restore any global mocks
+    jest.restoreAllMocks();
+  
+    // Small delay to ensure any pending async operations complete
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   describe('close', () => {

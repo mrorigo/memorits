@@ -3,9 +3,8 @@ import { z } from 'zod';
 import { OpenAIProvider } from '../providers/OpenAIProvider';
 import {
   ProcessedLongTermMemorySchema,
-  ConversationContextSchema,
   MemoryClassification,
-  MemoryImportanceLevel
+  MemoryImportanceLevel,
 } from '../types/schemas';
 
 export class MemoryAgent {
@@ -53,7 +52,7 @@ Extract and classify this memory:`;
         model: this.openaiProvider.getModel(),
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
+          { role: 'user', content: userPrompt },
         ],
         temperature: 0.1,
         max_tokens: 1000,
@@ -75,7 +74,7 @@ Extract and classify this memory:`;
       let parsedMemory;
       try {
         parsedMemory = JSON.parse(cleanContent);
-      } catch (parseError) {
+      } catch {
         console.warn('Failed to parse JSON response, using fallback:', cleanContent.substring(0, 100));
         throw new Error('Invalid JSON response from model');
       }

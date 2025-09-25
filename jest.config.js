@@ -13,4 +13,11 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
+  // Ensure proper test teardown
+  forceExit: true,
+  detectOpenHandles: true,
+  testTimeout: 30000,
+  // Clear mocks and modules between tests
+  clearMocks: true,
+  restoreMocks: true,
 };
