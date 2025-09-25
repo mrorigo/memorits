@@ -1,3 +1,5 @@
+<img src="memorits.jpg">
+
 # 🎯 Memorits: Type-Safe Memory Engine for AI Conversations
 
 **Transform AI conversations from fleeting interactions into persistent, searchable knowledge bases.**
@@ -168,7 +170,7 @@ Memorits is built on proven, enterprise-ready technologies:
 - **Documentation**: [https://memori.gibsonai.com/docs](https://memori.gibsonai.com/docs)
 
 ### Port Attribution
-**This specific TypeScript port was created by 'mrorigo' with AI assistance from Roo Code using the code-supernova model.**
+**This specific TypeScript port was created by @mrorigo with AI assistance from Roo Code using the code-supernova model.**
 
 - **Port Author**: mrorigo
 - **AI Assistant**: Roo Code (code-supernova model)
@@ -181,7 +183,7 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 
 ## API Reference
 
-For complete API documentation, see [`docs/API.md`](docs/API.md) or visit our [GitHub repository](https://github.com/mrorigo/memori-port).
+For complete API documentation, see [`docs/API.md`](docs/API.md) or visit our [GitHub repository](https://github.com/mrorigo/memorits).
 
 ---
 
@@ -214,7 +216,7 @@ npm run example:search
   </p>
   <p>
     <a href="#quick-start">Get Started</a> •
-    <a href="https://github.com/mrorigo/memori-port">View on GitHub</a> •
+    <a href="https://github.com/mrorigo/memorits">View on GitHub</a> •
     <a href="https://npmjs.com/package/memorits">Install from NPM</a>
   </p>
 </div>
