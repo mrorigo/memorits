@@ -275,10 +275,7 @@ export class DatabaseManager {
     });
   }
 
-  async initializeSchema(): Promise<void> {
-    // Schema is auto-created by Prisma on first run
-    console.log('Database schema initialized');
-  }
+  // Schema is auto-created by Prisma on first run - no explicit initialization needed
 
   async storeChatHistory(data: {
     chatId: string;
@@ -592,7 +589,6 @@ export class Memori {
       throw new Error('Memori is already enabled');
     }
 
-    await this.dbManager.initializeSchema();
     this.enabled = true;
     console.log('Memori enabled successfully');
   }
@@ -816,7 +812,7 @@ describe('DatabaseManager', () => {
 
   beforeEach(async () => {
     dbManager = new DatabaseManager('file:./test.db');
-    await dbManager.initializeSchema();
+    // Schema is auto-created by Prisma on first run - no explicit initialization needed
   });
 
   afterEach(async () => {

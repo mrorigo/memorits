@@ -189,7 +189,6 @@ The `DatabaseManager` handles all database operations with a clean abstraction l
 class DatabaseManager {
   private prisma: PrismaClient;
 
-  async initializeSchema(): Promise<void>
   async storeChatHistory(data: ChatHistoryData): Promise<string>
   async storeLongTermMemory(memoryData: any, chatId: string, namespace: string): Promise<string>
   async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]>
@@ -874,7 +873,6 @@ constructor(config?: Partial<MemoriConfig>)
 Handles all database operations with advanced search capabilities.
 
 **Key Methods**:
-- `initializeSchema(): Promise<void>` - Set up database schema
 - `storeChatHistory(data): Promise<string>` - Store conversation data
 - `storeLongTermMemory(memory, chatId, namespace): Promise<string>` - Store processed memory
 - `searchMemories(query, options): Promise<MemorySearchResult[]>` - Advanced search with filtering

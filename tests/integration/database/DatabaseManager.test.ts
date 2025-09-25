@@ -23,7 +23,6 @@ describe('DatabaseManager', () => {
     });
 
     dbManager = new DatabaseManager(`file:${dbPath}`);
-    await dbManager.initializeSchema();
   });
 
   afterEach(async () => {

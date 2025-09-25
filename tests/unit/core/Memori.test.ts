@@ -48,7 +48,6 @@ describe('Memori', () => {
     mockLoadConfig.mockReturnValue(mockConfig);
 
     // Setup method mocks
-    MockDatabaseManager.prototype.initializeSchema = jest.fn().mockResolvedValue(undefined);
     MockDatabaseManager.prototype.storeChatHistory = jest.fn().mockResolvedValue('mock-uuid');
     MockDatabaseManager.prototype.storeLongTermMemory = jest.fn().mockResolvedValue('memory-id');
     MockDatabaseManager.prototype.searchMemories = jest.fn().mockResolvedValue([]);
@@ -92,7 +91,6 @@ describe('Memori', () => {
     it('should enable Memori successfully', async () => {
       await memori.enable();
 
-      expect(MockDatabaseManager.prototype.initializeSchema).toHaveBeenCalled();
       expect(memori.isEnabled()).toBe(true);
     });
 

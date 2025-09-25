@@ -44,7 +44,6 @@ export class Memori {
       throw new Error('Memori is already enabled');
     }
 
-    await this.dbManager.initializeSchema();
 
     // Initialize ConsciousAgent if conscious ingestion is enabled
     if (this.config.consciousIngest) {

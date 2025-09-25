@@ -223,9 +223,6 @@ The DatabaseManager provides comprehensive database operations with type safety.
 
 ```typescript
 class DatabaseManager {
-  // Initialize database schema
-  async initializeSchema(): Promise<void>
-
   // Store conversation data
   async storeChatHistory(data: ChatHistoryData): Promise<string>
 
