@@ -4,6 +4,7 @@ import { MemoryAgent } from '../../../src/core/agents/MemoryAgent';
 import { ConsciousAgent } from '../../../src/core/agents/ConsciousAgent';
 import { OpenAIProvider } from '../../../src/core/providers/OpenAIProvider';
 import { ConfigManager } from '../../../src/core/utils/ConfigManager';
+import * as Logger from '../../../src/core/utils/Logger';
 
 // Mock dependencies
 jest.mock('../../../src/core/database/DatabaseManager');
@@ -269,15 +270,19 @@ describe('Memori', () => {
 
       MockConsciousAgent.prototype.run_conscious_ingest.mockRejectedValue(new Error('Ingestion error'));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const logErrorSpy = jest.spyOn(Logger, 'logError').mockImplementation(() => {});
 
       const consciousMemori = new Memori();
       await consciousMemori.enable();
 
       expect(consciousMemori.isEnabled()).toBe(true); // Should still be enabled despite error
-      expect(consoleSpy).toHaveBeenCalledWith('Error during initial conscious memory ingestion:', expect.any(Error));
+      expect(logErrorSpy).toHaveBeenCalledWith('Error during initial conscious memory ingestion', expect.objectContaining({
+        component: 'Memori',
+        namespace: consciousConfig.namespace,
+        error: 'Ingestion error',
+      }));
 
-      consoleSpy.mockRestore();
+      logErrorSpy.mockRestore();
     });
 
     it('should provide access to ConsciousAgent when enabled', async () => {
@@ -402,34 +407,42 @@ describe('Memori', () => {
       const consciousConfig = { ...mockConfig, consciousIngest: true };
       mockLoadConfig.mockReturnValue(consciousConfig);
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const logInfoSpy = jest.spyOn(Logger, 'logInfo').mockImplementation(() => {});
 
       const consciousMemori = new Memori();
       await consciousMemori.enable();
 
       await consciousMemori.recordConversation('Hello', 'Hi there');
 
-      expect(consoleSpy).toHaveBeenCalledWith('Conversation stored for conscious processing: mock-uuid');
+      expect(logInfoSpy).toHaveBeenCalledWith('Conversation stored for conscious processing: mock-uuid', expect.objectContaining({
+        component: 'Memori',
+        chatId: 'mock-uuid',
+        mode: 'conscious-ingestion',
+      }));
       expect(MockMemoryAgent.prototype.processConversation).not.toHaveBeenCalled();
 
-      consoleSpy.mockRestore();
+      logInfoSpy.mockRestore();
     });
 
     it('should not process memory when neither mode is enabled', async () => {
       const noModeConfig = { ...mockConfig, autoIngest: false, consciousIngest: false };
       mockLoadConfig.mockReturnValue(noModeConfig);
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const logInfoSpy = jest.spyOn(Logger, 'logInfo').mockImplementation(() => {});
 
       const noModeMemori = new Memori();
       await noModeMemori.enable();
 
       await noModeMemori.recordConversation('Hello', 'Hi there');
 
-      expect(consoleSpy).toHaveBeenCalledWith('Conversation stored without processing: mock-uuid');
+      expect(logInfoSpy).toHaveBeenCalledWith('Conversation stored without processing: mock-uuid', expect.objectContaining({
+        component: 'Memori',
+        chatId: 'mock-uuid',
+        mode: 'no-ingestion',
+      }));
       expect(MockMemoryAgent.prototype.processConversation).not.toHaveBeenCalled();
 
-      consoleSpy.mockRestore();
+      logInfoSpy.mockRestore();
     });
   });
 

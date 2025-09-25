@@ -1,6 +1,7 @@
 // src/core/database/DatabaseManager.ts
 import { PrismaClient } from '@prisma/client';
 import { MemoryImportanceLevel } from '../types/schemas';
+import { logInfo } from '../utils/Logger';
 
 export class DatabaseManager {
   private prisma: PrismaClient;
@@ -13,7 +14,7 @@ export class DatabaseManager {
 
   async initializeSchema(): Promise<void> {
     // Schema is auto-created by Prisma on first run
-    console.log('Database schema initialized');
+    logInfo('Database schema initialized', { component: 'DatabaseManager' });
   }
 
   async storeChatHistory(data: {

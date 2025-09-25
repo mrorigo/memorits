@@ -5,6 +5,7 @@ import { MemoryAgent } from './agents/MemoryAgent';
 import { ConsciousAgent } from './agents/ConsciousAgent';
 import { OpenAIProvider } from './providers/OpenAIProvider';
 import { ConfigManager, MemoriConfig } from './utils/ConfigManager';
+import { logInfo, logError } from './utils/Logger';
 
 // Types for metadata and search results
 type ConversationMetadata = Record<string, unknown>;
@@ -59,14 +60,25 @@ export class Memori {
     // Initialize ConsciousAgent if conscious ingestion is enabled
     if (this.config.consciousIngest) {
       this.consciousAgent = new ConsciousAgent(this.dbManager, this.config.namespace);
-      console.log('ConsciousAgent initialized for conscious ingestion mode');
+      logInfo('ConsciousAgent initialized for conscious ingestion mode', {
+        component: 'Memori',
+        namespace: this.config.namespace,
+      });
 
       // Run initial conscious memory ingestion
       try {
         await this.consciousAgent.run_conscious_ingest();
-        console.log('Initial conscious memory ingestion completed');
+        logInfo('Initial conscious memory ingestion completed', {
+          component: 'Memori',
+          namespace: this.config.namespace,
+        });
       } catch (error) {
-        console.error('Error during initial conscious memory ingestion:', error);
+        logError('Error during initial conscious memory ingestion', {
+          component: 'Memori',
+          namespace: this.config.namespace,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         // Don't fail the entire enable process if conscious ingestion fails
       }
     }
@@ -78,7 +90,11 @@ export class Memori {
       this.startBackgroundMonitoring();
     }
 
-    console.log('Memori enabled successfully');
+    logInfo('Memori enabled successfully', {
+      component: 'Memori',
+      namespace: this.config.namespace,
+      sessionId: this.sessionId,
+    });
   }
 
   async recordConversation(
@@ -108,13 +124,28 @@ export class Memori {
     // Process memory based on ingestion mode
     if (this.config.autoIngest) {
       // Auto-ingestion mode: automatically process memory
-      this.processMemory(chatId, userInput, aiOutput).catch(console.error);
+      this.processMemory(chatId, userInput, aiOutput).catch((error) => {
+        logError('Error processing memory in auto-ingestion mode', {
+          component: 'Memori',
+          chatId,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      });
     } else if (this.config.consciousIngest && this.consciousAgent) {
       // Conscious ingestion mode: only store conversation, let conscious agent handle processing
-      console.log(`Conversation stored for conscious processing: ${chatId}`);
+      logInfo(`Conversation stored for conscious processing: ${chatId}`, {
+        component: 'Memori',
+        chatId,
+        mode: 'conscious-ingestion',
+      });
     } else {
       // No ingestion mode: just store conversation without processing
-      console.log(`Conversation stored without processing: ${chatId}`);
+      logInfo(`Conversation stored without processing: ${chatId}`, {
+        component: 'Memori',
+        chatId,
+        mode: 'no-ingestion',
+      });
     }
 
     return chatId;
@@ -145,9 +176,19 @@ export class Memori {
         this.config.namespace,
       );
 
-      console.log(`Memory processed for chat ${chatId}`);
+      logInfo(`Memory processed for chat ${chatId}`, {
+        component: 'Memori',
+        chatId,
+        namespace: this.config.namespace,
+      });
     } catch (error) {
-      console.error(`Failed to process memory for chat ${chatId}:`, error);
+      logError(`Failed to process memory for chat ${chatId}`, {
+        component: 'Memori',
+        chatId,
+        namespace: this.config.namespace,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     }
   }
 
@@ -184,7 +225,12 @@ export class Memori {
     try {
       await this.consciousAgent.check_for_context_updates();
     } catch (error) {
-      console.error('Error checking for conscious context updates:', error);
+      logError('Error checking for conscious context updates', {
+        component: 'Memori',
+        namespace: this.config.namespace,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     }
   }
 
@@ -199,7 +245,12 @@ export class Memori {
     try {
       await this.consciousAgent.initialize_existing_conscious_memories();
     } catch (error) {
-      console.error('Error initializing conscious context:', error);
+      logError('Error initializing conscious context', {
+        component: 'Memori',
+        namespace: this.config.namespace,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     }
   }
 
@@ -232,13 +283,22 @@ export class Memori {
       clearInterval(this.backgroundInterval);
     }
 
-    console.log(`Starting background monitoring with ${this.backgroundUpdateInterval}ms interval`);
+    logInfo(`Starting background monitoring with ${this.backgroundUpdateInterval}ms interval`, {
+      component: 'Memori',
+      namespace: this.config.namespace,
+      intervalMs: this.backgroundUpdateInterval,
+    });
 
     this.backgroundInterval = setInterval(async () => {
       try {
         await this.checkForConsciousContextUpdates();
       } catch (error) {
-        console.error('Error in background monitoring:', error);
+        logError('Error in background monitoring', {
+          component: 'Memori',
+          namespace: this.config.namespace,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
       }
     }, this.backgroundUpdateInterval);
   }
@@ -250,7 +310,10 @@ export class Memori {
     if (this.backgroundInterval) {
       clearInterval(this.backgroundInterval);
       this.backgroundInterval = undefined;
-      console.log('Background monitoring stopped');
+      logInfo('Background monitoring stopped', {
+        component: 'Memori',
+        namespace: this.config.namespace,
+      });
     }
   }
 

@@ -6,16 +6,18 @@
  */
 
 import { Memori, ConfigManager } from '../src/index';
+import { logInfo, logError } from '../src/core/utils/Logger';
 
 async function basicUsageExample(): Promise<void> {
-  console.log('🚀 Starting Basic Memori Usage Example...\n');
+  logInfo('🚀 Starting Basic Memori Usage Example', { component: 'basic-usage-example' });
 
   let memori: Memori | undefined;
 
   try {
     // Load configuration from environment variables
     const config = ConfigManager.loadConfig();
-    console.log('📋 Configuration loaded:', {
+    logInfo('📋 Configuration loaded', {
+      component: 'basic-usage-example',
       databaseUrl: config.databaseUrl,
       namespace: config.namespace,
       model: config.model,
@@ -24,22 +26,22 @@ async function basicUsageExample(): Promise<void> {
 
     // Initialize Memori instance
     memori = new Memori(config);
-    console.log('✅ Memori instance created');
+    logInfo('✅ Memori instance created', { component: 'basic-usage-example' });
 
     // Enable Memori (initializes database schema)
     await memori.enable();
-    console.log('✅ Memori enabled successfully\n');
+    logInfo('✅ Memori enabled successfully', { component: 'basic-usage-example' });
 
     // Simulate a conversation
-    console.log('💬 Recording conversation...');
+    logInfo('💬 Recording conversation...', { component: 'basic-usage-example' });
     const chatId = await memori.recordConversation(
       'What is TypeScript and why should I use it?',
       'TypeScript is a superset of JavaScript that adds static typing. It helps catch errors early, improves code maintainability, and provides better IDE support.',
     );
-    console.log(`✅ Conversation recorded with ID: ${chatId}\n`);
+    logInfo(`✅ Conversation recorded with ID: ${chatId}`, { component: 'basic-usage-example', chatId });
 
     // Add more conversations to build memory
-    console.log('💬 Recording more conversations...');
+    logInfo('💬 Recording more conversations...', { component: 'basic-usage-example' });
     await memori.recordConversation(
       'How do I declare variables in TypeScript?',
       'You can declare variables using let, const, or var. TypeScript also supports type annotations like: let name: string = "John";',
@@ -51,51 +53,75 @@ async function basicUsageExample(): Promise<void> {
     );
 
     // Wait a moment for memory processing (asynchronous)
-    console.log('⏳ Waiting for memory processing...');
+    logInfo('⏳ Waiting for memory processing...', { component: 'basic-usage-example' });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Search for memories
-    console.log('\n🔍 Searching memories for "TypeScript"...');
+    logInfo('🔍 Searching memories for "TypeScript"...', { component: 'basic-usage-example' });
     const memories = await memori.searchMemories('TypeScript', 5);
 
     if (memories.length > 0) {
-      console.log(`✅ Found ${memories.length} relevant memories:`);
+      logInfo(`✅ Found ${memories.length} relevant memories:`, {
+        component: 'basic-usage-example',
+        memoryCount: memories.length,
+      });
       memories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+        logInfo(`${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'basic-usage-example',
+          memoryIndex: index + 1,
+          memoryId: memory.id,
+        });
         if (memory.metadata) {
-          console.log('   Metadata:', memory.metadata);
+          logInfo('Memory metadata', {
+            component: 'basic-usage-example',
+            memoryId: memory.id,
+            metadata: memory.metadata,
+          });
         }
       });
     } else {
-      console.log('ℹ️ No memories found. This might be expected on first run.');
-    }
-
-    // Search for specific concepts
-    console.log('\n🔍 Searching memories for "interfaces"...');
-    const interfaceMemories = await memori.searchMemories('interfaces', 3);
-
-    if (interfaceMemories.length > 0) {
-      console.log(`✅ Found ${interfaceMemories.length} memories about interfaces:`);
-      interfaceMemories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo('ℹ️ No memories found. This might be expected on first run.', {
+        component: 'basic-usage-example',
       });
     }
 
-    console.log('\n🎉 Basic usage example completed successfully!');
+    // Search for specific concepts
+    logInfo('🔍 Searching memories for "interfaces"...', { component: 'basic-usage-example' });
+    const interfaceMemories = await memori.searchMemories('interfaces', 3);
+
+    if (interfaceMemories.length > 0) {
+      logInfo(`✅ Found ${interfaceMemories.length} memories about interfaces:`, {
+        component: 'basic-usage-example',
+        memoryCount: interfaceMemories.length,
+      });
+      interfaceMemories.forEach((memory, index) => {
+        logInfo(`${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'basic-usage-example',
+          memoryIndex: index + 1,
+          memoryId: memory.id,
+        });
+      });
+    }
+
+    logInfo('🎉 Basic usage example completed successfully!', { component: 'basic-usage-example' });
 
   } catch (error) {
-    console.error('❌ Error in basic usage example:', error);
-    if (error instanceof Error) {
-      console.error('Error message:', error.message);
-    }
+    logError('❌ Error in basic usage example', {
+      component: 'basic-usage-example',
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
   } finally {
     // Always close the database connection
     if (memori) {
       try {
         await memori.close();
-        console.log('✅ Database connection closed');
+        logInfo('✅ Database connection closed', { component: 'basic-usage-example' });
       } catch (error) {
-        console.error('❌ Error closing database:', error);
+        logError('❌ Error closing database', {
+          component: 'basic-usage-example',
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   }
@@ -103,8 +129,19 @@ async function basicUsageExample(): Promise<void> {
 
 // Error handling for unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logError('Unhandled Promise Rejection', {
+    component: 'basic-usage-example',
+    promise: String(promise),
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
 });
 
 // Run the example
-basicUsageExample().catch(console.error);
+basicUsageExample().catch((error) => {
+  logError('Unhandled error in basic usage example', {
+    component: 'basic-usage-example',
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
+});
