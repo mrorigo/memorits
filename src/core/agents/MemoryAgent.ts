@@ -8,6 +8,40 @@ import {
 } from '../types/schemas';
 import { MemoryProcessingParams } from '../types/models';
 
+// Memory processing schema definition for prompt generation
+const MEMORY_SCHEMA = {
+  content: 'string',
+  summary: 'string',
+  classification: 'ESSENTIAL|CONTEXTUAL|CONVERSATIONAL|REFERENCE|PERSONAL|CONSCIOUS_INFO',
+  importance: 'CRITICAL|HIGH|MEDIUM|LOW',
+  topic: 'string',
+  entities: ['string'],
+  keywords: ['string'],
+  confidenceScore: 'number',
+  classificationReason: 'string',
+  promotionEligible: 'boolean',
+} as const;
+
+// Detailed classification guidelines
+const CLASSIFICATION_GUIDELINES = `
+CLASSIFICATION GUIDELINES:
+- ESSENTIAL: Critical information, facts, or decisions that must be remembered
+- CONTEXTUAL: Supporting information that provides useful background
+- CONVERSATIONAL: General discussion without lasting importance
+- REFERENCE: Technical information, links, or reference material
+- PERSONAL: User-specific preferences, habits, or personal details
+- CONSCIOUS_INFO: Insights requiring higher-order reasoning or pattern recognition
+`;
+
+// Importance level criteria
+const IMPORTANCE_CRITERIA = `
+IMPORTANCE CRITERIA:
+- CRITICAL (0.8-1.0): Must-remember information affecting decisions or safety
+- HIGH (0.6-0.8): Important information with significant relevance
+- MEDIUM (0.4-0.6): Useful information with moderate relevance
+- LOW (0.0-0.4): Background information with limited importance
+`;
+
 export class MemoryAgent {
   private openaiProvider: OpenAIProvider;
 
@@ -16,30 +50,41 @@ export class MemoryAgent {
   }
 
   async processConversation(params: MemoryProcessingParams): Promise<z.infer<typeof ProcessedLongTermMemorySchema>> {
-    const systemPrompt = `You are a memory processing agent. Analyze the conversation and extract structured memory information.
+    const systemPrompt = `You are a memory processing agent specializing in conversational analysis.
 
-Classify the memory into appropriate categories and determine its importance level.
-Extract entities, topics, and determine if this should be promoted to conscious context.
+${CLASSIFICATION_GUIDELINES}
+${IMPORTANCE_CRITERIA}
 
-Return JSON with this structure:
-{
-  "content": "full memory content",
-  "summary": "concise summary",
-  "classification": "ESSENTIAL|CONTEXTUAL|CONVERSATIONAL|REFERENCE|PERSONAL|CONSCIOUS_INFO",
-  "importance": "CRITICAL|HIGH|MEDIUM|LOW",
-  "topic": "main topic",
-  "entities": ["entity1", "entity2"],
-  "keywords": ["keyword1", "keyword2"],
-  "confidenceScore": 0.8,
-  "classificationReason": "explanation",
-  "promotionEligible": false
-}`;
+CONTEXT USAGE:
+- Prioritize current conversation over historical context
+- Use user preferences and project context to inform classification
+- Consider conversation flow and topic transitions
 
-    const userPrompt = `Conversation:
+Return valid JSON matching this exact schema: ${JSON.stringify(MEMORY_SCHEMA, null, 2)}`;
+
+    // Create structured context template
+    const contextTemplate = `
+User Preferences: ${params.context.userPreferences?.join(', ') || 'None'}
+Current Projects: ${params.context.currentProjects?.join(', ') || 'None'}
+Relevant Skills: ${params.context.relevantSkills?.join(', ') || 'None'}
+`;
+
+    const userPrompt = `Analyze this conversation segment:
+
+CURRENT CONVERSATION:
 User: ${params.userInput}
 AI: ${params.aiOutput}
 
-Context: ${JSON.stringify(params.context)}
+${contextTemplate}
+
+INSTRUCTIONS:
+1. Extract the core information and its significance
+2. Determine appropriate classification based on content type and importance
+3. Identify key entities (people, places, concepts) and topics
+4. Generate concise summary (max 200 characters)
+5. Provide clear reasoning for your classification choice
+6. Set confidence score (0.0-1.0) based on analysis clarity
+7. Determine if this warrants conscious context promotion
 
 Extract and classify this memory:`;
 
