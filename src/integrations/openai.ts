@@ -41,8 +41,8 @@ export class MemoriOpenAI {
                 await this.memori.recordConversation(userInput, aiOutput, {
                   model,
                   metadata: {
-                    temperature: params.temperature,
-                    maxTokens: params.max_tokens,
+                    temperature: params.temperature || undefined,
+                    maxTokens: params.max_tokens || undefined,
                     tokensUsed: response.usage?.total_tokens || 0,
                   },
                 });

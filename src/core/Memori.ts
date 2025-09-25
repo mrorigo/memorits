@@ -6,22 +6,11 @@ import { ConsciousAgent } from './agents/ConsciousAgent';
 import { OpenAIProvider } from './providers/OpenAIProvider';
 import { ConfigManager, MemoriConfig } from './utils/ConfigManager';
 import { logInfo, logError } from './utils/Logger';
-
-// Types for metadata and search results
-type ConversationMetadata = Record<string, unknown>;
-type MemorySearchResult = {
-  id: string;
-  content: string;
-  summary: string;
-  classification: string;
-  importance: string;
-  topic?: string;
-  entities: string[];
-  keywords: string[];
-  confidenceScore: number;
-  classificationReason: string;
-  metadata?: ConversationMetadata;
-};
+import {
+  MemorySearchResult,
+  RecordConversationOptions,
+  SearchOptions,
+} from './types/models';
 
 export class Memori {
   private dbManager: DatabaseManager;
@@ -100,10 +89,7 @@ export class Memori {
   async recordConversation(
     userInput: string,
     aiOutput: string,
-    options?: {
-      model?: string;
-      metadata?: ConversationMetadata;
-    },
+    options?: RecordConversationOptions,
   ): Promise<string> {
     if (!this.enabled) {
       throw new Error('Memori is not enabled');
@@ -162,6 +148,7 @@ export class Memori {
         userInput,
         aiOutput,
         context: {
+          conversationId: chatId,
           sessionId: this.sessionId,
           modelUsed: this.config.model,
           userPreferences: this.config.userContext?.userPreferences || [],
@@ -192,10 +179,13 @@ export class Memori {
     }
   }
 
-  async searchMemories(query: string, limit: number = 5): Promise<MemorySearchResult[]> {
+  async searchMemories(query: string, options: SearchOptions = {}): Promise<MemorySearchResult[]> {
     return this.dbManager.searchMemories(query, {
       namespace: this.config.namespace,
-      limit,
+      limit: options.limit || 5,
+      minImportance: options.minImportance,
+      categories: options.categories,
+      includeMetadata: options.includeMetadata,
     });
   }
 

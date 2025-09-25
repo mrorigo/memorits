@@ -161,7 +161,8 @@ describe('Memori', () => {
         userInput: 'Hello',
         aiOutput: 'Hi there',
         context: {
-          sessionId: expect.any(String),
+          conversationId: 'mock-uuid',
+          sessionId: 'mock-uuid',
           modelUsed: mockConfig.model,
           userPreferences: [],
           currentProjects: [],
@@ -183,15 +184,21 @@ describe('Memori', () => {
       expect(MockDatabaseManager.prototype.searchMemories).toHaveBeenCalledWith('test query', {
         namespace: mockConfig.namespace,
         limit: 5,
+        minImportance: undefined,
+        categories: undefined,
+        includeMetadata: undefined,
       });
     });
 
     it('should search memories with custom limit', async () => {
-      await memori.searchMemories('test query', 10);
+      await memori.searchMemories('test query', { limit: 10 });
 
       expect(MockDatabaseManager.prototype.searchMemories).toHaveBeenCalledWith('test query', {
         namespace: mockConfig.namespace,
         limit: 10,
+        minImportance: undefined,
+        categories: undefined,
+        includeMetadata: undefined,
       });
     });
   });

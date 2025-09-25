@@ -58,7 +58,11 @@ async function basicUsageExample(): Promise<void> {
 
     // Search for memories
     logInfo('🔍 Searching memories for "TypeScript"...', { component: 'basic-usage-example' });
-    const memories = await memori.searchMemories('TypeScript', 5);
+    const memories = await memori.searchMemories('TypeScript', { limit: 5 });
+
+    // Search for specific concepts
+    logInfo('🔍 Searching memories for "interfaces"...', { component: 'basic-usage-example' });
+    const interfaceMemories2 = await memori.searchMemories('interfaces', { limit: 3 });
 
     if (memories.length > 0) {
       logInfo(`✅ Found ${memories.length} relevant memories:`, {

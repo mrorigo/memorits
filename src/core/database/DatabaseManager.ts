@@ -1,7 +1,8 @@
 // src/core/database/DatabaseManager.ts
 import { PrismaClient } from '@prisma/client';
-import { MemoryImportanceLevel } from '../types/schemas';
+import { MemoryImportanceLevel, MemoryClassification } from '../types/schemas';
 import { logInfo } from '../utils/Logger';
+import { MemorySearchResult, SearchOptions } from '../types/models';
 
 export class DatabaseManager {
   private prisma: PrismaClient;
@@ -79,54 +80,55 @@ export class DatabaseManager {
     return scores[level as MemoryImportanceLevel] || 0.5;
   }
 
-  async searchMemories(query: string, options: {
-    namespace?: string;
-    limit?: number;
-  }): Promise<Array<{
-    id: string;
-    content: string;
-    summary: string;
-    classification: string;
-    importance: string;
-    topic?: string;
-    entities: string[];
-    keywords: string[];
-    confidenceScore: number;
-    classificationReason: string;
-    metadata?: Record<string, unknown>;
-  }>> {
-    // Simple SQLite FTS implementation
+  async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
+    // Simple SQLite FTS implementation with enhanced filtering
+    const whereClause: any = {
+      namespace: options.namespace || 'default',
+      OR: [
+        { searchableContent: { contains: query } },
+        { summary: { contains: query } },
+        { topic: { contains: query } },
+      ],
+    };
+
+    // Add importance filtering if specified
+    if (options.minImportance) {
+      whereClause.importanceScore = {
+        gte: this.calculateImportanceScore(options.minImportance),
+      };
+    }
+
+    // Add category filtering if specified
+    if (options.categories && options.categories.length > 0) {
+      whereClause.classification = {
+        in: options.categories,
+      };
+    }
+
     const memories = await this.prisma.longTermMemory.findMany({
-      where: {
-        namespace: options.namespace || 'default',
-        OR: [
-          { searchableContent: { contains: query } },
-          { summary: { contains: query } },
-          { topic: { contains: query } },
-        ],
-      },
+      where: whereClause,
       take: options.limit || 5,
       orderBy: { importanceScore: 'desc' },
     });
 
-    // Transform the raw Prisma results to match the expected interface
+    // Transform the raw Prisma results to match the MemorySearchResult interface
     return memories.map((memory: any) => ({
       id: memory.id,
       content: memory.searchableContent,
       summary: memory.summary,
-      classification: memory.classification,
-      importance: memory.memoryImportance,
+      classification: memory.classification as MemoryClassification,
+      importance: memory.memoryImportance as MemoryImportanceLevel,
       topic: memory.topic || undefined,
       entities: (memory.entitiesJson as string[]) || [],
       keywords: (memory.keywordsJson as string[]) || [],
       confidenceScore: memory.confidenceScore,
-      classificationReason: memory.classificationReason,
-      metadata: {
+      classificationReason: memory.classificationReason || '',
+      metadata: options.includeMetadata ? {
         modelUsed: 'unknown',
         category: memory.categoryPrimary,
         originalChatId: memory.originalChatId,
         extractionTimestamp: memory.extractionTimestamp,
-      },
+      } : undefined,
     }));
   }
 

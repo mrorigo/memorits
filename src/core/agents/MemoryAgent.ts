@@ -6,6 +6,7 @@ import {
   MemoryClassification,
   MemoryImportanceLevel,
 } from '../types/schemas';
+import { MemoryProcessingParams } from '../types/models';
 
 export class MemoryAgent {
   private openaiProvider: OpenAIProvider;
@@ -14,12 +15,7 @@ export class MemoryAgent {
     this.openaiProvider = openaiProvider;
   }
 
-  async processConversation(params: {
-    chatId: string;
-    userInput: string;
-    aiOutput: string;
-    context: any;
-  }): Promise<z.infer<typeof ProcessedLongTermMemorySchema>> {
+  async processConversation(params: MemoryProcessingParams): Promise<z.infer<typeof ProcessedLongTermMemorySchema>> {
     const systemPrompt = `You are a memory processing agent. Analyze the conversation and extract structured memory information.
 
 Classify the memory into appropriate categories and determine its importance level.

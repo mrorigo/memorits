@@ -60,6 +60,7 @@ describe('MemoryAgent', () => {
       userInput: 'What is TypeScript?',
       aiOutput: 'TypeScript is a programming language',
       context: {
+        conversationId: 'test-chat',
         sessionId: 'test-session',
         modelUsed: 'gpt-4o-mini',
         userPreferences: [],
