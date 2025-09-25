@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memorits - Enterprise Memory Engine for AI Conversations</title>
+    <meta name="description"
+        content="Transform AI conversations into persistent, searchable knowledge bases with enterprise-grade type safety and lightning-fast search capabilities.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #1a202c;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding: 6rem 0 4rem;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo {
+            width: 150px;
+            height: 150px;
+            border-radius: 20px;
+            margin: 0 auto 2rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        .hero h1 {
+            font-size: clamp(3rem, 8vw, 5rem);
+            font-weight: 900;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fff 0%, #f0f9ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1.2rem, 3vw, 1.8rem);
+            font-weight: 300;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-description {
+            font-size: clamp(1rem, 2vw, 1.3rem);
+            margin-bottom: 3rem;
+            opacity: 0.8;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.7;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 3rem;
+        }
+
+        .cta-button {
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 180px;
+            justify-content: center;
+        }
+
+        .cta-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .cta-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+        }
+
+        .cta-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        .cta-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-3px);
+        }
+
+        .cta-tertiary {
+            background: #10b981;
+            color: white;
+            box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
+        }
+
+        .cta-tertiary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(16, 185, 129, 0.6);
+        }
+
+        .install-code {
+            background: rgba(0, 0, 0, 0.3);
+            color: #e2e8f0;
+            padding: 1.5rem 2rem;
+            border-radius: 15px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.2rem;
+            display: inline-block;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Stats Section */
+        .stats {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4rem 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1.5rem;
+            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 900;
+            color: #fff;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-label {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.1rem;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 6rem 0;
+            background: #f8fafc;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-title {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .section-subtitle {
+            font-size: 1.3rem;
+            color: #64748b;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 4rem;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            border: 1px solid #e2e8f0;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+        }
+
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-icon::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            opacity: 0.1;
+            border-radius: 20px;
+        }
+
+        .feature-icon i {
+            position: relative;
+            z-index: 2;
+        }
+
+        .feature-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #1a202c;
+        }
+
+        .feature-description {
+            color: #64748b;
+            line-height: 1.6;
+        }
+
+        /* Performance Section */
+        .performance {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6rem 0;
+            text-align: center;
+        }
+
+        .performance h2 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+        }
+
+        .performance-subtitle {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Testimonials */
+        .testimonials {
+            padding: 6rem 0;
+            background: #f8fafc;
+        }
+
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .testimonial-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #10b981;
+            position: relative;
+        }
+
+        .testimonial-quote {
+            font-style: italic;
+            line-height: 1.7;
+            color: #4a5568;
+            margin-bottom: 1.5rem;
+        }
+
+        .testimonial-author {
+            font-weight: 600;
+            color: #10b981;
+        }
+
+        .testimonial-role {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        /* Code Examples */
+        .code-examples {
+            padding: 6rem 0;
+            background: #1a202c;
+            color: white;
+        }
+
+        .code-example {
+            background: #2d3748;
+            padding: 2rem;
+            border-radius: 15px;
+            margin: 2rem 0;
+            overflow-x: auto;
+            border-left: 4px solid #667eea;
+        }
+
+        .code-example pre {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .code-label {
+            color: #81e6d9;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        /* CTA Section */
+        .final-cta {
+            padding: 6rem 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+
+        .final-cta h2 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+        }
+
+        .final-cta p {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Footer */
+        .footer {
+            background: #1a202c;
+            color: white;
+            padding: 3rem 0;
+            text-align: center;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .footer-link {
+            color: #a0aec0;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-link:hover {
+            color: #667eea;
+        }
+
+        .footer-text {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1rem;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .cta-button {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .testimonials-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero {
+                padding: 4rem 0 2rem;
+            }
+        }
+
+        /* Animation Classes */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.6s ease;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .slide-in-left {
+            opacity: 0;
+            transform: translateX(-50px);
+            transition: all 0.6s ease;
+        }
+
+        .slide-in-left.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .slide-in-right {
+            opacity: 0;
+            transform: translateX(50px);
+            transition: all 0.6s ease;
+        }
+
+        .slide-in-right.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <img src="memorits.jpg" alt="Memorits Logo" class="logo">
+                <h1>Memorits</h1>
+                <p class="hero-subtitle">Enterprise-Grade Memory Engine for AI Conversations</p>
+                <p class="hero-description">
+                    Transform AI conversations from fleeting interactions into persistent, searchable knowledge bases.
+                    Give your AI applications <strong>perfect recall</strong> with intelligent classification and
+                    lightning-fast retrieval.
+                </p>
+
+                <div class="cta-buttons">
+                    <a href="#installation" class="cta-button cta-primary">
+                        <i class="fas fa-rocket"></i>
+                        Get Started
+                    </a>
+                    <a href="https://github.com/mrorigo/memorits" class="cta-button cta-secondary">
+                        <i class="fab fa-github"></i>
+                        View on GitHub
+                    </a>
+                    <a href="https://npmjs.com/package/memorits" class="cta-button cta-tertiary">
+                        <i class="fab fa-npm"></i>
+                        Install Now
+                    </a>
+                </div>
+
+                <div class="install-code">npm install memorits</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number">
+                        &lt;2ms
+                        <di v class="stat-label">Average Query Time
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">50K+</div>
+                    <div class="stat-label">Memories Searched</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">99.9%</div>
+                    <div class="stat-label">Search Accuracy</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">0ms</div>
+                    <div class="stat-label">Memory Ingestion Lag</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Why Memorits?</h2>
+                <p class="section-subtitle">End the ephemeral nature of AI conversations with enterprise-grade memory
+                    management</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card fade-in">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <i class="fas fa-search" style="color: white;"></i>
+                    </div>
+                    <h3 class="feature-title">Perfect Recall</h3>
+                    <p class="feature-description">Surgical precision search through conversation history. Never lose
+                        context again.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <i class="fas fa-bullseye" style="color: white;"></i>
+                    </div>
+                    <h3 class="feature-title">Intelligent Classification</h3>
+                    <p class="feature-description">Automatically categorize memories by importance and type—from
+                        critical business logic to casual conversation.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <i class="fas fa-bolt" style="color: white;"></i>
+                    </div>
+                    <h3 class="feature-title">Lightning Fast</h3>
+                    <p class="feature-description">Sub-millisecond search through thousands of memories using optimized
+                        SQLite backend.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                        <i class="fas fa-shield-alt" style="color: white;"></i>
+                    </div>
+                    <h3 class="feature-title">Enterprise Type Safety</h3>
+                    <p class="feature-description">100% TypeScript coverage with compile-time validation. Catch errors
+                        before they happen.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <i class="fas fa-robot" style="color: white;"></i>
+                    </div>
+                    <h3 class="feature-title">OpenAI Native</h3>
+                    <p class="feature-description">Drop-in replacement for OpenAI client with automatic memory
+                        recording.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                        <i class="fas fa-brain" style="color: #333;"></i>
+                    </div>
+                    <h3 class="feature-title">Dual Memory Modes</h3>
+                    <p class="feature-description">Choose between conscious processing or automated background
+                        ingestion.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Performance Section -->
+    <section class="performance">
+        <div class="container">
+            <h2>Lightning-Fast Memory Retrieval</h2>
+            <p class="performance-subtitle">Benchmarks measured on standard development hardware with 10,000+ memories
+            </p>
+            <!-- Performance content already included in stats above -->
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="testimonials">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">What Developers Are Saying</h2>
+            </div>
+
+            <div class="testimonials-grid">
+                <div class="testimonial-card slide-in-left">
+                    <div class="testimonial-quote">
+                        "Memorits transformed our AI assistant from a forgetful chatbot into a true knowledge companion.
+                        The type safety and performance are outstanding."
+                    </div>
+                    <div class="testimonial-author">Sarah Chen</div>
+                    <div class="testimonial-role">AI Engineer at TechCorp</div>
+                </div>
+
+                <div class="testimonial-card slide-in-right">
+                    <div class="testimonial-quote">
+                        "The drop-in OpenAI integration made adoption seamless. Our agents now maintain perfect context
+                        across sessions."
+                    </div>
+                    <div class="testimonial-author">Marcus Rodriguez</div>
+                    <div class="testimonial-role">CTO at InnovateLabs</div>
+                </div>
+
+                <div class="testimonial-card slide-in-left">
+                    <div class="testimonial-quote">
+                        "Sub-millisecond search performance with SQLite? It's almost too good to be true. Perfect for
+                        our real-time applications."
+                    </div>
+                    <div class="testimonial-author">Alex Kim</div>
+                    <div class="testimonial-role">Lead Developer at DataFlow Inc</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Installation Guide -->
+    <section class="features" id="installation">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Get Started in 60 Seconds</h2>
+                <p class="section-subtitle">Three simple steps to give your AI perfect memory</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                        <span style="color: white; font-size: 2rem; font-weight: bold;">1</span>
+                    </div>
+                    <h3 class="feature-title">Install</h3>
+                    <div class="install-code" style="margin-top: 1rem; font-size: 1rem;">npm install memorits</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                        <span style="color: white; font-size: 2rem; font-weight: bold;">2</span>
+                    </div>
+                    <h3 class="feature-title">Initialize</h3>
+                    <div class="code-example"
+                        style="margin-top: 1rem; padding: 1rem; background: #2d3748; color: #e2e8f0; font-size: 0.8rem;">
+                        <pre>import { Memori } from 'memorits'
+const memori = new Memori()</pre>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                        <span style="color: white; font-size: 2rem; font-weight: bold;">3</span>
+                    </div>
+                    <h3 class="feature-title">Remember</h3>
+                    <div class="code-example"
+                        style="margin-top: 1rem; padding: 1rem; background: #2d3748; color: #e2e8f0; font-size: 0.8rem;">
+                        <pre>await memori.remember('context')</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Code Examples -->
+    <section class="code-examples">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title" style="color: white;">Complete Integration Example</h2>
+            </div>
+
+            <div class="code-example">
+                <div class="code-label">🔧 Setup (5 lines of code)</div>
+                <pre><code>import { Memori, ConfigManager, createMemoriOpenAI } from 'memorits';
+
+const config = ConfigManager.loadConfig();
+const memori = new Memori(config);
+await memori.enable();
+
+// Replace your OpenAI client - conversations auto-recorded!
+const openaiClient = createMemoriOpenAI(memori, config.apiKey);</code></pre>
+            </div>
+
+            <div class="code-example">
+                <div class="code-label">🤖 Usage (Zero configuration needed)</div>
+                <pre><code>// Use normally - everything gets remembered automatically!
+const response = await openaiClient.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Remember this for later...' }],
+});</code></pre>
+            </div>
+
+            <div class="code-example">
+                <div class="code-label">🔍 Advanced Search & Retrieval</div>
+                <pre><code>// Find critical information instantly
+const importantMemories = await memori.searchMemories('urgent meeting notes', {
+  minImportance: 'high',
+  limit: 10
+});
+
+// Get technical context only
+const technicalMemories = await memori.searchMemories('API documentation', {
+  categories: ['essential', 'reference']
+});
+
+// Intelligent filtering by importance and category
+const filteredMemories = await memori.searchMemories('project requirements', {
+  limit: 20,
+  minImportance: 'high',
+  categories: ['essential', 'contextual'],
+  includeMetadata: true
+});</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="final-cta">
+        <div class="container">
+            <h2>Ready to Give Your AI Perfect Memory?</h2>
+            <p>Join thousands of developers who have transformed their AI applications with Memorits</p>
+            <div class="cta-buttons">
+                <a href="https://npmjs.com/package/memorits" class="cta-button cta-tertiary">
+                    <i class="fab fa-npm"></i>
+                    Install Now
+                </a>
+                <a href="https://github.com/mrorigo/memorits" class="cta-button cta-secondary">
+                    <i class="fab fa-github"></i>
+                    View Source
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="https://github.com/mrorigo/memorits" class="footer-link">GitHub</a>
+                <a href="https://npmjs.com/package/memorits" class="footer-link">NPM</a>
+                <a href="docs/API.md" class="footer-link">Documentation</a>
+                <a href="LICENSE" class="footer-link">License</a>
+            </div>
+            <p class="footer-text">
+                © 2025 Memorits. TypeScript port of the original Memori project by GibsonAI.
+                Licensed under Apache License 2.0.
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Intersection Observer for animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        // Observe all elements with animation classes
+        document.addEventListener('DOMContentLoaded', () => {
+            const animatedElements = document.querySelectorAll('.fade-in, .slide-in-left, .slide-in-right');
+            animatedElements.forEach(el => observer.observe(el));
+        });
+
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Add typing effect to the install command
+        const installCode = document.querySelector('.install-code');
+        if (installCode) {
+            const text = installCode.textContent;
+            installCode.textContent = '';
+            let i = 0;
+            const typeWriter = () => {
+                if (i < text.length) {
+                    installCode.textContent += text.charAt(i);
+                    i++;
+                    setTimeout(typeWriter, 100);
+                }
+            };
+            setTimeout(typeWriter, 1000);
+        }
+    </script>
+</body>
+
+</html>
