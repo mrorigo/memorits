@@ -1,4 +1,4 @@
-<img src="memorits.jpg">
+<img src="docs/memorits.jpg">
 
 # 🎯 Memorits: Type-Safe Memory Engine for AI Conversations
 
