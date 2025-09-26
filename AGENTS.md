@@ -4,7 +4,7 @@ This file provides guidance to agents when working with code in this repository.
 
 ## Build/Lint/Test Commands
 
-- Run single test: `jest --testPathPattern=tests/unit/core/MemoryAgent.test.ts` (uses custom Jest config with ts-jest)
+- Run single test: `npm test -- --testPathPattern=tests/unit/core/MemoryAgent.test.ts` (uses custom Jest config with ts-jest)
 - Lint with auto-fix: `npm run lint:fix` (applies different rules for tests, examples, and main code)
 - Database commands: `npm run prisma:push` followed by `npm run prisma:generate` (required sequence)
 - Example scripts: Use `npm run example:*` (tsx-based execution, not standard node)

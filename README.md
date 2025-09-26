@@ -114,7 +114,7 @@ const response = await client.chat.completions.create({
 
 **After (MemoriOpenAI drop-in):**
 ```typescript
-import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
+import { MemoriOpenAI } from 'memorits';
 
 const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
   enableChatMemory: true,
@@ -136,13 +136,12 @@ const memories = await client.memory.searchMemories('world');
 #### Pattern 1: Simple Constructor (Most Common)
 
 ```typescript
-import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
+import { MemoriOpenAI } from 'memorits';
 
 // Simple replacement - existing code works unchanged
 const client = new MemoriOpenAI('your-api-key', {
   enableChatMemory: true,
-  autoInitialize: true,
-  databaseUrl: 'sqlite:./memories.db'
+  autoInitialize: true
 });
 
 // Use exactly like OpenAI client
@@ -330,363 +329,35 @@ try {
   }
   ```
   
-  ## Migration Guide
-  
-  ### From Standard OpenAI to MemoriOpenAI
-  
-  Migrating your existing OpenAI code to MemoriOpenAI is designed to be as simple as possible. Here are the step-by-step guides for different migration scenarios.
-  
-  #### Step 1: Basic Migration (Most Common)
-  
-  **Before:**
-  ```typescript
-  import OpenAI from 'openai';
-  
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
-  ```
-  
-  **After:**
-  ```typescript
-  import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
-  
-  const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-    enableChatMemory: true,
-    autoInitialize: true
-  });
-  ```
-  
-  **✅ No other code changes needed!**
-  
-  #### Step 2: Environment-Based Migration
-  
-  If you prefer environment configuration:
-  
-  ```bash
-  # Add these environment variables
-  export OPENAI_API_KEY="your-api-key"
-  export MEMORI_DATABASE_URL="sqlite:./memories.db"
-  export MEMORI_AUTO_INGEST="true"
-  export MEMORI_PROCESSING_MODE="auto"
-  ```
-  
-  ```typescript
-  // Your code becomes even simpler
-  import { MemoriOpenAIFromEnv } from 'memorits/integrations/openai-dropin';
-  
-  const client = await MemoriOpenAIFromEnv();
-  ```
-  
-  #### Step 3: Advanced Migration with Custom Configuration
-  
-  For applications requiring specific memory settings:
-  
-  ```typescript
-  // Before
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: 'https://api.openai.com/v1',
-    organization: 'your-org'
-  });
-  
-  // After
-  const client = new MemoriOpenAI({
-    apiKey: process.env.OPENAI_API_KEY!,
-    baseURL: 'https://api.openai.com/v1',
-    organization: 'your-org',
-    enableChatMemory: true,
-    autoInitialize: true,
-    databaseUrl: 'sqlite:./enterprise-memories.db',
-    namespace: 'enterprise-app',
-    memoryProcessingMode: 'conscious',
-    minImportanceLevel: 'medium'
-  });
-  ```
-  
-  ### Migration Best Practices
-  
-  #### 1. Start Simple
-  Begin with basic migration and add advanced features incrementally:
-  
-  ```typescript
-  // Start here - basic memory recording
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: true,
-    autoInitialize: true
-  });
-  
-  // Later, add advanced features
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: true,
-    enableEmbeddingMemory: true,
-    memoryProcessingMode: 'conscious',
-    autoInitialize: true,
-    databaseUrl: 'postgresql://...',
-    namespace: 'production-app'
-  });
-  ```
-  
-  #### 2. Database Migration Strategy
-  
-  **For Development:**
-  ```typescript
-  // Use SQLite for easy development
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: true,
-    autoInitialize: true,
-    databaseUrl: 'sqlite:./dev-memories.db'
-  });
-  ```
-  
-  **For Production:**
-  ```typescript
-  // Use PostgreSQL for production
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: true,
-    autoInitialize: true,
-    databaseUrl: 'postgresql://user:pass@host:5432/memories'
-  });
-  ```
-  
-  #### 3. Testing Your Migration
-  
-  Create a simple test to verify memory recording works:
-  
-  ```typescript
-  import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
-  
-  async function testMemoryRecording() {
-    const client = new MemoriOpenAI('test-key', {
-      enableChatMemory: true,
-      autoInitialize: true,
-      databaseUrl: 'sqlite:./test-memories.db'
-    });
-  
-    // Test conversation
-    await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: 'This is a test conversation for memory recording' }]
-    });
-  
-    // Verify memory was recorded
-    const memories = await client.memory.searchMemories('test conversation');
-    console.log(`Found ${memories.length} memories`);
-  
-    // Clean up test database
-    await client.memory.clearAllMemories();
-  }
-  ```
-  
-  #### 4. Gradual Rollout Strategy
-  
-  For large applications, migrate incrementally:
-  
-  ```typescript
-  // Phase 1: Memory recording only (read-only)
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: true,
-    autoInitialize: true,
-    memoryProcessingMode: 'none' // No memory injection yet
-  });
-  
-  // Phase 2: Add memory injection
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: true,
-    autoInitialize: true,
-    memoryProcessingMode: 'auto' // Add memory injection
-  });
-  
-  // Phase 3: Advanced features
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: true,
-    enableEmbeddingMemory: true,
-    memoryProcessingMode: 'conscious',
-    autoInitialize: true,
-    consciousIngest: true,
-    autoIngest: true
-  });
-  ```
-  
-  ### Common Migration Patterns
-  
-  #### Pattern A: Express.js Application
-  
-  ```typescript
-  // Before
-  import OpenAI from 'openai';
-  
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
-  
-  app.post('/chat', async (req, res) => {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: req.body.messages
-    });
-    res.json(response);
-  });
-  
-  // After
-  import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
-  
-  const openai = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-    enableChatMemory: true,
-    autoInitialize: true
-  });
-  
-  app.post('/chat', async (req, res) => {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: req.body.messages
-    });
-    res.json(response);
-  });
-  
-  // Now with memory search endpoint too!
-  app.get('/memories', async (req, res) => {
-    const memories = await openai.memory.searchMemories(req.query.q as string);
-    res.json(memories);
-  });
-  ```
-  
-  #### Pattern B: CLI Application
-  
-  ```typescript
-  // Before
-  import OpenAI from 'openai';
-  
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
-  
-  // After
-  import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
-  
-  const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-    enableChatMemory: true,
-    autoInitialize: true
-  });
-  ```
-  
-  #### Pattern C: Agent Framework Integration
-  
-  ```typescript
-  // Before
-  import OpenAI from 'openai';
-  
-  class MyAgent {
-    private client: OpenAI;
-  
-    constructor() {
-      this.client = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
-      });
-    }
-  
-    async chat(message: string) {
-      return await this.client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: message }]
-      });
-    }
-  }
-  
-  // After
-  import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
-  
-  class MyAgent {
-    private client: MemoriOpenAI;
-  
-    constructor() {
-      this.client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-        enableChatMemory: true,
-        autoInitialize: true,
-        namespace: 'my-agent'
-      });
-    }
-  
-    async chat(message: string) {
-      const response = await this.client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: message }]
-      });
-  
-      // Now you can also search memories
-      const context = await this.client.memory.searchMemories(message, {
-        limit: 3
-      });
-  
-      return { response, context };
-    }
-  }
-  ```
-  
-  ### Migration Checklist
-  
-  - [ ] Replace OpenAI imports with MemoriOpenAI
-  - [ ] Add memory configuration options
-  - [ ] Test that existing functionality still works
-  - [ ] Verify memory recording is working
-  - [ ] Test memory search and retrieval
-  - [ ] Configure production database settings
-  - [ ] Set up monitoring for memory operations
-  - [ ] Update deployment scripts if needed
-  
-  ### Troubleshooting Migration Issues
-  
-  **Issue: TypeScript compilation errors**
-  ```typescript
-  // Make sure you're importing from the correct path
-  import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
-  // Not: import MemoriOpenAI from 'memorits';
-  ```
-  
-  **Issue: Memory not being recorded**
-  ```typescript
-  // Check your configuration
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: true,  // Make sure this is true
-    autoInitialize: true,    // And this too
-    databaseUrl: 'sqlite:./memories.db'  // Specify database
-  });
-  ```
-  
-  **Issue: Database connection errors**
-  ```typescript
-  // For development, use SQLite
-  databaseUrl: 'sqlite:./memories.db'
-  
-  // For production, use full connection string
-  databaseUrl: 'postgresql://user:pass@localhost:5432/memories'
-  ```
-  
-  **Issue: Memory injection not working**
-  ```typescript
-  // Check processing mode
-  const client = new MemoriOpenAI(apiKey, {
-    memoryProcessingMode: 'auto',  // Should be 'auto' or 'conscious'
-    autoIngest: true,              // Enable auto ingestion
-    consciousIngest: true          // Enable conscious processing
-  });
-  ```
-  
-  ### Rollback Strategy
-  
-  If you need to temporarily disable memory features:
-  
-  ```typescript
-  // Quick rollback to standard OpenAI behavior
-  const client = new MemoriOpenAI(apiKey, {
-    enableChatMemory: false,      // Disable memory recording
-    memoryProcessingMode: 'none'  // Disable memory injection
-  });
-  
-  // Or switch back to standard OpenAI completely
-  import OpenAI from 'openai';
-  const client = new OpenAI({ apiKey });
-  ```
+---
+
+## Migration Guide
+
+**Ready to migrate from OpenAI to MemoriOpenAI?**
+
+🚀 **[Complete Migration Guide](docs/MIGRATION.md)** - Step-by-step migration with examples, best practices, and troubleshooting.
+
+📖 **[Detailed Migration Documentation](docs/MIGRATION.md)** - Advanced configuration, production deployment, and comprehensive testing.
+
+### Quick Migration (3 lines)
+
+```typescript
+// Replace this
+import OpenAI from 'openai';
+const client = new OpenAI({ apiKey });
+
+// With this
+import { MemoriOpenAI } from 'memorits';
+const client = new MemoriOpenAI(apiKey, { enableChatMemory: true });
+```
+
+**✅ Zero breaking changes** - Your existing OpenAI code works unchanged!
+
+### Additional Resources
+
+- 📖 **[Quick Migration Guide](docs/MIGRATION.md)** - Essential migration steps and examples
+- 📚 **[Complete Migration Guide](docs/MIGRATION.md)** - Comprehensive testing and production deployment
+- 🧪 **[API Documentation](docs/API.md)** - Full API reference with detailed examples
 ```
 
 ---
