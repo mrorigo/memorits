@@ -1,4 +1,3 @@
-// src/integrations/openai-dropin/memory-manager.ts
 // Memory Manager implementation for OpenAI Drop-in with Architecture Phase 1 components
 // Provides ConversationRecorder, StreamingBuffer, and comprehensive memory management
 
@@ -6,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Memori } from '../../core/Memori';
 import { MemoryAgent } from '../../core/agents/MemoryAgent';
 import { logInfo, logError } from '../../core/utils/Logger';
+import { ErrorUtils } from './utils/ErrorUtils';
 import type {
   MemoryManager,
   ConversationRecorder,
@@ -23,6 +23,10 @@ import type {
   BufferedStream,
   StreamingBufferConfig,
   ErrorRecoveryConfig,
+  MemoryProcessingMode,
+} from './types';
+import {
+  RecoveryStrategy,
 } from './types';
 import type {
   MemoryClassification,
@@ -36,35 +40,16 @@ import type {
 import {
   MemoryError,
   MemoryErrorType,
-  RecoveryStrategy,
 } from './types';
 
 /**
- * Default streaming buffer configuration
+ * Default streaming buffer configuration - now centralized in ConfigUtils
  */
-const DEFAULT_STREAMING_CONFIG: StreamingBufferConfig = {
+const DEFAULT_STREAMING_CONFIG: Partial<StreamingBufferConfig> = {
   bufferTimeout: 30000, // 30 seconds
   maxBufferSize: 50000, // 50KB
   enableMemoryRecording: true,
-  memoryProcessingMode: 'auto',
-};
-
-/**
- * Error recovery configuration
- */
-const DEFAULT_ERROR_RECOVERY: ErrorRecoveryConfig = {
-  maxRetries: 3,
-  retryDelay: 1000,
-  strategy: RecoveryStrategy.RETRY,
-  logRecovery: true,
-  customRecovery: async (error: MemoryError) => {
-    logError('Custom recovery function called', {
-      component: 'MemoryManager',
-      errorType: error.type,
-      message: error.message,
-    });
-    return true; // Recovery successful
-  },
+  memoryProcessingMode: 'auto' as MemoryProcessingMode,
 };
 
 /**
@@ -106,7 +91,11 @@ export class OpenAIMemoryManager implements MemoryManager {
     this.memoryAgent = memoryAgent;
     this.conversationRecorder = new OpenAIConversationRecorder(memori, memoryAgent);
     this.streamingBuffer = new OpenAIStreamingBuffer();
-    this.errorRecovery = { ...DEFAULT_ERROR_RECOVERY, ...config.errorRecovery };
+    this.errorRecovery = { ...ErrorUtils.defaults.ERROR_RECOVERY, ...config.errorRecovery };
+
+    // Configure error handling using ErrorUtils
+    ErrorUtils.MemoryErrorHandler.configureErrorRecovery(this.errorRecovery);
+
     this.metrics = {
       totalRequests: 0,
       memoryRecordingSuccess: 0,
@@ -258,10 +247,11 @@ export class OpenAIMemoryManager implements MemoryManager {
       // Store operation context for potential retry
       this.storeOperationContext('chat', params, response, options);
 
-      return await this.handleRecordingError(error, {
-        type: MemoryErrorType.RECORDING_FAILED,
-        context: { params, options, duration },
-        recoverable: true,
+      return await ErrorUtils.MemoryErrorHandler.handleRecordingError(error, {
+        params,
+        options,
+        duration,
+        operation: 'chat_completion',
       });
     }
   }
@@ -470,9 +460,10 @@ export class OpenAIMemoryManager implements MemoryManager {
   ): Promise<MemoryRecordingResult> {
     // Use streaming buffer to capture complete response
     const bufferConfig: StreamingBufferConfig = {
-      ...DEFAULT_STREAMING_CONFIG,
-      ...options?.streamingConfig,
+      bufferTimeout: options?.streamingConfig?.bufferTimeout ?? DEFAULT_STREAMING_CONFIG.bufferTimeout!,
+      maxBufferSize: options?.streamingConfig?.maxBufferSize ?? DEFAULT_STREAMING_CONFIG.maxBufferSize!,
       enableMemoryRecording: options?.forceRecording ?? true,
+      memoryProcessingMode: options?.streamingConfig?.memoryProcessingMode ?? DEFAULT_STREAMING_CONFIG.memoryProcessingMode!,
     };
 
     const bufferedResult = await this.streamingBuffer.processStream(stream, bufferConfig);
@@ -811,7 +802,7 @@ export class OpenAIConversationRecorder implements ConversationRecorder {
           MemoryErrorType.RECORDING_FAILED,
           'Cannot record conversation: AI output is empty or missing',
           { context, userInputProvided: Boolean(userInput) },
-          false
+          false,
         );
       }
 
@@ -964,7 +955,12 @@ export class OpenAIStreamingBuffer implements StreamingBuffer {
   private timeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config?: Partial<StreamingBufferConfig>) {
-    this.config = { ...DEFAULT_STREAMING_CONFIG, ...config };
+    this.config = {
+      bufferTimeout: config?.bufferTimeout ?? DEFAULT_STREAMING_CONFIG.bufferTimeout!,
+      maxBufferSize: config?.maxBufferSize ?? DEFAULT_STREAMING_CONFIG.maxBufferSize!,
+      enableMemoryRecording: config?.enableMemoryRecording ?? DEFAULT_STREAMING_CONFIG.enableMemoryRecording!,
+      memoryProcessingMode: config?.memoryProcessingMode ?? DEFAULT_STREAMING_CONFIG.memoryProcessingMode!,
+    };
     this.startTime = Date.now();
   }
 
@@ -1027,7 +1023,7 @@ export class OpenAIStreamingBuffer implements StreamingBuffer {
     contentLength: number;
     isComplete: boolean;
     hasErrors: boolean;
-    } {
+  } {
     return {
       chunkCount: this.chunks.length,
       contentLength: this.contentBuffer.length,

@@ -1,35 +1,34 @@
-// tests/unit/integrations/openai-dropin/MemoriOpenAIClient.test.ts
 // Comprehensive unit tests for MemoriOpenAIClient
 // Tests all aspects of the main OpenAI drop-in client implementation
 
 // Mock dependencies before importing the main module
 const mockMemori = {
-    enable: jest.fn().mockResolvedValue(undefined),
-    close: jest.fn().mockResolvedValue(undefined),
-    recordConversation: jest.fn(),
-    searchMemories: jest.fn(),
-    getSessionId: jest.fn().mockReturnValue('mock-session-id'),
-    isEnabled: jest.fn().mockReturnValue(true),
+  enable: jest.fn().mockResolvedValue(undefined),
+  close: jest.fn().mockResolvedValue(undefined),
+  recordConversation: jest.fn(),
+  searchMemories: jest.fn(),
+  getSessionId: jest.fn().mockReturnValue('mock-session-id'),
+  isEnabled: jest.fn().mockReturnValue(true),
 };
 
 jest.mock('../../../../src/core/Memori', () => ({
-    Memori: jest.fn().mockImplementation(() => mockMemori),
+  Memori: jest.fn().mockImplementation(() => mockMemori),
 }));
 
 jest.mock('../../../../src/core/agents/MemoryAgent', () => ({
-    MemoryAgent: jest.fn().mockImplementation(() => ({
-        processConversation: jest.fn(),
-        getProcessingHistory: jest.fn().mockReturnValue([]),
-        clearProcessingHistory: jest.fn(),
-    })),
+  MemoryAgent: jest.fn().mockImplementation(() => ({
+    processConversation: jest.fn(),
+    getProcessingHistory: jest.fn().mockReturnValue([]),
+    clearProcessingHistory: jest.fn(),
+  })),
 }));
 
 jest.mock('../../../../src/core/providers/OpenAIProvider', () => ({
-    OpenAIProvider: jest.fn().mockImplementation(() => ({})),
+  OpenAIProvider: jest.fn().mockImplementation(() => ({})),
 }));
 
 jest.mock('../../../../src/core/utils/ConfigManager', () => ({
-    ConfigManager: jest.fn().mockImplementation(() => ({})),
+  ConfigManager: jest.fn().mockImplementation(() => ({})),
 }));
 
 import { MemoriOpenAIClient } from '../../../../src/integrations/openai-dropin/client';
@@ -357,56 +356,56 @@ describe('MemoriOpenAIClient', () => {
       });
 
       it('should update OpenAI client when API settings change', async () => {
-          const newConfig: Partial<MemoriOpenAIConfig> = {
-              baseUrl: 'https://new-api.example.com',
-              organization: 'new-org',
-              project: 'new-project',
-          };
+        const newConfig: Partial<MemoriOpenAIConfig> = {
+          baseUrl: 'https://new-api.example.com',
+          organization: 'new-org',
+          project: 'new-project',
+        };
 
-          await client.updateConfig(newConfig);
+        await client.updateConfig(newConfig);
 
-          const updatedConfig = client.getConfig();
-          expect(updatedConfig.baseUrl).toBe('https://new-api.example.com');
-          expect(updatedConfig.organization).toBe('new-org');
-          expect(updatedConfig.project).toBe('new-project');
-          // Note: apiKey is not updated as it would break the client - it's preserved from original
-          expect(updatedConfig.apiKey).toBe('test-api-key');
+        const updatedConfig = client.getConfig();
+        expect(updatedConfig.baseUrl).toBe('https://new-api.example.com');
+        expect(updatedConfig.organization).toBe('new-org');
+        expect(updatedConfig.project).toBe('new-project');
+        // Note: apiKey is not updated as it would break the client - it's preserved from original
+        expect(updatedConfig.apiKey).toBe('test-api-key');
       });
 
       it('should validate configuration updates', async () => {
-          const invalidConfig: Partial<MemoriOpenAIConfig> = {
-              bufferTimeout: 500, // Invalid: too small
-          };
+        const invalidConfig: Partial<MemoriOpenAIConfig> = {
+          bufferTimeout: 500, // Invalid: too small
+        };
 
-          await expect(client.updateConfig(invalidConfig)).rejects.toThrow('Buffer timeout must be at least 1000ms');
+        await expect(client.updateConfig(invalidConfig)).rejects.toThrow('Buffer timeout must be at least 1000ms');
       });
 
       it('should handle configuration updates with memory processing modes', async () => {
-          const configWithModes: Partial<MemoriOpenAIConfig> = {
-              memoryProcessingMode: 'auto',
-              maxMemoryAge: 30,
-          };
+        const configWithModes: Partial<MemoriOpenAIConfig> = {
+          memoryProcessingMode: 'auto',
+          maxMemoryAge: 30,
+        };
 
-          await client.updateConfig(configWithModes);
+        await client.updateConfig(configWithModes);
 
-          const updatedConfig = client.getConfig();
-          expect(updatedConfig.memoryProcessingMode).toBe('auto');
-          expect(updatedConfig.maxMemoryAge).toBe(30);
+        const updatedConfig = client.getConfig();
+        expect(updatedConfig.memoryProcessingMode).toBe('auto');
+        expect(updatedConfig.maxMemoryAge).toBe(30);
       });
 
       it('should handle configuration updates with performance settings', async () => {
-          const performanceConfig: Partial<MemoriOpenAIConfig> = {
-              bufferTimeout: 5000,
-              maxBufferSize: 10000,
-              backgroundUpdateInterval: 10000,
-          };
+        const performanceConfig: Partial<MemoriOpenAIConfig> = {
+          bufferTimeout: 5000,
+          maxBufferSize: 10000,
+          backgroundUpdateInterval: 10000,
+        };
 
-          await client.updateConfig(performanceConfig);
+        await client.updateConfig(performanceConfig);
 
-          const updatedConfig = client.getConfig();
-          expect(updatedConfig.bufferTimeout).toBe(5000);
-          expect(updatedConfig.maxBufferSize).toBe(10000);
-          expect(updatedConfig.backgroundUpdateInterval).toBe(10000);
+        const updatedConfig = client.getConfig();
+        expect(updatedConfig.bufferTimeout).toBe(5000);
+        expect(updatedConfig.maxBufferSize).toBe(10000);
+        expect(updatedConfig.backgroundUpdateInterval).toBe(10000);
       });
     });
   });
@@ -514,26 +513,26 @@ describe('MemoriOpenAIClient', () => {
     });
 
     it('should handle enable/disable state transitions correctly', async () => {
-        const client = new MemoriOpenAIClient('test-api-key', { autoInitialize: false });
+      const client = new MemoriOpenAIClient('test-api-key', { autoInitialize: false });
 
-        // Initially disabled
-        expect(client.isEnabled).toBe(false);
+      // Initially disabled
+      expect(client.isEnabled).toBe(false);
 
-        // Enable successfully
-        await client.enable();
-        expect(client.isEnabled).toBe(true);
+      // Enable successfully
+      await client.enable();
+      expect(client.isEnabled).toBe(true);
 
-        // Try to enable again - should fail
-        await expect(client.enable()).rejects.toThrow('MemoriOpenAIClient is already enabled');
-        expect(client.isEnabled).toBe(true);
+      // Try to enable again - should fail
+      await expect(client.enable()).rejects.toThrow('MemoriOpenAIClient is already enabled');
+      expect(client.isEnabled).toBe(true);
 
-        // Disable successfully
-        await client.disable();
-        expect(client.isEnabled).toBe(false);
+      // Disable successfully
+      await client.disable();
+      expect(client.isEnabled).toBe(false);
 
-        // Try to disable again - should fail
-        await expect(client.disable()).rejects.toThrow('MemoriOpenAIClient is not enabled');
-        expect(client.isEnabled).toBe(false);
+      // Try to disable again - should fail
+      await expect(client.disable()).rejects.toThrow('MemoriOpenAIClient is not enabled');
+      expect(client.isEnabled).toBe(false);
     });
 
     it('should handle configuration update errors gracefully', async () => {

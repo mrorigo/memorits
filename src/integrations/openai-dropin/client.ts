@@ -12,6 +12,7 @@ import { logInfo, logError } from '../../core/utils/Logger';
 import { OpenAIMemoryManager } from './memory-manager';
 import { ChatProxy } from './chat-proxy';
 import { EmbeddingProxy } from './embedding-proxy';
+import { ConfigUtils } from './utils/ConfigUtils';
 import type {
   MemoriOpenAI,
   MemoriOpenAIConfig,
@@ -29,15 +30,9 @@ import type {
   BufferedStream,
   OpenAIMetrics,
   DatabaseConfig,
-  DatabaseType,
 } from './types';
 
-// Import required types from core
-import type {
-  MemoryClassification,
-  MemoryImportanceLevel,
-  MemorySearchResult,
-} from '../../core/types/models';
+// Import required types from core - removed unused imports
 
 // Import error classes as values, not types
 import {
@@ -46,59 +41,22 @@ import {
 } from './types';
 
 /**
- * Default configuration for MemoriOpenAI
- */
-const DEFAULT_CONFIG: Partial<MemoriOpenAIConfig> = {
-  enableChatMemory: true,
-  enableEmbeddingMemory: false,
-  memoryProcessingMode: 'auto',
-  autoInitialize: true,
-  bufferTimeout: 30000,
-  maxBufferSize: 50000,
-  backgroundUpdateInterval: 30000,
-  debugMode: false,
-  enableMetrics: false,
-  metricsInterval: 60000,
-};
-
-/**
- * Validates and merges configuration
+ * Validates and merges configuration using ConfigUtils
  */
 function validateAndMergeConfig(
   apiKey: string,
   config: Partial<MemoriOpenAIConfig> = {},
 ): MemoriOpenAIConfig {
-  const mergedConfig: MemoriOpenAIConfig = {
-    ...DEFAULT_CONFIG,
-    ...config,
-    apiKey,
-  };
+  // Use ConfigUtils for validation and merging
+  const mergedConfig = ConfigUtils.ConfigBuilder.mergeWithDefaults(apiKey, config);
 
-  // Validate required fields
-  if (!apiKey) {
+  // Validate using ConfigUtils
+  const validation = ConfigUtils.MemoriOpenAIConfigValidator.validate(mergedConfig);
+  if (!validation.isValid) {
     throw new MemoryError(
       MemoryErrorType.CONFIGURATION_ERROR,
-      'API key is required for MemoriOpenAI',
-      { config: mergedConfig },
-      false,
-    );
-  }
-
-  // Validate buffer settings
-  if (mergedConfig.bufferTimeout && mergedConfig.bufferTimeout < 1000) {
-    throw new MemoryError(
-      MemoryErrorType.CONFIGURATION_ERROR,
-      'Buffer timeout must be at least 1000ms',
-      { bufferTimeout: mergedConfig.bufferTimeout },
-      false,
-    );
-  }
-
-  if (mergedConfig.maxBufferSize && mergedConfig.maxBufferSize < 1000) {
-    throw new MemoryError(
-      MemoryErrorType.CONFIGURATION_ERROR,
-      'Max buffer size must be at least 1000 characters',
-      { maxBufferSize: mergedConfig.maxBufferSize },
+      `Configuration validation failed: ${validation.errors.join(', ')}`,
+      { config: mergedConfig, validationErrors: validation.errors },
       false,
     );
   }
@@ -107,17 +65,10 @@ function validateAndMergeConfig(
 }
 
 /**
- * Creates database configuration from MemoriOpenAI config
+ * Creates database configuration from MemoriOpenAI config using ConfigUtils
  */
 function createDatabaseConfig(config: MemoriOpenAIConfig): DatabaseConfig {
-  const databaseType: DatabaseType = 'sqlite'; // Default to SQLite for simplicity
-  const databaseUrl = config.databaseConfig?.url || 'sqlite:./memori-openai.db';
-
-  return {
-    type: databaseType,
-    url: databaseUrl,
-    namespace: config.namespace || 'memori-openai',
-  };
+  return ConfigUtils.DatabaseConfigBuilder.fromConfig(config);
 }
 
 

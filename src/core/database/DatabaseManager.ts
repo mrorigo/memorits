@@ -1,4 +1,3 @@
-// src/core/database/DatabaseManager.ts
 import { PrismaClient } from '@prisma/client';
 import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } from '../types/schemas';
 import { MemorySearchResult, SearchOptions, DatabaseStats } from '../types/models';
@@ -361,16 +360,16 @@ export class DatabaseManager {
     });
 
     // Filter by similarity threshold (basic implementation)
-  return similarMemories.filter((memory) => {
-    // Simple content overlap check
-    const contentWords = new Set(content.toLowerCase().split(/\s+/));
-    const memoryWords = new Set(memory.content.toLowerCase().split(/\s+/));
-    const intersection = new Set([...Array.from(contentWords)].filter((x) => memoryWords.has(x)));
-    const union = new Set([...Array.from(contentWords), ...Array.from(memoryWords)]);
-    const similarity = intersection.size / union.size;
+    return similarMemories.filter((memory) => {
+      // Simple content overlap check
+      const contentWords = new Set(content.toLowerCase().split(/\s+/));
+      const memoryWords = new Set(memory.content.toLowerCase().split(/\s+/));
+      const intersection = new Set([...Array.from(contentWords)].filter((x) => memoryWords.has(x)));
+      const union = new Set([...Array.from(contentWords), ...Array.from(memoryWords)]);
+      const similarity = intersection.size / union.size;
 
-    return similarity >= threshold;
-  });
+      return similarity >= threshold;
+    });
   }
 
   /**
