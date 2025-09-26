@@ -76,6 +76,10 @@ export class DatabaseManager {
     this.initializeFTSSupport();
   }
 
+  getPrismaClient(): PrismaClient {
+    return this.prisma;
+  }
+
   /**
    * Initialize or get the SearchService instance
    */

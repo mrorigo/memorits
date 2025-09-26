@@ -1,7 +1,6 @@
 #!/usr/bin/env ts-node
 /**
  * Test script for FTS5 implementation with BM25 ranking
- * This tests the database schema updates specified in PARITY_1.md section 2.1
  */
 
 import { PrismaClient } from '@prisma/client';

@@ -1,6 +1,5 @@
 /**
  * Example demonstrating the new SearchStrategy interface and base classes
- * as specified in PARITY_1.md section 2.3
  */
 
 import {

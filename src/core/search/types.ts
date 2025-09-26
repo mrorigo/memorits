@@ -3,7 +3,10 @@ export enum SearchStrategy {
   FTS5 = 'fts5',
   LIKE = 'like',
   RECENT = 'recent',
-  SEMANTIC = 'semantic'
+  SEMANTIC = 'semantic',
+  CATEGORY_FILTER = 'category_filter',
+  TEMPORAL_FILTER = 'temporal_filter',
+  METADATA_FILTER = 'metadata_filter'
 }
 
 // Filter Types
@@ -56,7 +59,7 @@ export type {
   SearchResult as EnhancedSearchResult,
   SearchStrategyMetadata,
   SearchStrategyConfig,
-  ValidationResult
+  ValidationResult,
 } from './SearchStrategy';
 
 // Search Service Interface

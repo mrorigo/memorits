@@ -3,7 +3,6 @@ import { logInfo, logError } from '../utils/Logger';
 
 /**
  * Initialize the FTS5 search schema with triggers and BM25 support
- * This implements the database schema updates specified in PARITY_1.md section 2.1
  */
 export async function initializeSearchSchema(prisma: PrismaClient): Promise<boolean> {
   try {

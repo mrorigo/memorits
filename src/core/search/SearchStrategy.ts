@@ -1,4 +1,4 @@
-// SearchStrategy interface and base classes as specified in PARITY_1.md section 2.3
+// SearchStrategy interface and base classes
 
 /**
  * Search capability enumeration for strategy features
@@ -9,7 +9,11 @@ export enum SearchCapability {
     FILTERING = 'filtering',
     SORTING = 'sorting',
     RELEVANCE_SCORING = 'relevance_scoring',
-    CATEGORIZATION = 'categorization'
+    CATEGORIZATION = 'categorization',
+    TEMPORAL_FILTERING = 'temporal_filtering',
+    TIME_RANGE_PROCESSING = 'time_range_processing',
+    TEMPORAL_PATTERN_MATCHING = 'temporal_pattern_matching',
+    TEMPORAL_AGGREGATION = 'temporal_aggregation',
 }
 
 /**
@@ -72,7 +76,7 @@ export interface SearchStrategyConfig {
 }
 
 /**
- * SearchStrategy interface as specified in PARITY_1.md section 2.3
+ * SearchStrategy interface
  */
 export interface ISearchStrategy {
     readonly name: string;
@@ -117,7 +121,7 @@ export abstract class BaseSearchStrategy implements ISearchStrategy {
             capabilities: [...this.capabilities],
             supportedMemoryTypes: ['short_term', 'long_term'],
             configurationSchema: this.getConfigurationSchema(),
-            performanceMetrics: this.getPerformanceMetrics()
+            performanceMetrics: this.getPerformanceMetrics(),
         };
     }
 
