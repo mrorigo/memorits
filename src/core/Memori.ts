@@ -11,6 +11,7 @@ import {
   RecordConversationOptions,
   SearchOptions,
 } from './types/models';
+import { ProcessedLongTermMemory } from './types/schemas';
 
 export class Memori {
   private dbManager: DatabaseManager;
@@ -335,5 +336,49 @@ export class Memori {
    */
   isBackgroundMonitoringActive(): boolean {
     return this.backgroundInterval !== undefined;
+  }
+
+  /**
+   * Store processed memory directly (used by memory manager components)
+   */
+  async storeProcessedMemory(
+    processedMemory: ProcessedLongTermMemory,
+    chatId: string,
+    namespace?: string,
+  ): Promise<string> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    const targetNamespace = namespace || this.config.namespace;
+
+    try {
+      const memoryId = await this.dbManager.storeLongTermMemory(
+        processedMemory,
+        chatId,
+        targetNamespace,
+      );
+
+      logInfo(`Processed memory stored successfully for chat ${chatId}`, {
+        component: 'Memori',
+        chatId,
+        namespace: targetNamespace,
+        classification: processedMemory.classification,
+        importance: processedMemory.importance,
+      });
+
+      return memoryId;
+    } catch (error) {
+      logError(`Failed to store processed memory for chat ${chatId}`, {
+        component: 'Memori',
+        chatId,
+        namespace: targetNamespace,
+        classification: processedMemory.classification,
+        importance: processedMemory.importance,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
   }
 }

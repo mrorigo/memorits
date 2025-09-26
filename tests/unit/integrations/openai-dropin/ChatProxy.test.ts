@@ -396,46 +396,44 @@ describe('ChatProxy', () => {
                 expect(shouldRecord).toBe(false);
             });
 
-            it('should extract user content correctly from message arrays', () => {
-                const params = {
-                    model: 'gpt-4o-mini',
-                    messages: [
-                        { role: 'system', content: 'System prompt' },
-                        { role: 'user', content: 'User message' },
-                        { role: 'assistant', content: 'Assistant response' },
-                        { role: 'user', content: 'Latest user message' }, // Should be extracted
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 1000,
-                    stream: false,
-                };
+           it('should extract user content correctly from message arrays', () => {
+               const params = {
+                   model: 'gpt-4o-mini',
+                   messages: [
+                       { role: 'system', content: 'System prompt' },
+                       { role: 'user', content: 'User message' },
+                       { role: 'assistant', content: 'Assistant response' },
+                       { role: 'user', content: 'Latest user message' }, // Should be extracted
+                   ],
+                   temperature: 0.7,
+                   max_tokens: 1000,
+                   stream: false,
+               };
 
-                const extractUserContent = (chatProxy as any).extractUserContent;
-                const userContent = extractUserContent(params.messages);
-                expect(userContent).toBe('Latest user message');
-            });
+               const userContent = (chatProxy as any).extractUserContent(params.messages);
+               expect(userContent).toBe('Latest user message');
+           });
 
-            it('should handle array content blocks', () => {
-                const params = {
-                    model: 'gpt-4o-mini',
-                    messages: [
-                        {
-                            role: 'user',
-                            content: [
-                                { type: 'text', text: 'First part' },
-                                { type: 'text', text: 'Second part' },
-                            ],
-                        },
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 1000,
-                    stream: false,
-                };
+           it('should handle array content blocks', () => {
+               const params = {
+                   model: 'gpt-4o-mini',
+                   messages: [
+                       {
+                           role: 'user',
+                           content: [
+                               { type: 'text', text: 'First part' },
+                               { type: 'text', text: 'Second part' },
+                           ],
+                       },
+                   ],
+                   temperature: 0.7,
+                   max_tokens: 1000,
+                   stream: false,
+               };
 
-                const extractUserContent = (chatProxy as any).extractUserContent;
-                const userContent = extractUserContent(params.messages);
-                expect(userContent).toBe('First part Second part');
-            });
+               const userContent = (chatProxy as any).extractUserContent(params.messages);
+               expect(userContent).toBe('First part Second part');
+           });
         });
     });
 

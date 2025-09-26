@@ -361,25 +361,91 @@ export class DatabaseManager {
     });
 
     // Filter by similarity threshold (basic implementation)
-    return similarMemories.filter(memory => {
-      // Simple content overlap check
-      const contentWords = new Set(content.toLowerCase().split(/\s+/));
-      const memoryWords = new Set(memory.content.toLowerCase().split(/\s+/));
-      const intersection = new Set([...contentWords].filter(x => memoryWords.has(x)));
-      const union = new Set([...contentWords, ...memoryWords]);
-      const similarity = intersection.size / union.size;
+  return similarMemories.filter((memory) => {
+    // Simple content overlap check
+    const contentWords = new Set(content.toLowerCase().split(/\s+/));
+    const memoryWords = new Set(memory.content.toLowerCase().split(/\s+/));
+    const intersection = new Set([...Array.from(contentWords)].filter((x) => memoryWords.has(x)));
+    const union = new Set([...Array.from(contentWords), ...Array.from(memoryWords)]);
+    const similarity = intersection.size / union.size;
 
-      return similarity >= threshold;
-    });
+    return similarity >= threshold;
+  });
   }
 
   /**
    * Get all memories that are marked as duplicates of others
    */
-  async getDuplicateMemories(_namespace: string = 'default'): Promise<MemorySearchResult[]> {
-    // Note: This is a placeholder - actual implementation would depend on schema
-    // For now, return empty array as we don't have duplicate tracking fields
-    return [];
+  async getDuplicateMemories(namespace: string = 'default'): Promise<MemorySearchResult[]> {
+    try {
+      // Look for memories that have duplicate tracking information in metadata
+      // Since we don't have dedicated duplicate tracking fields, we search for
+      // memories that reference other memories as duplicates
+      const memories = await this.prisma.longTermMemory.findMany({
+        where: {
+          namespace,
+          // Look for memories that have metadata indicating they're duplicates
+          processedData: {
+            path: ['isDuplicate'],
+            equals: true,
+          } as any,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Also search for memories with duplicate tracking in searchableContent
+      const duplicateContentMemories = await this.prisma.longTermMemory.findMany({
+        where: {
+          namespace,
+          searchableContent: {
+            contains: 'DUPLICATE_OF:',
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Combine and deduplicate results
+      const allMemories = [...memories, ...duplicateContentMemories];
+      const uniqueMemories = allMemories.filter((memory, index, self) =>
+        index === self.findIndex((m) => m.id === memory.id),
+      );
+
+      const result: MemorySearchResult[] = uniqueMemories.map((memory: any) => ({
+        id: memory.id,
+        content: memory.searchableContent,
+        summary: memory.summary,
+        classification: memory.classification as unknown as MemoryClassification,
+        importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
+        topic: memory.topic || undefined,
+        entities: (memory.entitiesJson as string[]) || [],
+        keywords: (memory.keywordsJson as string[]) || [],
+        confidenceScore: memory.confidenceScore,
+        classificationReason: memory.classificationReason || '',
+        metadata: {
+          modelUsed: 'unknown',
+          category: memory.categoryPrimary,
+          originalChatId: memory.originalChatId,
+          extractionTimestamp: memory.extractionTimestamp,
+          isDuplicate: (memory.processedData as any)?.isDuplicate || false,
+          duplicateOf: (memory.processedData as any)?.duplicateOf || undefined,
+        },
+      }));
+
+      logInfo(`Retrieved ${result.length} duplicate memories for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        duplicateCount: result.length,
+      });
+
+      return result;
+    } catch (error) {
+      logInfo(`Error retrieving duplicate memories for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to retrieve duplicate memories: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -390,14 +456,114 @@ export class DatabaseManager {
     originalId: string,
     consolidationReason: string = 'automatic_consolidation',
   ): Promise<void> {
-    // Note: This is a placeholder - actual implementation would update duplicate tracking fields
-    // For now, just log the action
-    logInfo(`Would mark memory ${duplicateId} as duplicate of ${originalId} with reason: ${consolidationReason}`, {
-      component: 'DatabaseManager',
-      duplicateId,
-      originalId,
-      consolidationReason,
-    });
+    try {
+      // Update the duplicate memory with tracking information
+      await this.prisma.longTermMemory.update({
+        where: { id: duplicateId },
+        data: {
+          processedData: {
+            isDuplicate: true,
+            duplicateOf: originalId,
+            consolidationReason,
+            markedAsDuplicateAt: new Date(),
+          } as any,
+        },
+      });
+
+      logInfo(`Marked memory ${duplicateId} as duplicate of ${originalId}`, {
+        component: 'DatabaseManager',
+        duplicateId,
+        originalId,
+        consolidationReason,
+      });
+    } catch (error) {
+      logInfo(`Error marking memory ${duplicateId} as duplicate of ${originalId}`, {
+        component: 'DatabaseManager',
+        duplicateId,
+        originalId,
+        consolidationReason,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to mark memory as duplicate: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Update duplicate tracking information for memories
+   */
+  async updateDuplicateTracking(
+    updates: Array<{
+      memoryId: string;
+      isDuplicate?: boolean;
+      duplicateOf?: string;
+      consolidationReason?: string;
+      markedAsDuplicateAt?: Date;
+    }>,
+    namespace: string = 'default',
+  ): Promise<{ updated: number; errors: string[] }> {
+    const errors: string[] = [];
+    let updated = 0;
+
+    try {
+      // Process each update in parallel for better performance
+      const updatePromises = updates.map(async (update) => {
+        try {
+          const existingMemory = await this.prisma.longTermMemory.findFirst({
+            where: {
+              id: update.memoryId,
+              namespace,
+            },
+          });
+
+          if (!existingMemory) {
+            errors.push(`Memory ${update.memoryId} not found in namespace ${namespace}`);
+            return;
+          }
+
+          // Update the memory with new duplicate tracking information
+          await this.prisma.longTermMemory.update({
+            where: { id: update.memoryId },
+            data: {
+              processedData: {
+                ...(existingMemory.processedData as any),
+                ...update,
+                updatedAt: new Date(),
+              } as any,
+            },
+          });
+
+          updated++;
+        } catch (error) {
+          const errorMsg = `Failed to update duplicate tracking for memory ${update.memoryId}: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMsg);
+          logInfo(errorMsg, {
+            component: 'DatabaseManager',
+            memoryId: update.memoryId,
+            namespace,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+
+      await Promise.all(updatePromises);
+
+      logInfo(`Updated duplicate tracking for ${updated} memories in namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        updated,
+        errors: errors.length,
+      });
+
+      return { updated, errors };
+    } catch (error) {
+      const errorMsg = `Error updating duplicate tracking: ${error instanceof Error ? error.message : String(error)}`;
+      logInfo(errorMsg, {
+        component: 'DatabaseManager',
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(errorMsg);
+    }
   }
 
   /**
@@ -434,17 +600,101 @@ export class DatabaseManager {
     totalMemories: number;
     potentialDuplicates: number;
     consolidatedMemories: number;
+    consolidationRatio: number;
+    lastConsolidation?: Date;
   }> {
-    // Note: This is a placeholder - actual implementation would query consolidation tracking
-    const totalMemories = await this.prisma.longTermMemory.count({
-      where: { namespace },
-    });
+    try {
+      // Get total memories count
+      const totalMemories = await this.prisma.longTermMemory.count({
+        where: { namespace },
+      });
 
-    return {
-      totalMemories,
-      potentialDuplicates: 0,
-      consolidatedMemories: 0,
-    };
+      // Get consolidated memories (those marked as duplicates that have been processed)
+      const consolidatedMemories = await this.prisma.longTermMemory.count({
+        where: {
+          namespace,
+          processedData: {
+            path: ['isDuplicate'],
+            equals: true,
+          } as any,
+        },
+      });
+
+      // Get potential duplicates (memories with similar content)
+      const allMemories = await this.prisma.longTermMemory.findMany({
+        where: { namespace },
+        select: { id: true, searchableContent: true, summary: true },
+        take: 1000, // Limit for performance
+      });
+
+      // Calculate potential duplicates using similarity analysis
+      let potentialDuplicates = 0;
+      const processedIds = new Set<string>();
+
+      for (const memory of allMemories) {
+        if (processedIds.has(memory.id)) continue;
+
+        const similarMemories = allMemories.filter(otherMemory => {
+          if (otherMemory.id === memory.id || processedIds.has(otherMemory.id)) return false;
+
+          // Simple similarity check
+          const content1 = (memory.searchableContent + ' ' + memory.summary).toLowerCase();
+          const content2 = (otherMemory.searchableContent + ' ' + otherMemory.summary).toLowerCase();
+
+          const words1 = new Set(content1.split(/\s+/));
+          const words2 = new Set(content2.split(/\s+/));
+          const intersection = new Set([...Array.from(words1)].filter((x) => words2.has(x)));
+          const union = new Set([...Array.from(words1), ...Array.from(words2)]);
+          const similarity = intersection.size / union.size;
+
+          return similarity >= 0.7; // 70% similarity threshold
+        });
+
+        if (similarMemories.length > 0) {
+          potentialDuplicates += similarMemories.length;
+          processedIds.add(memory.id);
+          similarMemories.forEach(mem => processedIds.add(mem.id));
+        }
+      }
+
+      // Get last consolidation activity
+      const lastConsolidation = await this.prisma.longTermMemory.findFirst({
+        where: {
+          namespace,
+          processedData: {
+            path: ['consolidationReason'],
+            not: null,
+          } as any,
+        },
+        orderBy: { extractionTimestamp: 'desc' },
+        select: { extractionTimestamp: true },
+      });
+
+      const consolidationRatio = totalMemories > 0 ? (consolidatedMemories / totalMemories) * 100 : 0;
+
+      const stats = {
+        totalMemories,
+        potentialDuplicates,
+        consolidatedMemories,
+        consolidationRatio: Math.round(consolidationRatio * 100) / 100,
+        lastConsolidation: lastConsolidation?.extractionTimestamp,
+      };
+
+      logInfo(`Retrieved consolidation stats for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        ...stats,
+      });
+
+      return stats;
+    } catch (error) {
+      logInfo(`Error retrieving consolidation stats for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to retrieve consolidation statistics: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -453,16 +703,151 @@ export class DatabaseManager {
   async cleanupConsolidatedMemories(
     olderThanDays: number = 30,
     namespace: string = 'default',
-  ): Promise<{ cleaned: number; errors: string[] }> {
-    // Note: This is a placeholder implementation
-    // In a real implementation, this would remove or archive old consolidated memories
-    logInfo(`Would cleanup consolidated memories older than ${olderThanDays} days in namespace ${namespace}`, {
-      component: 'DatabaseManager',
-      olderThanDays,
-      namespace,
-    });
+    dryRun: boolean = false,
+  ): Promise<{ cleaned: number; errors: string[]; skipped: number }> {
+    const errors: string[] = [];
+    let cleaned = 0;
+    let skipped = 0;
 
-    return { cleaned: 0, errors: [] };
+    try {
+      // Calculate the cutoff date
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+
+      // Find consolidated memories older than the cutoff date
+      const oldConsolidatedMemories = await this.prisma.longTermMemory.findMany({
+        where: {
+          namespace,
+          AND: [
+            {
+              processedData: {
+                path: ['isDuplicate'],
+                equals: true,
+              } as any,
+            },
+            {
+              extractionTimestamp: {
+                lt: cutoffDate,
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          searchableContent: true,
+          summary: true,
+          extractionTimestamp: true,
+          processedData: true,
+        },
+      });
+
+      if (oldConsolidatedMemories.length === 0) {
+        logInfo(`No consolidated memories found older than ${olderThanDays} days in namespace '${namespace}'`, {
+          component: 'DatabaseManager',
+          namespace,
+          olderThanDays,
+        });
+        return { cleaned: 0, errors: [], skipped: 0 };
+      }
+
+      logInfo(`Found ${oldConsolidatedMemories.length} consolidated memories older than ${olderThanDays} days in namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        olderThanDays,
+        memoryCount: oldConsolidatedMemories.length,
+      });
+
+      // Process each memory for cleanup
+      const cleanupPromises = oldConsolidatedMemories.map(async (memory) => {
+        try {
+          // Check if memory is still referenced by other active memories
+          const referenceCount = await this.prisma.longTermMemory.count({
+            where: {
+              namespace,
+              processedData: {
+                path: ['duplicateOf'],
+                equals: memory.id,
+              } as any,
+            },
+          });
+
+          if (referenceCount > 0) {
+            skipped++;
+            logInfo(`Skipping cleanup of memory ${memory.id} - still referenced by ${referenceCount} other memories`, {
+              component: 'DatabaseManager',
+              memoryId: memory.id,
+              namespace,
+              referenceCount,
+            });
+            return;
+          }
+
+          if (dryRun) {
+            cleaned++;
+            logInfo(`DRY RUN: Would remove consolidated memory ${memory.id} from ${memory.extractionTimestamp.toISOString()}`, {
+              component: 'DatabaseManager',
+              memoryId: memory.id,
+              namespace,
+              ageInDays: olderThanDays,
+            });
+          } else {
+            // Soft delete by updating metadata instead of hard delete
+            await this.prisma.longTermMemory.update({
+              where: { id: memory.id },
+              data: {
+                processedData: {
+                  ...(memory.processedData as any),
+                  cleanedUp: true,
+                  cleanedUpAt: new Date(),
+                  cleanupReason: `Older than ${olderThanDays} days`,
+                } as any,
+                // Mark as cleaned up by updating searchable content
+                searchableContent: `[CLEANED] ${memory.searchableContent}`,
+              },
+            });
+
+            cleaned++;
+            logInfo(`Cleaned up consolidated memory ${memory.id}`, {
+              component: 'DatabaseManager',
+              memoryId: memory.id,
+              namespace,
+              ageInDays: olderThanDays,
+            });
+          }
+        } catch (error) {
+          const errorMsg = `Failed to cleanup memory ${memory.id}: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMsg);
+          logInfo(errorMsg, {
+            component: 'DatabaseManager',
+            memoryId: memory.id,
+            namespace,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+
+      await Promise.all(cleanupPromises);
+
+      logInfo(`Cleanup completed for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        cleaned,
+        skipped,
+        errors: errors.length,
+        olderThanDays,
+      });
+
+      return { cleaned, errors, skipped };
+    } catch (error) {
+      const errorMsg = `Error during cleanup of consolidated memories: ${error instanceof Error ? error.message : String(error)}`;
+      logInfo(errorMsg, {
+        component: 'DatabaseManager',
+        namespace,
+        olderThanDays,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(errorMsg);
+    }
   }
 
   // Database Statistics Operations

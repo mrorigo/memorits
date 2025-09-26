@@ -378,7 +378,8 @@ export interface ConversationRecorder {
   recordStreamingConversation(
     completeContent: string,
     metadata: StreamingMetadata,
-    context: ConversationContext
+    context: ConversationContext,
+    userInput?: string
   ): Promise<string>;
 }
 

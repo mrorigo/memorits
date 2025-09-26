@@ -286,8 +286,20 @@ export class MockMemori {
   }> = [];
   private enabled: boolean = false;
   private sessionId: string = uuidv4();
+  private shouldFailEnable: boolean = false;
+  private enableErrorMessage: string = 'Mock enable failure';
+
+  setEnableFailure(shouldFail: boolean, message?: string): void {
+    this.shouldFailEnable = shouldFail;
+    if (message) {
+      this.enableErrorMessage = message;
+    }
+  }
 
   async enable(): Promise<void> {
+    if (this.shouldFailEnable) {
+      throw new Error(this.enableErrorMessage);
+    }
     this.enabled = true;
   }
 

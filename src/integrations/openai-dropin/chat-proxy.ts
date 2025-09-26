@@ -158,10 +158,31 @@ export class ChatProxy implements ChatProxyInterface {
       return lastUserMessage.content;
     }
 
-    // Handle array of content blocks
+    // Handle array of content blocks with proper type safety
     return lastUserMessage.content
-      .map(block => (typeof block === 'string' ? block : (block as any).text || ''))
+      .map(block => this.extractTextFromContentBlock(block))
       .join(' ');
+  }
+
+  /**
+   * Safely extract text from a content block using proper OpenAI SDK types
+   */
+  private extractTextFromContentBlock(block: unknown): string {
+    // Handle string content blocks
+    if (typeof block === 'string') {
+      return block;
+    }
+
+    // Handle content part objects with proper type checking
+    if (block && typeof block === 'object' && 'type' in block && 'text' in block) {
+      const contentPart = block as OpenAI.ChatCompletionContentPart;
+      if (contentPart.type === 'text' && typeof contentPart.text === 'string') {
+        return contentPart.text;
+      }
+    }
+
+    // Fallback for unknown content types
+    return '';
   }
 
   /**
