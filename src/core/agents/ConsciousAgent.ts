@@ -1,6 +1,6 @@
 // src/core/agents/ConsciousAgent.ts
 import { DatabaseManager } from '../database/DatabaseManager';
-import { logger, logInfo, logError, logDebug, logWarn } from '../utils/Logger';
+import { logInfo, logError, logDebug } from '../utils/Logger';
 
 export interface ConsciousMemory {
   id: string;

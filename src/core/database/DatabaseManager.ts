@@ -1,8 +1,8 @@
 // src/core/database/DatabaseManager.ts
 import { PrismaClient } from '@prisma/client';
 import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } from '../types/schemas';
-import { MemorySearchResult, SearchOptions } from '../types/models';
-import { logDebug, logInfo } from '../utils/Logger';
+import { MemorySearchResult, SearchOptions, DatabaseStats } from '../types/models';
+import { logInfo } from '../utils/Logger';
 
 // Type definitions for database operations
 export interface ChatHistoryData {
@@ -463,5 +463,95 @@ export class DatabaseManager {
     });
 
     return { cleaned: 0, errors: [] };
+  }
+
+  // Database Statistics Operations
+
+  /**
+   * Get comprehensive database statistics
+   */
+  async getDatabaseStats(namespace: string = 'default'): Promise<DatabaseStats> {
+    try {
+      // Get counts from all tables in parallel for better performance
+      const [
+        totalConversations,
+        totalLongTermMemories,
+        totalShortTermMemories,
+        totalConsciousMemories,
+        lastChatActivity,
+        lastLongTermActivity,
+        lastShortTermActivity,
+      ] = await Promise.all([
+        this.prisma.chatHistory.count({
+          where: { namespace },
+        }),
+        this.prisma.longTermMemory.count({
+          where: { namespace },
+        }),
+        this.prisma.shortTermMemory.count({
+          where: { namespace },
+        }),
+        this.prisma.longTermMemory.count({
+          where: {
+            namespace,
+            categoryPrimary: 'conscious-info',
+          },
+        }),
+        this.prisma.chatHistory.findFirst({
+          where: { namespace },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        }),
+        this.prisma.longTermMemory.findFirst({
+          where: { namespace },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        }),
+        this.prisma.shortTermMemory.findFirst({
+          where: { namespace },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        }),
+      ]);
+
+      // Calculate total memories
+      const totalMemories = totalLongTermMemories + totalShortTermMemories;
+
+      // Find the most recent activity across all tables
+      const activityDates = [
+        lastChatActivity?.createdAt,
+        lastLongTermActivity?.createdAt,
+        lastShortTermActivity?.createdAt,
+      ].filter(Boolean);
+
+      const lastActivity = activityDates.length > 0
+        ? new Date(Math.max(...activityDates.map(date => date!.getTime())))
+        : undefined;
+
+      const stats: DatabaseStats = {
+        totalConversations,
+        totalMemories,
+        shortTermMemories: totalShortTermMemories,
+        longTermMemories: totalLongTermMemories,
+        consciousMemories: totalConsciousMemories,
+        lastActivity,
+      };
+
+      logInfo(`Retrieved database stats for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        ...stats,
+      });
+
+      return stats;
+
+    } catch (error) {
+      logInfo(`Error retrieving database stats for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to retrieve database statistics: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

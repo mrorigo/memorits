@@ -232,6 +232,9 @@ class DatabaseManager {
   // Advanced search with filtering
   async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]>
 
+  // Get comprehensive database statistics
+  async getDatabaseStats(namespace?: string): Promise<DatabaseStats>
+
   // Close database connection
   async close(): Promise<void>
 }
@@ -252,11 +255,43 @@ const technicalMemories = await dbManager.searchMemories('implementation', {
   categories: ['essential', 'contextual']
 });
 
+```typescript
 // Include metadata for detailed analysis
 const detailedSearch = await dbManager.searchMemories('architecture', {
   includeMetadata: true,
   limit: 50
 });
+```
+
+### Database Statistics
+
+Get comprehensive statistics about database usage and content:
+
+```typescript
+// Get statistics for default namespace
+const defaultStats = await dbManager.getDatabaseStats();
+console.log(`Total conversations: ${defaultStats.totalConversations}`);
+console.log(`Total memories: ${defaultStats.totalMemories}`);
+console.log(`Long-term memories: ${defaultStats.longTermMemories}`);
+console.log(`Short-term memories: ${defaultStats.shortTermMemories}`);
+console.log(`Conscious memories: ${defaultStats.consciousMemories}`);
+if (defaultStats.lastActivity) {
+  console.log(`Last activity: ${defaultStats.lastActivity.toISOString()}`);
+}
+
+// Get statistics for specific namespace
+const customNamespaceStats = await dbManager.getDatabaseStats('my-namespace');
+console.log(`Custom namespace memories: ${customNamespaceStats.totalMemories}`);
+
+// Monitor database growth over time
+const currentStats = await dbManager.getDatabaseStats();
+const previousStats = await dbManager.getDatabaseStats(); // From cache or storage
+
+const growthRate = {
+  conversations: currentStats.totalConversations - previousStats.totalConversations,
+  memories: currentStats.totalMemories - previousStats.totalMemories,
+  consciousMemories: currentStats.consciousMemories - previousStats.consciousMemories,
+};
 ```
 
 ## Provider Interfaces

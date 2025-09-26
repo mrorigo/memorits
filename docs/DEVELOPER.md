@@ -183,6 +183,7 @@ The `DatabaseManager` handles all database operations with a clean abstraction l
 - **Schema Initialization**: Automatic database setup on first run
 - **CRUD Operations**: Type-safe database operations
 - **Search Implementation**: Full-text search with relevance scoring
+- **Database Statistics**: Comprehensive statistics and metrics collection
 - **Connection Management**: Proper connection lifecycle handling
 
 ```typescript
@@ -192,6 +193,7 @@ class DatabaseManager {
   async storeChatHistory(data: ChatHistoryData): Promise<string>
   async storeLongTermMemory(memoryData: any, chatId: string, namespace: string): Promise<string>
   async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]>
+  async getDatabaseStats(namespace?: string): Promise<DatabaseStats>
   async close(): Promise<void>
 }
 ```
