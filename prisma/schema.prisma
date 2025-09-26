@@ -1,6 +1,7 @@
 datasource db {
   provider = "sqlite"  // Start with SQLite for testing
   url      = env("DATABASE_URL")
+  // Use system SQLite with FTS5 support instead of bundled version
 }
 
 generator client {

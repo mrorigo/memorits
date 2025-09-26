@@ -1,7 +1,11 @@
 import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } from '../types/schemas';
 import { MemorySearchResult, SearchOptions, DatabaseStats } from '../types/models';
-import { logInfo } from '../utils/Logger';
+import { logInfo, logError } from '../utils/Logger';
+import { initializeSearchSchema, verifyFTSSchema } from './init-search-schema';
+import { SearchService } from '../search/SearchService';
+import { SearchQuery } from '../search/types';
 
 // Type definitions for database operations
 export interface ChatHistoryData {
@@ -60,11 +64,40 @@ export interface DatabaseWhereClause {
 
 export class DatabaseManager {
   private prisma: PrismaClient;
+  private ftsEnabled: boolean = false;
+  private searchService?: SearchService;
 
   constructor(databaseUrl: string) {
+    // Configure Prisma to use system SQLite with FTS5 support
     this.prisma = new PrismaClient({
       datasourceUrl: databaseUrl,
+      // Note: FTS5 is available in system SQLite, will be verified at runtime
     });
+    this.initializeFTSSupport();
+  }
+
+  /**
+   * Initialize or get the SearchService instance
+   */
+  public getSearchService(): SearchService {
+    if (!this.searchService) {
+      this.searchService = new SearchService(this);
+    }
+    return this.searchService;
+  }
+
+  private async initializeFTSSupport(): Promise<void> {
+    try {
+      await initializeSearchSchema(this.prisma);
+      this.ftsEnabled = true;
+      logInfo('FTS5 search support initialized successfully', { component: 'DatabaseManager' });
+    } catch (error) {
+      logError('Failed to initialize FTS5 search support, falling back to basic search', {
+        component: 'DatabaseManager',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.ftsEnabled = false;
+    }
   }
 
 
@@ -123,7 +156,161 @@ export class DatabaseManager {
   }
 
   async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
-    // Simple SQLite FTS implementation with enhanced filtering
+    try {
+      // Use the new SearchService for enhanced search capabilities
+      const searchService = this.getSearchService();
+
+      // Convert SearchOptions to SearchQuery
+      const searchQuery: SearchQuery = {
+        text: query,
+        limit: options.limit,
+        offset: 0, // Not directly supported in SearchOptions, default to 0
+        includeMetadata: options.includeMetadata,
+      };
+
+      // Execute search using the new SearchService
+      const searchResults = await searchService.search(searchQuery);
+
+      // Transform SearchResult[] to MemorySearchResult[]
+      return searchResults.map(result => ({
+        id: result.id,
+        content: result.content,
+        summary: result.metadata.summary as string || '',
+        classification: (result.metadata.category as string || 'unknown') as MemoryClassification,
+        importance: (result.metadata.importance as string || 'medium') as MemoryImportanceLevel,
+        topic: result.metadata.category as string || undefined,
+        entities: [],
+        keywords: [],
+        confidenceScore: result.score,
+        classificationReason: result.strategy,
+        metadata: options.includeMetadata ? {
+          searchScore: result.score,
+          searchStrategy: result.strategy,
+          memoryType: result.metadata.memoryType as string || 'long_term',
+          category: result.metadata.category as string,
+          importanceScore: result.metadata.importanceScore as number || 0.5,
+        } : undefined,
+      }));
+
+    } catch (error) {
+      logError('Enhanced search failed, falling back to legacy search', {
+        component: 'DatabaseManager',
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Fallback to legacy search methods
+      return this.searchMemoriesLegacy(query, options);
+    }
+  }
+
+  /**
+   * Legacy search method for fallback
+   */
+  private async searchMemoriesLegacy(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
+    // Use FTS5 search if available and query is not empty, otherwise fall back to basic search
+    if (this.ftsEnabled && query && query.trim()) {
+      try {
+        return await this.searchMemoriesFTS(query, options);
+      } catch (error) {
+        logError('FTS5 search failed, falling back to basic search', {
+          component: 'DatabaseManager',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return this.searchMemoriesBasic(query, options);
+      }
+    } else {
+      return this.searchMemoriesBasic(query, options);
+    }
+  }
+
+  /**
+   * Advanced FTS5 search with BM25 ranking
+   */
+  private async searchMemoriesFTS(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
+    try {
+      const limit = options.limit || 10;
+      const namespace = options.namespace || 'default';
+
+      // Build FTS query with proper escaping and phrase handling
+      const ftsQuery = this.buildFTSQuery(query);
+
+      // Build metadata filters
+      const metadataFilters: string[] = [`namespace = '${namespace}'`];
+
+      if (options.minImportance) {
+        const minScore = this.calculateImportanceScore(options.minImportance);
+        metadataFilters.push(`json_extract(metadata, '$.importance_score') >= ${minScore}`);
+      }
+
+      if (options.categories && options.categories.length > 0) {
+        const categories = options.categories.map(cat => `'${cat}'`).join(',');
+        metadataFilters.push(`json_extract(metadata, '$.category_primary') IN (${categories})`);
+      }
+
+      const whereClause = metadataFilters.length > 0 ? `WHERE ${metadataFilters.join(' AND ')}` : '';
+
+      const rawResults = await this.prisma.$queryRaw`
+        SELECT
+          fts.rowid as memory_id,
+          fts.content as searchable_content,
+          fts.metadata,
+          bm25(memory_fts, 1.0, 1.0, 1.0) as search_score,
+          'fts5' as search_strategy
+        FROM memory_fts fts
+        ${whereClause}
+          AND memory_fts MATCH ${ftsQuery}
+        ORDER BY bm25(memory_fts, 1.0, 1.0, 1.0) DESC
+        LIMIT ${limit}
+      `;
+
+      // Transform results to MemorySearchResult format
+      const results: MemorySearchResult[] = [];
+
+      for (const row of rawResults as any[]) {
+        const metadata = JSON.parse(row.metadata);
+
+        // Get the actual memory data from the main tables
+        const memoryData = await this.getMemoryDataById(row.memory_id, metadata.memory_type);
+        if (memoryData) {
+          results.push({
+            id: row.memory_id,
+            content: row.searchable_content,
+            summary: memoryData.summary,
+            classification: metadata.classification as MemoryClassification,
+            importance: metadata.memory_importance as MemoryImportanceLevel,
+            topic: memoryData.topic,
+            entities: memoryData.entities,
+            keywords: memoryData.keywords,
+            confidenceScore: metadata.confidence_score || 0.5,
+            classificationReason: memoryData.classification_reason || '',
+            metadata: options.includeMetadata ? {
+              searchScore: row.search_score,
+              searchStrategy: row.search_strategy,
+              memoryType: metadata.memory_type,
+              category: metadata.category_primary,
+              importanceScore: metadata.importance_score,
+            } : undefined,
+          });
+        }
+      }
+
+      return results;
+
+    } catch (error) {
+      logError('FTS5 search failed', {
+        component: 'DatabaseManager',
+        query,
+        options,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Basic search implementation (fallback)
+   */
+  private async searchMemoriesBasic(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
     const whereClause: DatabaseWhereClause = {
       namespace: options.namespace || 'default',
       OR: [
@@ -174,8 +361,132 @@ export class DatabaseManager {
     }));
   }
 
+  /**
+   * Build FTS5 query with proper escaping and phrase handling
+   */
+  private buildFTSQuery(query: string): string {
+    // Clean and escape the query for FTS5
+    const cleanQuery = query.replace(/"/g, '""').replace(/\*/g, '').trim();
+
+    if (!cleanQuery) {
+      return '*'; // Match all if empty query
+    }
+
+    const terms = cleanQuery.split(/\s+/);
+
+    // Use phrase search for exact matches, OR for multiple terms
+    if (terms.length === 1) {
+      return `"${cleanQuery}"`;
+    } else {
+      return terms.map(term => `"${term}"`).join(' OR ');
+    }
+  }
+
+  /**
+   * Get memory data by ID and type
+   */
+  private async getMemoryDataById(memoryId: string, memoryType: string): Promise<any> {
+    if (memoryType === 'long_term') {
+      return await this.prisma.longTermMemory.findUnique({
+        where: { id: memoryId },
+        select: {
+          summary: true,
+          topic: true,
+          entitiesJson: true,
+          keywordsJson: true,
+          classificationReason: true,
+        },
+      });
+    } else if (memoryType === 'short_term') {
+      return await this.prisma.shortTermMemory.findUnique({
+        where: { id: memoryId },
+        select: {
+          summary: true,
+          processedData: true,
+        },
+      });
+    }
+    return null;
+  }
+
   async close(): Promise<void> {
     await this.prisma.$disconnect();
+  }
+
+  /**
+   * Check if FTS5 search is enabled
+   */
+  isFTSEnabled(): boolean {
+    return this.ftsEnabled;
+  }
+
+  /**
+   * Get FTS schema verification status
+   */
+  async getFTSStatus(): Promise<{
+    enabled: boolean;
+    isValid: boolean;
+    issues: string[];
+    stats: { tables: number; triggers: number; indexes: number };
+  }> {
+    try {
+      const verification = await verifyFTSSchema(this.prisma);
+      return {
+        enabled: this.ftsEnabled,
+        isValid: verification.isValid,
+        issues: verification.issues,
+        stats: verification.stats,
+      };
+    } catch (error) {
+      return {
+        enabled: false,
+        isValid: false,
+        issues: [`FTS verification failed: ${error instanceof Error ? error.message : String(error)}`],
+        stats: { tables: 0, triggers: 0, indexes: 0 },
+      };
+    }
+  }
+
+  /**
+   * Enhanced error handling for FTS operations
+   */
+  private handleFTSError(operation: string, error: unknown, context?: Record<string, unknown>): Error {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const enhancedError = new Error(`FTS operation '${operation}' failed: ${errorMessage}`);
+
+    logError('FTS operation failed', {
+      component: 'DatabaseManager',
+      operation,
+      error: errorMessage,
+      context: context || {},
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    // Provide specific guidance based on error type
+    if (errorMessage.includes('no such table: memory_fts')) {
+      enhancedError.message += ' - FTS5 table not found. Run database migration to initialize FTS schema.';
+    } else if (errorMessage.includes('no such function: bm25')) {
+      enhancedError.message += ' - BM25 function not available. Ensure SQLite is compiled with FTS5 support.';
+    } else if (errorMessage.includes('disk I/O error') || errorMessage.includes('database or disk is full')) {
+      enhancedError.message += ' - Database storage error. Check available disk space.';
+    }
+
+    return enhancedError;
+  }
+
+  /**
+   * Safely execute FTS query with comprehensive error handling
+   */
+  private async safeFTSQuery<T>(
+    operation: string,
+    queryFn: () => Promise<T>,
+    context?: Record<string, unknown>,
+  ): Promise<T> {
+    try {
+      return await queryFn();
+    } catch (error) {
+      throw this.handleFTSError(operation, error, context);
+    }
   }
 
   // Conscious Memory Operations

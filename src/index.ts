@@ -5,6 +5,25 @@ export { ConfigManager } from './core/utils/ConfigManager';
 export { createMemoriOpenAI } from './integrations/openai';
 export { ProcessedLongTermMemorySchema } from './core/types/schemas';
 
+// Search Strategy exports (new architecture)
+export {
+  ISearchStrategy,
+  BaseSearchStrategy,
+  SearchResultBuilder,
+  SearchError,
+  SearchStrategyError,
+  SearchValidationError,
+  SearchTimeoutError,
+  SearchConfigurationError,
+  StrategyValidator,
+  SearchCapability,
+  SearchQuery,
+  SearchResult,
+  SearchStrategyMetadata,
+  SearchStrategyConfig,
+  ValidationResult
+} from './core/search/SearchStrategy';
+
 // OpenAI Drop-in Replacement exports
 // Main client and types
 export { default as MemoriOpenAIClient, MemoriOpenAI, MemoriOpenAIConfig } from './integrations/openai-dropin/client';

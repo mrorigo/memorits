@@ -11,7 +11,8 @@ import {
   RecordConversationOptions,
   SearchOptions,
 } from './types/models';
-import { ProcessedLongTermMemory } from './types/schemas';
+import { ProcessedLongTermMemory, MemoryClassification, MemoryImportanceLevel } from './types/schemas';
+import { SearchStrategy, SearchQuery } from './search/types';
 
 export class Memori {
   private dbManager: DatabaseManager;
@@ -186,6 +187,74 @@ export class Memori {
       minImportance: options.minImportance,
       categories: options.categories,
       includeMetadata: options.includeMetadata,
+    });
+  }
+
+  /**
+   * Advanced search using specific search strategy
+   */
+  async searchMemoriesWithStrategy(query: string, strategy: SearchStrategy, options: SearchOptions = {}): Promise<MemorySearchResult[]> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    try {
+      const searchService = this.dbManager.getSearchService();
+
+      const searchQuery: SearchQuery = {
+        text: query,
+        limit: options.limit || 10,
+        includeMetadata: options.includeMetadata,
+      };
+
+      const searchResults = await searchService.searchWithStrategy(searchQuery, strategy);
+
+      return searchResults.map(result => ({
+        id: result.id,
+        content: result.content,
+        summary: result.metadata.summary as string || '',
+        classification: (result.metadata.category as string || 'unknown') as MemoryClassification,
+        importance: (result.metadata.importance as string || 'medium') as MemoryImportanceLevel,
+        topic: result.metadata.category as string || undefined,
+        entities: [],
+        keywords: [],
+        confidenceScore: result.score,
+        classificationReason: result.strategy,
+        metadata: options.includeMetadata ? {
+          searchScore: result.score,
+          searchStrategy: result.strategy,
+          memoryType: result.metadata.memoryType as string || 'long_term',
+          category: result.metadata.category as string,
+          importanceScore: result.metadata.importanceScore as number || 0.5,
+        } : undefined,
+      }));
+
+    } catch (error) {
+      logError('Advanced search failed', {
+        component: 'Memori',
+        query,
+        strategy,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Search with strategy ${strategy} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Get available search strategies
+   */
+  getAvailableSearchStrategies(): SearchStrategy[] {
+    const searchService = this.dbManager.getSearchService();
+    return searchService.getAvailableStrategies();
+  }
+
+  /**
+   * Search for recent memories (empty query)
+   */
+  async searchRecentMemories(limit: number = 10, includeMetadata: boolean = false): Promise<MemorySearchResult[]> {
+    return this.searchMemories('', {
+      limit,
+      includeMetadata,
     });
   }
 

@@ -52,7 +52,8 @@
     "example:ollama": "tsx examples/ollama-integration.ts",
     "example:openai": "tsx examples/openai-integration.ts",
     "example:search": "tsx examples/memory-search.ts",
-    "example:dual-memory": "tsx examples/dual-memory-mode.ts"
+    "example:dual-memory": "tsx examples/dual-memory-mode.ts",
+    "example:search-strategy": "tsx examples/search-strategy-usage.ts"
   },
   "devDependencies": {
     "@babel/core": "^7.28.4",
