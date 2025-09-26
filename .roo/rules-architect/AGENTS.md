@@ -7,3 +7,7 @@
 - Database design: Prisma schema with JSON fields requires careful migration planning to avoid data loss
 - Session isolation: Each Memori instance uses sessionId for data isolation - affects multi-user scenarios
 - Testing architecture: Integration tests require temporary databases - affects CI/CD pipeline design
+- OpenAI drop-in architecture: Factory pattern implementation provides multiple initialization strategies for different use cases
+- Drop-in memory integration: Client-level memory access requires careful API design to maintain OpenAI SDK compatibility
+- Streaming architecture: Memory buffer management for streaming responses adds complexity to real-time processing
+- Configuration architecture: Environment-based configuration with multiple fallback strategies for drop-in initialization

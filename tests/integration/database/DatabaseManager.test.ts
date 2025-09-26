@@ -1,4 +1,3 @@
-// tests/integration/database/DatabaseManager.test.ts
 import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
 import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';

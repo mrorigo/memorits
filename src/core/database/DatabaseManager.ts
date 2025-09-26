@@ -499,13 +499,13 @@ export class DatabaseManager {
         }),
         this.prisma.chatHistory.findFirst({
           where: { namespace },
-          orderBy: { createdAt: 'desc' },
-          select: { createdAt: true },
+          orderBy: { timestamp: 'desc' },
+          select: { timestamp: true },
         }),
         this.prisma.longTermMemory.findFirst({
           where: { namespace },
-          orderBy: { createdAt: 'desc' },
-          select: { createdAt: true },
+          orderBy: { extractionTimestamp: 'desc' },
+          select: { extractionTimestamp: true },
         }),
         this.prisma.shortTermMemory.findFirst({
           where: { namespace },
@@ -519,8 +519,8 @@ export class DatabaseManager {
 
       // Find the most recent activity across all tables
       const activityDates = [
-        lastChatActivity?.createdAt,
-        lastLongTermActivity?.createdAt,
+        lastChatActivity?.timestamp,
+        lastLongTermActivity?.extractionTimestamp,
         lastShortTermActivity?.createdAt,
       ].filter(Boolean);
 

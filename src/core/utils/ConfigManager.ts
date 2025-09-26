@@ -1,4 +1,3 @@
-// src/core/utils/ConfigManager.ts
 import { z } from 'zod';
 
 export const MemoriConfigSchema = z.object({

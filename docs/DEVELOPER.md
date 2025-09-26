@@ -506,32 +506,59 @@ interface ConversationContext {
 
 ## Advanced Features
 
-### OpenAI Integration
+### OpenAI Drop-in Replacement
 
-#### Wrapper Implementation
-The `MemoriOpenAI` class provides a drop-in replacement for the OpenAI client with automatic memory recording:
+#### MemoriOpenAI Client
+The `MemoriOpenAI` class provides a **zero breaking changes** drop-in replacement for the OpenAI SDK v5.x with automatic memory recording:
 
 ```typescript
-export class MemoriOpenAI {
-  constructor(memori: Memori, apiKey: string, options?: OpenAI.RequestOptions)
+// Simple constructor replacement (most common)
+const client = new MemoriOpenAI('your-api-key', {
+  enableChatMemory: true,
+  autoInitialize: true,
+  databaseUrl: 'sqlite:./memories.db'
+});
 
-  get chat(): OpenAI.Chat {
-    // Intercepted chat completions with memory recording
-  }
-}
+// Environment-based configuration
+const client = await MemoriOpenAIFromEnv('your-api-key', {
+  enableChatMemory: true,
+  memoryProcessingMode: 'conscious'
+});
 
-export function createMemoriOpenAI(
-  memori: Memori,
-  apiKey: string,
-  options?: OpenAI.RequestOptions & { baseUrl?: string }
-): MemoriOpenAI
+// Advanced configuration
+const client = await MemoriOpenAIFromConfig('your-api-key', {
+  enableChatMemory: true,
+  enableEmbeddingMemory: true,
+  memoryProcessingMode: 'conscious',
+  databaseUrl: 'postgresql://localhost/memories',
+  namespace: 'production-app',
+  minImportanceLevel: 'medium'
+});
+```
+
+#### Key Features
+- **Zero Breaking Changes**: Existing OpenAI code works unchanged
+- **Automatic Memory Recording**: Conversations recorded transparently
+- **Full API Compatibility**: Exact OpenAI SDK v5.x interface match
+- **Streaming Support**: Complete memory capture for streaming responses
+- **Multiple Initialization Patterns**: Simple to advanced configurations
+- **Type Safety**: Exact type matching with OpenAI SDK
+
+#### Factory Functions
+```typescript
+// Multiple initialization patterns
+createMemoriOpenAI(memori: Memori, apiKey: string, options?: MemoriOpenAIConfig)
+MemoriOpenAIFromConfig(apiKey: string, config: MemoriOpenAIConfig)
+MemoriOpenAIFromEnv(apiKey?: string, config?: Partial<MemoriOpenAIConfig>)
+MemoriOpenAIFromDatabase(apiKey: string, databaseUrl: string, options?: Partial<MemoriOpenAIConfig>)
 ```
 
 #### Conversation Interception
 - **Automatic Recording**: Captures all chat completions automatically
 - **Metadata Extraction**: Records model, temperature, token usage
-- **Streaming Limitations**: Notes limitations with streaming responses
+- **Streaming Support**: Full memory capture for streaming responses
 - **Error Handling**: Graceful handling of recording failures
+- **Memory Search**: Direct access to memory functionality via `client.memory.searchMemories()`
 
 ### Ollama Support
 
@@ -669,6 +696,8 @@ npm run build
 npm run example:basic
 npm run example:ollama
 npm run example:openai
+npm run example:memory-search
+npm run example:dual-memory-mode
 ```
 
 #### Ollama Setup (Optional)

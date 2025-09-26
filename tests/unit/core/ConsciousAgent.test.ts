@@ -167,7 +167,7 @@ describe('ConsciousAgent', () => {
     it('should handle errors gracefully', async () => {
       mockDbManager.getConsciousMemoriesFromShortTerm.mockRejectedValue(new Error('Database error'));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
 
       const result = await consciousAgent.initialize_existing_conscious_memories();
 
@@ -195,7 +195,7 @@ describe('ConsciousAgent', () => {
 
       mockDbManager.getNewConsciousMemories.mockResolvedValue(mockMemories);
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
 
       const result = await consciousAgent.check_for_context_updates();
 
@@ -216,7 +216,7 @@ describe('ConsciousAgent', () => {
     it('should handle errors gracefully', async () => {
       mockDbManager.getNewConsciousMemories.mockRejectedValue(new Error('Database error'));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
 
       const result = await consciousAgent.check_for_context_updates();
 
@@ -346,7 +346,7 @@ describe('ConsciousAgent', () => {
     });
 
     it('should handle consolidation errors gracefully', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
       const mockMemories = [
         {
           id: 'memory-1',

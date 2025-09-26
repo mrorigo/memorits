@@ -1,0 +1,69 @@
+// src/integrations/openai-dropin/index.ts
+// Main entry point for OpenAI drop-in replacement
+// Exports all components for easy importing
+
+// Main client implementation
+export { default as MemoriOpenAIClient } from './client';
+
+// Factory functions and patterns
+export { default as MemoriOpenAIFactory, memoriOpenAIFactory } from './factory';
+export {
+  createMemoriOpenAI,
+  MemoriOpenAIFromConfig,
+  MemoriOpenAIFromEnv,
+  MemoriOpenAIFromDatabase,
+} from './factory';
+
+// Type definitions
+export type {
+  MemoriOpenAI,
+  MemoriOpenAIConfig,
+  MemoryManager,
+  MemoryRecordingResult,
+  OpenAIMemoryMetadata,
+  StreamingMetadata,
+  BufferedStream,
+  MemoryError,
+  MemoryErrorType,
+  RecoveryStrategy,
+  ErrorRecoveryConfig,
+  OpenAIMetrics,
+  PerformanceMonitorConfig,
+  DatabaseConfig,
+  DatabaseType,
+  MemoryProcessingMode,
+  MemoryImportanceFilter,
+  RecordChatCompletionOptions,
+  RecordEmbeddingOptions,
+  StreamingBufferConfig,
+  ConversationRecorder,
+  StreamingBuffer,
+  MemoriOpenAIEnvironment,
+  MemoriOpenAIConstructorOptions,
+  DeepPartial,
+  OptionalConfigKeys,
+  RequiredConfigKeys,
+} from './types';
+
+// Re-export OpenAI types for compatibility
+export type {
+  ChatCompletion,
+  ChatCompletionChunk,
+  ChatCompletionCreateParams,
+  ChatCompletionMessage,
+  ChatCompletionMessageParam,
+  ChatCompletionRole,
+  Embedding,
+  EmbeddingCreateParams,
+  CreateEmbeddingResponse,
+  Chat,
+  Embeddings,
+} from './types';
+
+// Legacy support (for backward compatibility)
+export { LegacyMemoriOpenAIFactory } from './types';
+
+// Default export for convenience (re-export the client as MemoriOpenAI)
+import MemoriOpenAIClient from './client';
+const MemoriOpenAI = MemoriOpenAIClient;
+export default MemoriOpenAI;

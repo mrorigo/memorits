@@ -24,6 +24,8 @@ This file provides guidance to agents when working with code in this repository.
 - Database schema: Prisma client must be regenerated after any schema changes, not just pushed
 - Provider pattern: OpenAI provider requires specific mocking in tests (see test file patterns)
 - Session management: All operations require sessionId tracking for proper memory association
+- OpenAI drop-in: MemoriOpenAI provides zero breaking changes replacement for OpenAI SDK with automatic memory recording
+- Factory patterns: Multiple initialization patterns (constructor, environment, database URL, advanced config) for different use cases
 
 ## Critical Gotchas
 
@@ -32,3 +34,7 @@ This file provides guidance to agents when working with code in this repository.
 - Test isolation: Database tests create temporary SQLite instances with automatic cleanup
 - Module exports: Main exports are in src/index.ts but actual implementation is in src/core/Memori.ts
 - Logging: All log calls must include component metadata or will fail validation
+- OpenAI drop-in: MemoriOpenAI requires specific configuration for memory recording (enableChatMemory: true, autoInitialize: true)
+- Drop-in initialization: Multiple factory patterns available - choose based on use case (constructor vs environment vs database URL)
+- Memory operations: Drop-in client provides direct memory access via client.memory.searchMemories() and other methods
+- Streaming support: Full memory capture for streaming responses with configurable buffer settings
