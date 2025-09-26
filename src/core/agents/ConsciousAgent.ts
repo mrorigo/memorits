@@ -1,5 +1,6 @@
 // src/core/agents/ConsciousAgent.ts
 import { DatabaseManager } from '../database/DatabaseManager';
+import { logger, logInfo, logError, logDebug, logWarn } from '../utils/Logger';
 
 export interface ConsciousMemory {
   id: string;
@@ -28,27 +29,44 @@ export class ConsciousAgent {
    * Initialize existing conscious memories on startup
    */
   async run_conscious_ingest(): Promise<void> {
-    console.log('Starting conscious memory ingestion...');
+    logInfo('Starting conscious memory ingestion...', {
+      component: 'ConsciousAgent',
+      namespace: this.namespace,
+    });
 
     try {
       // Get all conscious-info memories that haven't been processed yet
       const consciousMemories = await this.getUnprocessedConsciousMemories();
 
       if (consciousMemories.length === 0) {
-        console.log('No unprocessed conscious memories found');
+        logInfo('No unprocessed conscious memories found', {
+          component: 'ConsciousAgent',
+          namespace: this.namespace,
+        });
         return;
       }
 
-      console.log(`Found ${consciousMemories.length} unprocessed conscious memories`);
+      logInfo(`Found ${consciousMemories.length} unprocessed conscious memories`, {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+        memoryCount: consciousMemories.length,
+      });
 
       // Process each conscious memory
       for (const memory of consciousMemories) {
         await this.processConsciousMemory(memory);
       }
 
-      console.log('Conscious memory ingestion completed');
+      logInfo('Conscious memory ingestion completed', {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+      });
     } catch (error) {
-      console.error('Error during conscious memory ingestion:', error);
+      logError('Error during conscious memory ingestion:', {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -59,10 +77,18 @@ export class ConsciousAgent {
   async initialize_existing_conscious_memories(): Promise<ConsciousMemory[]> {
     try {
       const memories = await this.getConsciousMemoriesFromShortTerm();
-      console.log(`Initialized ${memories.length} existing conscious memories`);
+      logInfo(`Initialized ${memories.length} existing conscious memories`, {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+        memoryCount: memories.length,
+      });
       return memories;
     } catch (error) {
-      console.error('Error initializing existing conscious memories:', error);
+      logError('Error initializing existing conscious memories:', {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
@@ -83,12 +109,20 @@ export class ConsciousAgent {
       }
 
       if (processedMemories.length > 0) {
-        console.log(`Processed ${processedMemories.length} new conscious memories`);
+        logInfo(`Processed ${processedMemories.length} new conscious memories`, {
+          component: 'ConsciousAgent',
+          namespace: this.namespace,
+          memoryCount: processedMemories.length,
+        });
       }
 
       return processedMemories;
     } catch (error) {
-      console.error('Error checking for context updates:', error);
+      logError('Error checking for context updates:', {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
@@ -125,10 +159,19 @@ export class ConsciousAgent {
       // Mark as processed to avoid duplicates
       this.processedMemoryIds.add(memory.id);
 
-      console.log(`Processed conscious memory: ${memory.summary}`);
+      logDebug(`Processed conscious memory: ${memory.summary}`, {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+        memoryId: memory.id,
+      });
       return memory;
     } catch (error) {
-      console.error(`Error processing conscious memory ${memory.id}:`, error);
+      logError(`Error processing conscious memory ${memory.id}:`, {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+        memoryId: memory.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -164,7 +207,12 @@ export class ConsciousAgent {
 
       await this.dbManager.storeConsciousMemoryInShortTerm(shortTermData, this.namespace);
     } catch (error) {
-      console.error('Error copying conscious memory to short-term storage:', error);
+      logError('Error copying conscious memory to short-term storage:', {
+        component: 'ConsciousAgent',
+        namespace: this.namespace,
+        memoryId: memory.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -193,18 +241,195 @@ export class ConsciousAgent {
   /**
    * Consolidate duplicate conscious memories
    */
-  async consolidateDuplicates(): Promise<void> {
+  async consolidateDuplicates(options?: {
+    namespace?: string;
+    similarityThreshold?: number;
+    dryRun?: boolean;
+  }): Promise<{
+    totalProcessed: number;
+    duplicatesFound: number;
+    consolidated: number;
+    errors: string[];
+  }> {
+    const namespace = options?.namespace || this.namespace;
+    const similarityThreshold = options?.similarityThreshold || 0.7;
+    const dryRun = options?.dryRun || false;
+
     try {
-      console.log('Starting conscious memory consolidation...');
+      logInfo(`Starting conscious memory consolidation in namespace: ${namespace}`, {
+        component: 'ConsciousAgent',
+        similarityThreshold,
+        dryRun,
+        namespace,
+      });
 
-      // This would identify and merge duplicate conscious memories
-      // Implementation depends on the specific consolidation logic needed
-      // For now, we'll just log the action
+      logDebug(`Similarity threshold: ${similarityThreshold}, Dry run: ${dryRun}`, {
+        component: 'ConsciousAgent',
+        namespace,
+      });
 
-      console.log('Conscious memory consolidation completed');
+      // Get all conscious memories for analysis
+      const consciousMemories = await this.dbManager.getProcessedConsciousMemories(namespace);
+
+      if (consciousMemories.length === 0) {
+        logInfo('No conscious memories found for consolidation', {
+          component: 'ConsciousAgent',
+          namespace,
+        });
+        return { totalProcessed: 0, duplicatesFound: 0, consolidated: 0, errors: [] };
+      }
+
+      logInfo(`Found ${consciousMemories.length} conscious memories to analyze for duplicates`, {
+        component: 'ConsciousAgent',
+        namespace,
+        memoryCount: consciousMemories.length,
+      });
+
+      const duplicatesFound: Array<{
+        primary: ConsciousMemory;
+        duplicates: ConsciousMemory[];
+        similarity: number;
+      }> = [];
+
+      const processedIds = new Set<string>();
+      const errors: string[] = [];
+
+      // Find potential duplicates by comparing each memory with others
+      for (const memory of consciousMemories) {
+        if (processedIds.has(memory.id)) {
+          continue; // Already processed as a duplicate
+        }
+
+        try {
+          // Find potential duplicates for this memory
+          const potentialDuplicates = await this.dbManager.findPotentialDuplicates(
+            memory.content + ' ' + memory.summary,
+            namespace,
+            similarityThreshold,
+          );
+
+          // Filter to only conscious memories and exclude self
+          const consciousDuplicates = potentialDuplicates.filter(potential =>
+            potential.id !== memory.id &&
+            potential.classification === 'conscious-info',
+          );
+
+          if (consciousDuplicates.length > 0) {
+            // Calculate average similarity for these duplicates
+            const similarities = consciousDuplicates.map(duplicate => {
+              const contentWords = new Set((memory.content + ' ' + memory.summary).toLowerCase().split(/\s+/));
+              const duplicateWords = new Set((duplicate.content + ' ' + duplicate.summary).toLowerCase().split(/\s+/));
+              const intersection = new Set([...contentWords].filter(x => duplicateWords.has(x)));
+              const union = new Set([...contentWords, ...duplicateWords]);
+              return intersection.size / union.size;
+            });
+
+            const averageSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+
+            if (averageSimilarity >= similarityThreshold) {
+              duplicatesFound.push({
+                primary: memory,
+                duplicates: consciousDuplicates,
+                similarity: averageSimilarity,
+              });
+
+              // Mark these duplicates as processed
+              consciousDuplicates.forEach(duplicate => processedIds.add(duplicate.id));
+            }
+          }
+        } catch (error) {
+          errors.push(`Error processing memory ${memory.id}: ${error}`);
+        }
+      }
+
+      logInfo(`Found ${duplicatesFound.length} groups of potential duplicate memories`, {
+        component: 'ConsciousAgent',
+        namespace,
+        duplicateGroups: duplicatesFound.length,
+      });
+
+      let consolidated = 0;
+
+      // Process each group of duplicates
+      for (const group of duplicatesFound) {
+        try {
+          if (dryRun) {
+            logInfo(`DRY RUN: Would consolidate ${group.duplicates.length} duplicates into primary memory ${group.primary.id}`, {
+              component: 'ConsciousAgent',
+              namespace,
+              primaryId: group.primary.id,
+              duplicateCount: group.duplicates.length,
+              similarity: group.similarity,
+            });
+            logDebug(`  Similarity: ${(group.similarity * 100).toFixed(1)}%`, {
+              component: 'ConsciousAgent',
+              namespace,
+              primaryId: group.primary.id,
+            });
+            logDebug(`  Primary: ${group.primary.summary.substring(0, 100)}...`, {
+              component: 'ConsciousAgent',
+              namespace,
+              primaryId: group.primary.id,
+            });
+            group.duplicates.forEach((dup, idx) => {
+              logDebug(`  Duplicate ${idx + 1}: ${dup.summary.substring(0, 100)}...`, {
+                component: 'ConsciousAgent',
+                namespace,
+                primaryId: group.primary.id,
+                duplicateId: dup.id,
+              });
+            });
+            consolidated++;
+          } else {
+            // Actually consolidate the duplicates
+            const consolidationResult = await this.dbManager.consolidateDuplicateMemories(
+              group.primary.id,
+              group.duplicates.map(d => d.id),
+              namespace,
+            );
+
+            if (consolidationResult.consolidated > 0) {
+              consolidated++;
+              logInfo(`Consolidated ${consolidationResult.consolidated} duplicates into memory ${group.primary.id}`, {
+                component: 'ConsciousAgent',
+                namespace,
+                primaryId: group.primary.id,
+                consolidatedCount: consolidationResult.consolidated,
+              });
+            }
+
+            if (consolidationResult.errors.length > 0) {
+              errors.push(...consolidationResult.errors);
+            }
+          }
+        } catch (error) {
+          errors.push(`Error consolidating group with primary ${group.primary.id}: ${error}`);
+        }
+      }
+
+      logInfo(`Consolidation completed. Processed: ${duplicatesFound.length}, Consolidated: ${consolidated}, Errors: ${errors.length}`, {
+        component: 'ConsciousAgent',
+        namespace,
+        totalProcessed: duplicatesFound.length,
+        consolidated,
+        errorCount: errors.length,
+      });
+
+      return {
+        totalProcessed: duplicatesFound.length,
+        duplicatesFound: duplicatesFound.reduce((sum, group) => sum + group.duplicates.length, 0),
+        consolidated,
+        errors,
+      };
+
     } catch (error) {
-      console.error('Error during conscious memory consolidation:', error);
-      throw error;
+      const errorMessage = `Error during conscious memory consolidation: ${error}`;
+      logError(errorMessage, {
+        component: 'ConsciousAgent',
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(errorMessage);
     }
   }
 

@@ -1,17 +1,18 @@
 /**
- * Dual Memory Mode Example
- *
- * This example demonstrates the dual memory mode functionality in Memori:
- * 1. Auto-ingestion mode: Automatically processes conversations into memories
- * 2. Conscious ingestion mode: Stores conversations for manual processing
- * 3. Background monitoring for conscious updates
- */
+  * Dual Memory Mode Example
+  *
+  * This example demonstrates the dual memory mode functionality in Memori:
+  * 1. Auto-ingestion mode: Automatically processes conversations into memories
+  * 2. Conscious ingestion mode: Stores conversations for manual processing
+  * 3. Background monitoring for conscious updates
+  */
 
 import { Memori, ConfigManager } from '../src/index';
+import { logInfo, logError } from '../src/core/utils/Logger';
 
 async function autoIngestionExample(): Promise<void> {
-  console.log('🤖 Auto-Ingestion Mode Example');
-  console.log('=====================================');
+  logInfo('🤖 Auto-Ingestion Mode Example', { component: 'dual-memory-mode-example', mode: 'auto' });
+  logInfo('=====================================', { component: 'dual-memory-mode-example', mode: 'auto' });
 
   const config = ConfigManager.loadConfig();
   config.autoIngest = true;
@@ -20,8 +21,8 @@ async function autoIngestionExample(): Promise<void> {
   const memori = new Memori(config);
   await memori.enable();
 
-  console.log('✅ Auto-ingestion mode enabled');
-  console.log('✅ Background monitoring: Disabled (not needed for auto mode)');
+  logInfo('✅ Auto-ingestion mode enabled', { component: 'dual-memory-mode-example', mode: 'auto' });
+  logInfo('✅ Background monitoring: Disabled (not needed for auto mode)', { component: 'dual-memory-mode-example', mode: 'auto' });
 
   // Record conversations - they will be automatically processed
   await memori.recordConversation(
@@ -34,14 +35,14 @@ async function autoIngestionExample(): Promise<void> {
     '15 + 27 equals 42.',
   );
 
-  console.log('✅ Conversations automatically processed into memories');
+  logInfo('✅ Conversations automatically processed into memories', { component: 'dual-memory-mode-example', mode: 'auto' });
 
   await memori.close();
 }
 
 async function consciousIngestionExample(): Promise<void> {
-  console.log('\n🧠 Conscious Ingestion Mode Example');
-  console.log('=====================================');
+  logInfo('\n🧠 Conscious Ingestion Mode Example', { component: 'dual-memory-mode-example', mode: 'conscious' });
+  logInfo('=====================================', { component: 'dual-memory-mode-example', mode: 'conscious' });
 
   const config = ConfigManager.loadConfig();
   config.autoIngest = false;
@@ -50,8 +51,8 @@ async function consciousIngestionExample(): Promise<void> {
   const memori = new Memori(config);
   await memori.enable();
 
-  console.log('✅ Conscious ingestion mode enabled');
-  console.log('✅ Background monitoring: Enabled (30-second intervals)');
+  logInfo('✅ Conscious ingestion mode enabled', { component: 'dual-memory-mode-example', mode: 'conscious' });
+  logInfo('✅ Background monitoring: Enabled (30-second intervals)', { component: 'dual-memory-mode-example', mode: 'conscious' });
 
   // Record conversations - they will be stored for conscious processing
   await memori.recordConversation(
@@ -64,29 +65,29 @@ async function consciousIngestionExample(): Promise<void> {
     'Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed.',
   );
 
-  console.log('✅ Conversations stored for conscious processing');
+  logInfo('✅ Conversations stored for conscious processing', { component: 'dual-memory-mode-example', mode: 'conscious' });
 
   // Manually trigger conscious processing
-  console.log('🔄 Manually triggering conscious context updates...');
+  logInfo('🔄 Manually triggering conscious context updates...', { component: 'dual-memory-mode-example', mode: 'conscious' });
   await memori.checkForConsciousContextUpdates();
 
   // Configure background monitoring interval
   memori.setBackgroundUpdateInterval(60000); // 60 seconds
-  console.log('✅ Background monitoring interval set to 60 seconds');
+  logInfo('✅ Background monitoring interval set to 60 seconds', { component: 'dual-memory-mode-example', mode: 'conscious' });
 
   // Check if background monitoring is active
-  console.log(`✅ Background monitoring active: ${memori.isBackgroundMonitoringActive()}`);
+  logInfo(`✅ Background monitoring active: ${memori.isBackgroundMonitoringActive()}`, { component: 'dual-memory-mode-example', mode: 'conscious' });
 
   // Check mode status
-  console.log(`✅ Conscious mode enabled: ${memori.isConsciousModeEnabled()}`);
-  console.log(`✅ Auto mode enabled: ${memori.isAutoModeEnabled()}`);
+  logInfo(`✅ Conscious mode enabled: ${memori.isConsciousModeEnabled()}`, { component: 'dual-memory-mode-example', mode: 'conscious' });
+  logInfo(`✅ Auto mode enabled: ${memori.isAutoModeEnabled()}`, { component: 'dual-memory-mode-example', mode: 'conscious' });
 
   await memori.close();
 }
 
 async function dualModeComparison(): Promise<void> {
-  console.log('\n⚖️ Dual Mode Comparison');
-  console.log('=====================================');
+  logInfo('\n⚖️ Dual Mode Comparison', { component: 'dual-memory-mode-example', mode: 'comparison' });
+  logInfo('=====================================', { component: 'dual-memory-mode-example', mode: 'comparison' });
 
   const config = ConfigManager.loadConfig();
   config.autoIngest = false;
@@ -95,8 +96,8 @@ async function dualModeComparison(): Promise<void> {
   const memori = new Memori(config);
   await memori.enable();
 
-  console.log('✅ Neither auto nor conscious mode enabled');
-  console.log('✅ Background monitoring: Disabled');
+  logInfo('✅ Neither auto nor conscious mode enabled', { component: 'dual-memory-mode-example', mode: 'comparison' });
+  logInfo('✅ Background monitoring: Disabled', { component: 'dual-memory-mode-example', mode: 'comparison' });
 
   // Record conversation without automatic processing
   await memori.recordConversation(
@@ -104,33 +105,44 @@ async function dualModeComparison(): Promise<void> {
     'The weather is sunny and warm with a temperature of 25°C.',
   );
 
-  console.log('✅ Conversation stored without automatic processing');
-  console.log('✅ Manual processing would be required for memory creation');
+  logInfo('✅ Conversation stored without automatic processing', { component: 'dual-memory-mode-example', mode: 'comparison' });
+  logInfo('✅ Manual processing would be required for memory creation', { component: 'dual-memory-mode-example', mode: 'comparison' });
 
   // Check mode status
-  console.log(`✅ Conscious mode enabled: ${memori.isConsciousModeEnabled()}`);
-  console.log(`✅ Auto mode enabled: ${memori.isAutoModeEnabled()}`);
+  logInfo(`✅ Conscious mode enabled: ${memori.isConsciousModeEnabled()}`, { component: 'dual-memory-mode-example', mode: 'comparison' });
+  logInfo(`✅ Auto mode enabled: ${memori.isAutoModeEnabled()}`, { component: 'dual-memory-mode-example', mode: 'comparison' });
 
   await memori.close();
 }
 
 async function main(): Promise<void> {
-  console.log('🚀 Memori Dual Memory Mode Examples');
-  console.log('=====================================\n');
+  logInfo('🚀 Memori Dual Memory Mode Examples', { component: 'dual-memory-mode-example' });
+  logInfo('=====================================\n', { component: 'dual-memory-mode-example' });
 
   try {
     await autoIngestionExample();
     await consciousIngestionExample();
     await dualModeComparison();
 
-    console.log('\n🎉 All dual memory mode examples completed successfully!');
+    logInfo('\n🎉 All dual memory mode examples completed successfully!', { component: 'dual-memory-mode-example' });
   } catch (error) {
-    console.error('❌ Error in dual memory mode examples:', error);
+    logError('❌ Error in dual memory mode examples:', {
+      component: 'dual-memory-mode-example',
+      error: error instanceof Error ? error.message : String(error),
+    });
     if (error instanceof Error) {
-      console.error('Error message:', error.message);
+      logError('Error message:', {
+        component: 'dual-memory-mode-example',
+        error: error.message,
+      });
     }
   }
 }
 
 // Run the examples
-main().catch(console.error);
+main().catch((error) => {
+  logError('Unhandled error in dual memory mode example', {
+    component: 'dual-memory-mode-example',
+    error: error instanceof Error ? error.message : String(error),
+  });
+});

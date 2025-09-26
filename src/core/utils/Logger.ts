@@ -76,7 +76,7 @@ export class Logger {
     // Create transports based on configuration
     const transports: winston.transport[] = [];
 
-    if (this.config.enableConsoleLogging) {
+    if (this.config.enableConsoleLogging && this.config.environment !== 'test') {
       const format = this.config.environment === 'production' ? productionFormat : developmentFormat;
       transports.push(createConsoleTransport(format));
     }
@@ -101,6 +101,10 @@ export class Logger {
    * Log error message
    */
   error(message: string, context?: LogContext): void {
+    // In test environment, silently consume logs to avoid console output
+    if (this.config.environment === 'test') {
+      return;
+    }
     this.logger.error(message, context);
   }
 
@@ -108,6 +112,10 @@ export class Logger {
    * Log warning message
    */
   warn(message: string, context?: LogContext): void {
+    // In test environment, silently consume logs to avoid console output
+    if (this.config.environment === 'test') {
+      return;
+    }
     this.logger.warn(message, context);
   }
 
@@ -115,6 +123,10 @@ export class Logger {
    * Log info message
    */
   info(message: string, context?: LogContext): void {
+    // In test environment, silently consume logs to avoid console output
+    if (this.config.environment === 'test') {
+      return;
+    }
     this.logger.info(message, context);
   }
 
@@ -122,6 +134,10 @@ export class Logger {
    * Log debug message
    */
   debug(message: string, context?: LogContext): void {
+    // In test environment, silently consume logs to avoid console output
+    if (this.config.environment === 'test') {
+      return;
+    }
     this.logger.debug(message, context);
   }
 
@@ -145,7 +161,7 @@ export class Logger {
     // Recreate logger with new configuration
     const transports: winston.transport[] = [];
 
-    if (this.config.enableConsoleLogging) {
+    if (this.config.enableConsoleLogging && this.config.environment !== 'test') {
       const format = this.config.environment === 'production' ? productionFormat : developmentFormat;
       transports.push(createConsoleTransport(format));
     }
@@ -166,7 +182,10 @@ export class Logger {
 }
 
 // Default logger instance
-export const logger = new Logger();
+export const logger = new Logger({
+  environment: process.env.NODE_ENV === 'test' ? 'test' : 'development',
+  enableConsoleLogging: process.env.NODE_ENV !== 'test',
+});
 
 // Convenience functions for backward compatibility and easier usage
 export const logError = (message: string, context?: LogContext) => logger.error(message, context);

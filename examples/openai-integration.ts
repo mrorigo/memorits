@@ -6,16 +6,18 @@
  */
 
 import { Memori, ConfigManager } from '../src/index';
+import { logInfo, logError } from '../src/core/utils/Logger';
 
 async function openaiIntegrationExample(): Promise<void> {
-  console.log('🚀 Starting OpenAI Integration Example...\n');
+  logInfo('🚀 Starting OpenAI Integration Example...\n', { component: 'openai-integration-example' });
 
   let memori: Memori | undefined;
 
   try {
     // Load configuration - should be configured for OpenAI
     const config = ConfigManager.loadConfig();
-    console.log('📋 OpenAI Configuration:', {
+    logInfo('📋 OpenAI Configuration loaded', {
+      component: 'openai-integration-example',
       databaseUrl: config.databaseUrl,
       namespace: config.namespace,
       model: config.model,
@@ -25,24 +27,28 @@ async function openaiIntegrationExample(): Promise<void> {
 
     // Verify OpenAI configuration
     if (!config.apiKey || config.apiKey === 'your-openai-api-key-here') {
-      console.log('❌ Error: OpenAI API key not configured');
-      console.log('   Please set OPENAI_API_KEY in your .env file');
-      console.log('   Get your API key from: https://platform.openai.com/api-keys');
+      logError('❌ Error: OpenAI API key not configured', {
+        component: 'openai-integration-example',
+        hint: 'Please set OPENAI_API_KEY in your .env file',
+        apiKeyUrl: 'https://platform.openai.com/api-keys',
+      });
       return;
     }
 
     if (config.baseUrl && config.baseUrl.includes('11434')) {
-      console.log('⚠️  Warning: Base URL appears to be configured for Ollama, not OpenAI');
-      console.log('   For OpenAI, remove OPENAI_BASE_URL from .env or set it to empty');
+      logInfo('⚠️  Warning: Base URL appears to be configured for Ollama, not OpenAI', {
+        component: 'openai-integration-example',
+        suggestion: 'For OpenAI, remove OPENAI_BASE_URL from .env or set it to empty',
+      });
     }
 
     // Initialize Memori instance
     memori = new Memori(config);
-    console.log('✅ Memori instance created with OpenAI backend');
+    logInfo('✅ Memori instance created with OpenAI backend', { component: 'openai-integration-example' });
 
     // Enable Memori (initializes database schema)
     await memori.enable();
-    console.log('✅ Memori enabled successfully\n');
+    logInfo('✅ Memori enabled successfully\n', { component: 'openai-integration-example' });
 
     // Test conversations with OpenAI context
     const conversations = [
@@ -64,7 +70,7 @@ async function openaiIntegrationExample(): Promise<void> {
       },
     ];
 
-    console.log('💬 Recording conversations with OpenAI context...');
+    logInfo('💬 Recording conversations with OpenAI context...', { component: 'openai-integration-example' });
 
     for (let i = 0; i < conversations.length; i++) {
       const { user, ai } = conversations[i];
@@ -76,69 +82,89 @@ async function openaiIntegrationExample(): Promise<void> {
           category: 'programming-concepts',
         },
       });
-      console.log(`✅ Conversation ${i + 1} recorded: ${chatId}`);
+      logInfo(`✅ Conversation ${i + 1} recorded: ${chatId}`, {
+        component: 'openai-integration-example',
+        chatId,
+        conversationIndex: i + 1,
+      });
     }
 
     // Wait for memory processing
-    console.log('\n⏳ Waiting for memory processing...');
+    logInfo('\n⏳ Waiting for memory processing...', { component: 'openai-integration-example' });
     await new Promise(resolve => setTimeout(resolve, 4000));
 
     // Search for programming concept memories
-    console.log('\n🔍 Searching memories for "JavaScript"...');
-    const jsMemories = await memori.searchMemories('JavaScript', 5);
+    logInfo('\n🔍 Searching memories for "JavaScript"...', { component: 'openai-integration-example' });
+    const jsMemories = await memori.searchMemories('JavaScript', { limit: 5 });
 
     if (jsMemories.length > 0) {
-      console.log(`✅ Found ${jsMemories.length} JavaScript-related memories:`);
+      logInfo(`✅ Found ${jsMemories.length} JavaScript-related memories:`, {
+        component: 'openai-integration-example',
+        count: jsMemories.length,
+      });
       jsMemories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
-        if (memory.metadata) {
-          console.log(`   Model: ${memory.metadata.modelUsed || 'Unknown'}`);
-          console.log(`   Category: ${memory.metadata.category || 'None'}`);
-        }
+        logInfo(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'openai-integration-example',
+          memoryIndex: index + 1,
+          modelUsed: memory.metadata?.modelUsed || 'Unknown',
+          category: memory.metadata?.category || 'None',
+        });
       });
     }
 
     // Search for async/await memories
-    console.log('\n🔍 Searching memories for "async"...');
-    const asyncMemories = await memori.searchMemories('async', 3);
+    logInfo('\n🔍 Searching memories for "async"...', { component: 'openai-integration-example' });
+    const asyncMemories = await memori.searchMemories('async', { limit: 3 });
 
     if (asyncMemories.length > 0) {
-      console.log(`✅ Found ${asyncMemories.length} async-related memories:`);
+      logInfo(`✅ Found ${asyncMemories.length} async-related memories:`, {
+        component: 'openai-integration-example',
+        count: asyncMemories.length,
+      });
       asyncMemories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+        logInfo(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'openai-integration-example',
+          memoryIndex: index + 1,
+        });
       });
     }
 
     // Search for React-related memories
-    console.log('\n🔍 Searching memories for "React"...');
-    const reactMemories = await memori.searchMemories('React', 3);
+    logInfo('\n🔍 Searching memories for "React"...', { component: 'openai-integration-example' });
+    const reactMemories = await memori.searchMemories('React', { limit: 3 });
 
     if (reactMemories.length > 0) {
-      console.log(`✅ Found ${reactMemories.length} React-related memories:`);
+      logInfo(`✅ Found ${reactMemories.length} React-related memories:`, {
+        component: 'openai-integration-example',
+        count: reactMemories.length,
+      });
       reactMemories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+        logInfo(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'openai-integration-example',
+          memoryIndex: index + 1,
+        });
       });
     }
 
-    console.log('\n🎉 OpenAI integration example completed successfully!');
-    console.log('💡 Tip: Make sure your OPENAI_API_KEY is valid and has sufficient credits');
+    logInfo('\n🎉 OpenAI integration example completed successfully!', { component: 'openai-integration-example' });
+    logInfo('💡 Tip: Make sure your OPENAI_API_KEY is valid and has sufficient credits', { component: 'openai-integration-example' });
 
   } catch (error) {
-    console.error('❌ Error in OpenAI integration example:', error);
+    logError('❌ Error in OpenAI integration example:', { component: 'openai-integration-example', error });
     if (error instanceof Error) {
-      console.error('Error message:', error.message);
+      logError('Error message:', { component: 'openai-integration-example', message: error.message });
 
       // Provide helpful troubleshooting for common OpenAI issues
       if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-        console.log('\n🔧 Troubleshooting suggestions:');
-        console.log('1. Check your OPENAI_API_KEY in the .env file');
-        console.log('2. Verify the API key is correct and active');
-        console.log('3. Make sure you have sufficient API credits');
+        logInfo('\n🔧 Troubleshooting suggestions:', { component: 'openai-integration-example' });
+        logInfo('1. Check your OPENAI_API_KEY in the .env file', { component: 'openai-integration-example' });
+        logInfo('2. Verify the API key is correct and active', { component: 'openai-integration-example' });
+        logInfo('3. Make sure you have sufficient API credits', { component: 'openai-integration-example' });
       } else if (error.message.includes('429') || error.message.includes('rate limit')) {
-        console.log('\n🔧 Troubleshooting suggestions:');
-        console.log('1. You are being rate limited by OpenAI');
-        console.log('2. Wait a moment before trying again');
-        console.log('3. Check your OpenAI account usage limits');
+        logInfo('\n🔧 Troubleshooting suggestions:', { component: 'openai-integration-example' });
+        logInfo('1. You are being rate limited by OpenAI', { component: 'openai-integration-example' });
+        logInfo('2. Wait a moment before trying again', { component: 'openai-integration-example' });
+        logInfo('3. Check your OpenAI account usage limits', { component: 'openai-integration-example' });
       }
     }
   } finally {
@@ -146,9 +172,9 @@ async function openaiIntegrationExample(): Promise<void> {
     if (memori) {
       try {
         await memori.close();
-        console.log('✅ Database connection closed');
+        logInfo('✅ Database connection closed', { component: 'openai-integration-example' });
       } catch (error) {
-        console.error('❌ Error closing database:', error);
+        logError('❌ Error closing database:', { component: 'openai-integration-example', error });
       }
     }
   }
@@ -156,7 +182,7 @@ async function openaiIntegrationExample(): Promise<void> {
 
 // Error handling for unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logError('Unhandled Rejection at:', { component: 'openai-integration-example', promise, reason });
 });
 
 // Run the example

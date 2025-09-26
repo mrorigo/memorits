@@ -2,6 +2,7 @@
 import { PrismaClient } from '@prisma/client';
 import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } from '../types/schemas';
 import { MemorySearchResult, SearchOptions } from '../types/models';
+import { logDebug, logInfo } from '../utils/Logger';
 
 // Type definitions for database operations
 export interface ChatHistoryData {
@@ -339,5 +340,128 @@ export class DatabaseManager {
     if (score >= 0.6) return 'high';
     if (score >= 0.4) return 'medium';
     return 'low';
+  }
+
+  // Duplicate Consolidation Operations
+
+  /**
+   * Find potential duplicate memories based on content similarity
+   */
+  async findPotentialDuplicates(
+    content: string,
+    namespace: string = 'default',
+    threshold: number = 0.7,
+  ): Promise<MemorySearchResult[]> {
+    // Simple similarity check using text search
+    // In a real implementation, you might use vector similarity or more sophisticated algorithms
+    const similarMemories = await this.searchMemories(content, {
+      namespace,
+      limit: 20,
+      includeMetadata: true,
+    });
+
+    // Filter by similarity threshold (basic implementation)
+    return similarMemories.filter(memory => {
+      // Simple content overlap check
+      const contentWords = new Set(content.toLowerCase().split(/\s+/));
+      const memoryWords = new Set(memory.content.toLowerCase().split(/\s+/));
+      const intersection = new Set([...contentWords].filter(x => memoryWords.has(x)));
+      const union = new Set([...contentWords, ...memoryWords]);
+      const similarity = intersection.size / union.size;
+
+      return similarity >= threshold;
+    });
+  }
+
+  /**
+   * Get all memories that are marked as duplicates of others
+   */
+  async getDuplicateMemories(_namespace: string = 'default'): Promise<MemorySearchResult[]> {
+    // Note: This is a placeholder - actual implementation would depend on schema
+    // For now, return empty array as we don't have duplicate tracking fields
+    return [];
+  }
+
+  /**
+   * Mark a memory as a duplicate of another memory
+   */
+  async markAsDuplicate(
+    duplicateId: string,
+    originalId: string,
+    consolidationReason: string = 'automatic_consolidation',
+  ): Promise<void> {
+    // Note: This is a placeholder - actual implementation would update duplicate tracking fields
+    // For now, just log the action
+    logInfo(`Would mark memory ${duplicateId} as duplicate of ${originalId} with reason: ${consolidationReason}`, {
+      component: 'DatabaseManager',
+      duplicateId,
+      originalId,
+      consolidationReason,
+    });
+  }
+
+  /**
+   * Consolidate duplicate memories by merging them into the primary memory
+   */
+  async consolidateDuplicateMemories(
+    primaryMemoryId: string,
+    duplicateIds: string[],
+    _namespace: string = 'default',
+  ): Promise<{ consolidated: number; errors: string[] }> {
+    const consolidatedCount = 0;
+    const errors: string[] = [];
+
+    // Note: This is a placeholder implementation
+    // In a real implementation, this would:
+    // 1. Merge metadata from duplicates into the primary memory
+    // 2. Update any references to point to the primary memory
+    // 3. Mark duplicates as consolidated/removed
+    // 4. Update search indexes
+
+    logInfo(`Would consolidate ${duplicateIds.length} duplicates into primary memory ${primaryMemoryId}`, {
+      component: 'DatabaseManager',
+      primaryMemoryId,
+      duplicateCount: duplicateIds.length,
+    });
+
+    return { consolidated: consolidatedCount, errors };
+  }
+
+  /**
+   * Get consolidation statistics for a namespace
+   */
+  async getConsolidationStats(namespace: string = 'default'): Promise<{
+    totalMemories: number;
+    potentialDuplicates: number;
+    consolidatedMemories: number;
+  }> {
+    // Note: This is a placeholder - actual implementation would query consolidation tracking
+    const totalMemories = await this.prisma.longTermMemory.count({
+      where: { namespace },
+    });
+
+    return {
+      totalMemories,
+      potentialDuplicates: 0,
+      consolidatedMemories: 0,
+    };
+  }
+
+  /**
+   * Clean up consolidated/duplicate memories
+   */
+  async cleanupConsolidatedMemories(
+    olderThanDays: number = 30,
+    namespace: string = 'default',
+  ): Promise<{ cleaned: number; errors: string[] }> {
+    // Note: This is a placeholder implementation
+    // In a real implementation, this would remove or archive old consolidated memories
+    logInfo(`Would cleanup consolidated memories older than ${olderThanDays} days in namespace ${namespace}`, {
+      component: 'DatabaseManager',
+      olderThanDays,
+      namespace,
+    });
+
+    return { cleaned: 0, errors: [] };
   }
 }

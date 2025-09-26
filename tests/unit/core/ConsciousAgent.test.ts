@@ -1,5 +1,14 @@
 import { ConsciousAgent } from '../../../src/core/agents/ConsciousAgent';
 import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
+import { logInfo, logError, logDebug } from '../../../src/core/utils/Logger';
+
+// Mock the Logger module
+jest.mock('../../../src/core/utils/Logger', () => ({
+  logInfo: jest.fn(),
+  logError: jest.fn(),
+  logDebug: jest.fn(),
+  logWarn: jest.fn(),
+}));
 
 // Mock DatabaseManager
 jest.mock('../../../src/core/database/DatabaseManager');
@@ -21,6 +30,9 @@ describe('ConsciousAgent', () => {
       storeConsciousMemoryInShortTerm: jest.fn(),
       getConsciousMemoriesFromShortTerm: jest.fn(),
       markConsciousMemoryAsProcessed: jest.fn(),
+      getProcessedConsciousMemories: jest.fn(),
+      findPotentialDuplicates: jest.fn(),
+      consolidateDuplicateMemories: jest.fn(),
     };
 
     MockDatabaseManager.mockImplementation(() => mockDbManager as any);
@@ -65,39 +77,66 @@ describe('ConsciousAgent', () => {
 
       mockDbManager.getUnprocessedConsciousMemories.mockResolvedValue(mockMemories);
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-
       await consciousAgent.run_conscious_ingest();
 
       expect(mockDbManager.getUnprocessedConsciousMemories).toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith('Starting conscious memory ingestion...');
-      expect(consoleSpy).toHaveBeenCalledWith('Found 2 unprocessed conscious memories');
-      expect(consoleSpy).toHaveBeenCalledWith('Conscious memory ingestion completed');
-
-      consoleSpy.mockRestore();
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Starting conscious memory ingestion...'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+        }),
+      );
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Found 2 unprocessed conscious memories'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+          memoryCount: 2,
+        }),
+      );
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Conscious memory ingestion completed'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+        }),
+      );
     });
 
     it('should handle empty conscious memories gracefully', async () => {
       mockDbManager.getUnprocessedConsciousMemories.mockResolvedValue([]);
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-
       await consciousAgent.run_conscious_ingest();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Starting conscious memory ingestion...');
-      expect(consoleSpy).toHaveBeenCalledWith('No unprocessed conscious memories found');
-
-      consoleSpy.mockRestore();
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Starting conscious memory ingestion...'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+        }),
+      );
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('No unprocessed conscious memories found'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+        }),
+      );
     });
 
     it('should handle errors gracefully', async () => {
       mockDbManager.getUnprocessedConsciousMemories.mockRejectedValue(new Error('Database error'));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
       await expect(consciousAgent.run_conscious_ingest()).rejects.toThrow('Database error');
 
-      consoleSpy.mockRestore();
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining('Error during conscious memory ingestion:'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+        }),
+      );
     });
   });
 
@@ -188,22 +227,176 @@ describe('ConsciousAgent', () => {
   });
 
   describe('consolidateDuplicates', () => {
-    it('should complete consolidation process', async () => {
+    it('should complete consolidation process with no memories', async () => {
+      mockDbManager.getProcessedConsciousMemories = jest.fn().mockResolvedValue([]);
+
+      const result = await consciousAgent.consolidateDuplicates();
+
+      expect(result).toEqual({
+        totalProcessed: 0,
+        duplicatesFound: 0,
+        consolidated: 0,
+        errors: [],
+      });
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Starting conscious memory consolidation in namespace: test-namespace'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+        }),
+      );
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('No conscious memories found for consolidation'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+        }),
+      );
+    });
+
+    it('should detect and consolidate duplicate memories', async () => {
+      const mockMemories = [
+        {
+          id: 'memory-1',
+          content: 'This is a test memory about AI agents',
+          summary: 'AI agents test memory',
+          classification: 'conscious-info',
+          importance: 'high',
+          entities: ['AI', 'agents'],
+          keywords: ['test', 'memory'],
+          confidenceScore: 0.8,
+          classificationReason: 'Test reason',
+        },
+        {
+          id: 'memory-2',
+          content: 'This is another test memory about artificial intelligence agents',
+          summary: 'Artificial intelligence agents memory',
+          classification: 'conscious-info',
+          importance: 'high',
+          entities: ['AI', 'agents'],
+          keywords: ['test', 'memory'],
+          confidenceScore: 0.8,
+          classificationReason: 'Test reason',
+        },
+        {
+          id: 'memory-3',
+          content: 'This is a different memory about databases',
+          summary: 'Database memory',
+          classification: 'conscious-info',
+          importance: 'medium',
+          entities: ['database'],
+          keywords: ['database'],
+          confidenceScore: 0.7,
+          classificationReason: 'Different topic',
+        },
+      ];
+
+      const mockPotentialDuplicates = [
+        {
+          id: 'memory-2',
+          content: 'This is a test memory about AI agents', // Made identical to memory-1 content
+          summary: 'AI agents test memory', // Made identical to memory-1 summary
+          classification: 'conscious-info',
+          importance: 'high',
+          entities: ['AI', 'agents'],
+          keywords: ['test', 'memory'],
+          confidenceScore: 0.8,
+          classificationReason: 'Test reason',
+        },
+      ];
+
+      mockDbManager.getProcessedConsciousMemories = jest.fn().mockResolvedValue(mockMemories);
+      mockDbManager.findPotentialDuplicates = jest.fn().mockResolvedValue(mockPotentialDuplicates);
+      mockDbManager.consolidateDuplicateMemories = jest.fn().mockResolvedValue({
+        consolidated: 1,
+        errors: [],
+      });
+
+      const result = await consciousAgent.consolidateDuplicates({ dryRun: true });
+
+      expect(result.totalProcessed).toBe(1);
+      expect(result.duplicatesFound).toBe(1);
+      expect(result.consolidated).toBe(1);
+      expect(result.errors).toEqual([]);
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Starting conscious memory consolidation in namespace: test-namespace'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          similarityThreshold: 0.7,
+          dryRun: true,
+          namespace: 'test-namespace',
+        }),
+      );
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Found 3 conscious memories to analyze for duplicates'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+          memoryCount: 3,
+        }),
+      );
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Found 1 groups of potential duplicate memories'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'test-namespace',
+          duplicateGroups: 1,
+        }),
+      );
+    });
+
+    it('should handle consolidation errors gracefully', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const mockMemories = [
+        {
+          id: 'memory-1',
+          content: 'Test memory',
+          summary: 'Test summary',
+          classification: 'conscious-info',
+          importance: 'high',
+          entities: [],
+          keywords: [],
+          confidenceScore: 0.8,
+          classificationReason: 'Test',
+        },
+      ];
 
-      await consciousAgent.consolidateDuplicates();
+      mockDbManager.getProcessedConsciousMemories = jest.fn().mockResolvedValue(mockMemories);
+      mockDbManager.findPotentialDuplicates = jest.fn().mockRejectedValue(new Error('Database error'));
 
-      expect(consoleSpy).toHaveBeenCalledWith('Starting conscious memory consolidation...');
-      expect(consoleSpy).toHaveBeenCalledWith('Conscious memory consolidation completed');
+      const result = await consciousAgent.consolidateDuplicates();
+
+      expect(result.totalProcessed).toBe(0);
+      expect(result.duplicatesFound).toBe(0);
+      expect(result.consolidated).toBe(0);
+      expect(result.errors).toContain('Error processing memory memory-1: Error: Database error');
 
       consoleSpy.mockRestore();
     });
 
-    it('should handle errors gracefully', async () => {
-      // The consolidateDuplicates method doesn't currently call any database operations
-      // that could throw errors, so it should always resolve successfully
-      const result = await consciousAgent.consolidateDuplicates();
-      expect(result).toBeUndefined();
+    it('should respect custom options', async () => {
+      mockDbManager.getProcessedConsciousMemories = jest.fn().mockResolvedValue([]);
+
+      await consciousAgent.consolidateDuplicates({
+        namespace: 'custom-namespace',
+        similarityThreshold: 0.9,
+        dryRun: true,
+      });
+
+      expect(logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Starting conscious memory consolidation in namespace: custom-namespace'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'custom-namespace',
+        }),
+      );
+      expect(logDebug).toHaveBeenCalledWith(
+        expect.stringContaining('Similarity threshold: 0.9, Dry run: true'),
+        expect.objectContaining({
+          component: 'ConsciousAgent',
+          namespace: 'custom-namespace',
+        }),
+      );
     });
   });
 

@@ -62,7 +62,6 @@ async function basicUsageExample(): Promise<void> {
 
     // Search for specific concepts
     logInfo('🔍 Searching memories for "interfaces"...', { component: 'basic-usage-example' });
-    const interfaceMemories2 = await memori.searchMemories('interfaces', { limit: 3 });
 
     if (memories.length > 0) {
       logInfo(`✅ Found ${memories.length} relevant memories:`, {
@@ -91,7 +90,7 @@ async function basicUsageExample(): Promise<void> {
 
     // Search for specific concepts
     logInfo('🔍 Searching memories for "interfaces"...', { component: 'basic-usage-example' });
-    const interfaceMemories = await memori.searchMemories('interfaces', 3);
+    const interfaceMemories = await memori.searchMemories('interfaces', { limit: 3 });
 
     if (interfaceMemories.length > 0) {
       logInfo(`✅ Found ${interfaceMemories.length} memories about interfaces:`, {

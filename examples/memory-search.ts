@@ -7,15 +7,18 @@
 
 import { Memori, ConfigManager } from '../src/index';
 
+import { logInfo, logError } from '../src/core/utils/Logger';
+
 async function memorySearchExample(): Promise<void> {
-  console.log('🚀 Starting Memory Search and Retrieval Example...\n');
+  logInfo('🚀 Starting Memory Search and Retrieval Example...\n', { component: 'memory-search-example' });
 
   let memori: Memori | undefined;
 
   try {
     // Load configuration
     const config = ConfigManager.loadConfig();
-    console.log('📋 Configuration loaded:', {
+    logInfo('📋 Configuration loaded:', {
+      component: 'memory-search-example',
       databaseUrl: config.databaseUrl,
       namespace: config.namespace,
       model: config.model,
@@ -23,14 +26,14 @@ async function memorySearchExample(): Promise<void> {
 
     // Initialize Memori instance
     memori = new Memori(config);
-    console.log('✅ Memori instance created');
+    logInfo('✅ Memori instance created', { component: 'memory-search-example' });
 
     // Enable Memori (initializes database schema)
     await memori.enable();
-    console.log('✅ Memori enabled successfully\n');
+    logInfo('✅ Memori enabled successfully\n', { component: 'memory-search-example' });
 
     // Add diverse conversations to build a rich memory base
-    console.log('💬 Building memory base with diverse conversations...');
+    logInfo('💬 Building memory base with diverse conversations...', { component: 'memory-search-example' });
 
     const conversations = [
       {
@@ -78,111 +81,166 @@ async function memorySearchExample(): Promise<void> {
       });
     }
 
-    console.log('✅ All conversations recorded');
+    logInfo('✅ All conversations recorded', { component: 'memory-search-example' });
 
     // Wait for memory processing
-    console.log('\n⏳ Waiting for memory processing...');
+    logInfo('\n⏳ Waiting for memory processing...', { component: 'memory-search-example' });
     await new Promise(resolve => setTimeout(resolve, 5000));
 
-    console.log('\n🔍 === MEMORY SEARCH DEMONSTRATIONS ===\n');
+    logInfo('\n🔍 === MEMORY SEARCH DEMONSTRATIONS ===\n', { component: 'memory-search-example' });
 
     // Basic keyword search
-    console.log('1️⃣ Basic keyword search for "programming":');
-    const programmingMemories = await memori.searchMemories('programming', 3);
+    logInfo('1️⃣ Basic keyword search for "programming":', { component: 'memory-search-example' });
+    const programmingMemories = await memori.searchMemories('programming', { limit: 3 });
     programmingMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'basic-keyword',
+      });
     });
 
     // Category-specific search
-    console.log('\n2️⃣ Searching for artificial intelligence content:');
-    const aiMemories = await memori.searchMemories('machine learning', 2);
+    logInfo('\n2️⃣ Searching for artificial intelligence content:', { component: 'memory-search-example' });
+    const aiMemories = await memori.searchMemories('machine learning', { limit: 2 });
     aiMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'category-specific',
+      });
     });
 
     // Architecture and design patterns
-    console.log('\n3️⃣ Searching for software architecture concepts:');
-    const architectureMemories = await memori.searchMemories('SOLID', 2);
+    logInfo('\n3️⃣ Searching for software architecture concepts:', { component: 'memory-search-example' });
+    const architectureMemories = await memori.searchMemories('SOLID', { limit: 2 });
     architectureMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'architecture-patterns',
+      });
     });
 
     // Technology-specific search
-    console.log('\n4️⃣ Searching for distributed systems (blockchain):');
-    const blockchainMemories = await memori.searchMemories('blockchain', 2);
+    logInfo('\n4️⃣ Searching for distributed systems (blockchain):', { component: 'memory-search-example' });
+    const blockchainMemories = await memori.searchMemories('blockchain', { limit: 2 });
     blockchainMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'technology-specific',
+      });
     });
 
     // Cloud computing search
-    console.log('\n5️⃣ Searching for cloud computing concepts:');
-    const cloudMemories = await memori.searchMemories('cloud computing', 2);
+    logInfo('\n5️⃣ Searching for cloud computing concepts:', { component: 'memory-search-example' });
+    const cloudMemories = await memori.searchMemories('cloud computing', { limit: 2 });
     cloudMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'cloud-computing',
+      });
     });
 
     // Debugging and troubleshooting
-    console.log('\n6️⃣ Searching for debugging techniques:');
-    const debugMemories = await memori.searchMemories('debugging', 2);
+    logInfo('\n6️⃣ Searching for debugging techniques:', { component: 'memory-search-example' });
+    const debugMemories = await memori.searchMemories('debugging', { limit: 2 });
     debugMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'debugging-techniques',
+      });
     });
 
     // Cross-topic search - finding related concepts
-    console.log('\n7️⃣ Cross-topic search for "systems":');
-    const systemsMemories = await memori.searchMemories('systems', 4);
+    logInfo('\n7️⃣ Cross-topic search for "systems":', { component: 'memory-search-example' });
+    const systemsMemories = await memori.searchMemories('systems', { limit: 4 });
     systemsMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'cross-topic'
+      });
     });
 
     // Concept intersection search
-    console.log('\n8️⃣ Concept intersection search for "learning":');
-    const learningMemories = await memori.searchMemories('learning', 3);
+    logInfo('\n8️⃣ Concept intersection search for "learning":', { component: 'memory-search-example' });
+    const learningMemories = await memori.searchMemories('learning', { limit: 3 });
     learningMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'concept-intersection'
+      });
     });
 
     // Pattern-based search
-    console.log('\n9️⃣ Pattern-based search for "principles":');
-    const principlesMemories = await memori.searchMemories('principles', 3);
+    logInfo('\n9️⃣ Pattern-based search for "principles":', { component: 'memory-search-example' });
+    const principlesMemories = await memori.searchMemories('principles', { limit: 3 });
     principlesMemories.forEach((memory, index) => {
-      console.log(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+      logInfo(`   ${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+        component: 'memory-search-example',
+        searchIndex: index + 1,
+        searchType: 'pattern-based'
+      });
     });
 
     // Comprehensive search across all memories
-    console.log('\n🔍📊 COMPREHENSIVE SEARCH RESULTS 📊🔍');
-    console.log('\n🔍 Searching for "technology" across all memories:');
-    const allTechMemories = await memori.searchMemories('technology', 10);
+    logInfo('\n🔍📊 COMPREHENSIVE SEARCH RESULTS 📊🔍', { component: 'memory-search-example' });
+    logInfo('\n🔍 Searching for "technology" across all memories:', { component: 'memory-search-example' });
+    const allTechMemories = await memori.searchMemories('technology', { limit: 10 });
 
     if (allTechMemories.length > 0) {
-      console.log(`✅ Found ${allTechMemories.length} technology-related memories:`);
+      logInfo(`✅ Found ${allTechMemories.length} technology-related memories:`, {
+        component: 'memory-search-example',
+        memoryCount: allTechMemories.length
+      });
       const categories = new Set();
       allTechMemories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+        logInfo(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'memory-search-example',
+          searchIndex: index + 1,
+          searchType: 'comprehensive'
+        });
         if (memory.metadata?.category) {
           categories.add(memory.metadata.category);
         }
       });
-      console.log(`\n📂 Categories found: ${Array.from(categories).join(', ')}`);
+      logInfo(`\n📂 Categories found: ${Array.from(categories).join(', ')}`, {
+        component: 'memory-search-example',
+        categories: Array.from(categories)
+      });
     }
 
-    console.log('\n🎉 Memory search example completed successfully!');
-    console.log('💡 This demonstrates how Memori can retrieve relevant information');
-    console.log('   across different topics and contexts based on semantic search.');
+    logInfo('\n🎉 Memory search example completed successfully!', { component: 'memory-search-example' });
+    logInfo('💡 This demonstrates how Memori can retrieve relevant information', { component: 'memory-search-example' });
+    logInfo('   across different topics and contexts based on semantic search.', { component: 'memory-search-example' });
 
   } catch (error) {
-    console.error('❌ Error in memory search example:', error);
+    logError('❌ Error in memory search example:', {
+      component: 'memory-search-example',
+      error: error instanceof Error ? error.message : String(error),
+    });
     if (error instanceof Error) {
-      console.error('Error message:', error.message);
+      logError('Error message:', {
+        component: 'memory-search-example',
+        error: error.message,
+      });
     }
   } finally {
     // Always close the database connection
     if (memori) {
       try {
         await memori.close();
-        console.log('✅ Database connection closed');
+        logInfo('✅ Database connection closed', { component: 'memory-search-example' });
       } catch (error) {
-        console.error('❌ Error closing database:', error);
+        logError('❌ Error closing database:', {
+          component: 'memory-search-example',
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   }
@@ -190,8 +248,17 @@ async function memorySearchExample(): Promise<void> {
 
 // Error handling for unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logError('Unhandled Rejection at:', {
+    component: 'memory-search-example',
+    promise: String(promise),
+    reason: reason instanceof Error ? reason.message : String(reason),
+  });
 });
 
 // Run the example
-memorySearchExample().catch(console.error);
+memorySearchExample().catch((error) => {
+  logError('Unhandled error in memory search example', {
+    component: 'memory-search-example',
+    error: error instanceof Error ? error.message : String(error),
+  });
+});

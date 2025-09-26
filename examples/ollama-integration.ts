@@ -6,16 +6,18 @@
  */
 
 import { Memori, ConfigManager } from '../src/index';
+import { logInfo, logError } from '../src/core/utils/Logger';
 
 async function ollamaIntegrationExample(): Promise<void> {
-  console.log('🚀 Starting Ollama Integration Example...\n');
+  logInfo('🚀 Starting Ollama Integration Example...\n', { component: 'ollama-integration-example' });
 
   let memori: Memori | undefined;
 
   try {
     // Load configuration - should be configured for Ollama
     const config = ConfigManager.loadConfig();
-    console.log('📋 Ollama Configuration:', {
+    logInfo('📋 Ollama Configuration loaded', {
+      component: 'ollama-integration-example',
       databaseUrl: config.databaseUrl,
       namespace: config.namespace,
       model: config.model,
@@ -24,22 +26,24 @@ async function ollamaIntegrationExample(): Promise<void> {
 
     // Verify Ollama configuration
     if (!config.baseUrl || !config.baseUrl.includes('11434')) {
-      console.log('⚠️  Warning: Base URL does not appear to be configured for Ollama');
-      console.log('   Expected: http://localhost:11434/v1');
-      console.log('   Current: ', config.baseUrl || 'Not set');
+      logInfo('⚠️  Warning: Base URL does not appear to be configured for Ollama', {
+        component: 'ollama-integration-example',
+        expected: 'http://localhost:11434/v1',
+        current: config.baseUrl || 'Not set'
+      });
     }
 
     if (!config.apiKey || config.apiKey === 'your-openai-api-key-here') {
-      console.log('ℹ️  Info: Using Ollama - no API key required');
+      logInfo('ℹ️  Info: Using Ollama - no API key required', { component: 'ollama-integration-example' });
     }
 
     // Initialize Memori instance
     memori = new Memori(config);
-    console.log('✅ Memori instance created with Ollama backend');
+    logInfo('✅ Memori instance created with Ollama backend', { component: 'ollama-integration-example' });
 
     // Enable Memori (initializes database schema)
     await memori.enable();
-    console.log('✅ Memori enabled successfully\n');
+    logInfo('✅ Memori enabled successfully\n', { component: 'ollama-integration-example' });
 
     // Test conversations with different Ollama models
     const conversations = [
@@ -57,7 +61,7 @@ async function ollamaIntegrationExample(): Promise<void> {
       },
     ];
 
-    console.log('💬 Recording conversations with Ollama context...');
+    logInfo('💬 Recording conversations with Ollama context...', { component: 'ollama-integration-example' });
 
     for (let i = 0; i < conversations.length; i++) {
       const { user, ai } = conversations[i];
@@ -69,66 +73,82 @@ async function ollamaIntegrationExample(): Promise<void> {
           category: 'local-llm-usage',
         },
       });
-      console.log(`✅ Conversation ${i + 1} recorded: ${chatId}`);
+      logInfo(`✅ Conversation ${i + 1} recorded: ${chatId}`, { component: 'ollama-integration-example', chatId });
     }
 
     // Wait for memory processing
-    console.log('\n⏳ Waiting for memory processing...');
+    logInfo('\n⏳ Waiting for memory processing...', { component: 'ollama-integration-example' });
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Search for local LLM related memories
-    console.log('\n🔍 Searching memories for "local LLM"...');
-    const localLLMMemories = await memori.searchMemories('local LLM', 5);
+    logInfo('\n🔍 Searching memories for "local LLM"...', { component: 'ollama-integration-example' });
+    const localLLMMemories = await memori.searchMemories('local LLM', { limit: 5 });
 
     if (localLLMMemories.length > 0) {
-      console.log(`✅ Found ${localLLMMemories.length} memories about local LLMs:`);
+      logInfo(`✅ Found ${localLLMMemories.length} memories about local LLMs:`, {
+        component: 'ollama-integration-example',
+        count: localLLMMemories.length,
+      });
       localLLMMemories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
-        if (memory.metadata) {
-          console.log(`   Model: ${memory.metadata.modelUsed || 'Unknown'}`);
-          console.log(`   Category: ${memory.metadata.category || 'None'}`);
-        }
+        logInfo(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'ollama-integration-example',
+          memoryIndex: index + 1,
+          modelUsed: memory.metadata?.modelUsed || 'Unknown',
+          category: memory.metadata?.category || 'None',
+        });
       });
     }
 
     // Search for efficiency-related memories
-    console.log('\n🔍 Searching memories for "efficient"...');
-    const efficiencyMemories = await memori.searchMemories('efficient', 3);
+    logInfo('\n🔍 Searching memories for "efficient"...', { component: 'ollama-integration-example' });
+    const efficiencyMemories = await memori.searchMemories('efficient', { limit: 3 });
 
     if (efficiencyMemories.length > 0) {
-      console.log(`✅ Found ${efficiencyMemories.length} efficiency-related memories:`);
+      logInfo(`✅ Found ${efficiencyMemories.length} efficiency-related memories:`, {
+        component: 'ollama-integration-example',
+        count: efficiencyMemories.length,
+      });
       efficiencyMemories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+        logInfo(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'ollama-integration-example',
+          memoryIndex: index + 1,
+        });
       });
     }
 
     // Search for programming-related memories
-    console.log('\n🔍 Searching memories for "programming"...');
-    const programmingMemories = await memori.searchMemories('programming', 3);
+    logInfo('\n🔍 Searching memories for "programming"...', { component: 'ollama-integration-example' });
+    const programmingMemories = await memori.searchMemories('programming', { limit: 3 });
 
     if (programmingMemories.length > 0) {
-      console.log(`✅ Found ${programmingMemories.length} programming-related memories:`);
+      logInfo(`✅ Found ${programmingMemories.length} programming-related memories:`, {
+        component: 'ollama-integration-example',
+        count: programmingMemories.length,
+      });
       programmingMemories.forEach((memory, index) => {
-        console.log(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`);
+        logInfo(`\n${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
+          component: 'ollama-integration-example',
+          memoryIndex: index + 1,
+        });
       });
     }
 
-    console.log('\n🎉 Ollama integration example completed successfully!');
-    console.log('💡 Tip: Make sure Ollama is running on http://localhost:11434');
-    console.log('   Use "ollama pull" commands to download models as needed');
+    logInfo('\n🎉 Ollama integration example completed successfully!', { component: 'ollama-integration-example' });
+    logInfo('💡 Tip: Make sure Ollama is running on http://localhost:11434', { component: 'ollama-integration-example' });
+    logInfo('   Use "ollama pull" commands to download models as needed', { component: 'ollama-integration-example' });
 
   } catch (error) {
-    console.error('❌ Error in Ollama integration example:', error);
+    logError('❌ Error in Ollama integration example:', { component: 'ollama-integration-example', error });
     if (error instanceof Error) {
-      console.error('Error message:', error.message);
+      logError('Error message:', { component: 'ollama-integration-example', message: error.message });
 
       // Provide helpful troubleshooting for common Ollama issues
       if (error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
-        console.log('\n🔧 Troubleshooting suggestions:');
-        console.log('1. Make sure Ollama is installed: https://ollama.ai');
-        console.log('2. Start Ollama server: ollama serve');
-        console.log('3. Check if Ollama is running on port 11434');
-        console.log('4. Pull a model: ollama pull llama2');
+        logInfo('\n🔧 Troubleshooting suggestions:', { component: 'ollama-integration-example' });
+        logInfo('1. Make sure Ollama is installed: https://ollama.ai', { component: 'ollama-integration-example' });
+        logInfo('2. Start Ollama server: ollama serve', { component: 'ollama-integration-example' });
+        logInfo('3. Check if Ollama is running on port 11434', { component: 'ollama-integration-example' });
+        logInfo('4. Pull a model: ollama pull llama2', { component: 'ollama-integration-example' });
       }
     }
   } finally {
@@ -136,9 +156,9 @@ async function ollamaIntegrationExample(): Promise<void> {
     if (memori) {
       try {
         await memori.close();
-        console.log('✅ Database connection closed');
+        logInfo('✅ Database connection closed', { component: 'ollama-integration-example' });
       } catch (error) {
-        console.error('❌ Error closing database:', error);
+        logError('❌ Error closing database:', { component: 'ollama-integration-example', error });
       }
     }
   }
