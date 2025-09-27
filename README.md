@@ -333,12 +333,6 @@ try {
 
 ## Migration Guide
 
-**Ready to migrate from OpenAI to MemoriOpenAI?**
-
-🚀 **[Complete Migration Guide](docs/MIGRATION.md)** - Step-by-step migration with examples, best practices, and troubleshooting.
-
-📖 **[Detailed Migration Documentation](docs/MIGRATION.md)** - Advanced configuration, production deployment, and comprehensive testing.
-
 ### Quick Migration (3 lines)
 
 ```typescript
@@ -351,14 +345,7 @@ import { MemoriOpenAI } from 'memorits';
 const client = new MemoriOpenAI(apiKey, { enableChatMemory: true });
 ```
 
-**✅ Zero breaking changes** - Your existing OpenAI code works unchanged!
-
-### Additional Resources
-
-- 📖 **[Quick Migration Guide](docs/MIGRATION.md)** - Essential migration steps and examples
-- 📚 **[Complete Migration Guide](docs/MIGRATION.md)** - Comprehensive testing and production deployment
-- 🧪 **[API Documentation](docs/API.md)** - Full API reference with detailed examples
-```
+**✅ Zero breaking changes** - Your existing OpenAI code works unchanged!**
 
 ---
 
@@ -475,7 +462,7 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 
 ## API Reference
 
-For complete API documentation, see [`docs/API.md`](docs/API.md) or visit our [GitHub repository](https://github.com/mrorigo/memorits).
+📚 **[Complete API Documentation](docs/developer/api/core-api.md)** - Comprehensive API reference with detailed examples.
 
 ---
 
@@ -627,10 +614,6 @@ enum MemoryImportanceLevel {
   LOW = 'low'             // Background information
 }
 ```
-
-## API Reference
-
-See detailed API documentation in `docs/API.md` or visit the [project repository](https://github.com/mrorigo/memorits).
 
 ## Development
 
