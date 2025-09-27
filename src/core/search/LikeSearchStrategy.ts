@@ -72,12 +72,41 @@ export class LikeSearchStrategy implements ISearchStrategy {
 
     } catch (error) {
       const duration = Date.now() - startTime;
+
+      // Enhanced error context with detailed information
+      const errorContext = {
+        strategy: this.name,
+        operation: 'like_search',
+        query: query.text,
+        parameters: {
+          limit: query.limit,
+          offset: query.offset,
+          filters: query.filters,
+          hasFilterExpression: !!query.filterExpression,
+          executionTime: duration,
+        },
+        executionTime: duration,
+        timestamp: new Date(),
+        severity: this.categorizeLikeError(error) as 'low' | 'medium' | 'high' | 'critical',
+      };
+
+      // Log detailed error information
       this.logger.error(`LIKE search failed after ${duration}ms:`, {
         error: error instanceof Error ? error.message : String(error),
-        duration: `${duration}ms`
+        strategy: this.name,
+        query: query.text,
+        executionTime: duration,
+        errorCategory: this.categorizeLikeError(error),
+        databaseState: this.getDatabaseState(),
       });
 
-      throw new Error(`LIKE strategy failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new SearchStrategyError(
+        this.name,
+        `LIKE strategy failed: ${error instanceof Error ? error.message : String(error)}`,
+        'like_search',
+        errorContext,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
@@ -465,22 +494,65 @@ export class LikeSearchStrategy implements ISearchStrategy {
   }
 
   /**
-   * Validate strategy-specific configuration
-   */
-  protected validateStrategyConfiguration(): boolean {
-    // Validate wildcard sensitivity
-    const validSensitivities = ['low', 'medium', 'high'];
-    if (!validSensitivities.includes(this.likeConfig.wildcardSensitivity)) {
-      return false;
-    }
+    * Validate strategy-specific configuration
+    */
+   protected validateStrategyConfiguration(): boolean {
+     // Validate wildcard sensitivity
+     const validSensitivities = ['low', 'medium', 'high'];
+     if (!validSensitivities.includes(this.likeConfig.wildcardSensitivity)) {
+       return false;
+     }
 
-    // Validate max wildcard terms
-    if (this.likeConfig.maxWildcardTerms < 1 || this.likeConfig.maxWildcardTerms > 50) {
-      return false;
-    }
+     // Validate max wildcard terms
+     if (this.likeConfig.maxWildcardTerms < 1 || this.likeConfig.maxWildcardTerms > 50) {
+       return false;
+     }
 
-    return true;
-  }
+     return true;
+   }
+
+   /**
+    * Categorize LIKE-specific errors for better error handling
+    */
+   private categorizeLikeError(error: unknown): string {
+     const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+     if (errorMessage.includes('syntax error') || errorMessage.includes('malformed query')) {
+       return 'high'; // Query syntax issues
+     }
+
+     if (errorMessage.includes('database locked') || errorMessage.includes('busy')) {
+       return 'medium'; // Temporary database issues
+     }
+
+     if (errorMessage.includes('out of memory') || errorMessage.includes('too many terms')) {
+       return 'high'; // Resource issues
+     }
+
+     if (errorMessage.includes('empty query') || errorMessage.includes('no search text')) {
+       return 'low'; // User input issues
+     }
+
+     return 'medium'; // Default category
+   }
+
+   /**
+    * Get database state for error context
+    */
+   private getDatabaseState(): Record<string, unknown> {
+     try {
+       const dbManager = this.databaseManager as any;
+       return {
+         connectionStatus: dbManager?.isConnected ? 'connected' : 'disconnected',
+         lastError: dbManager?.lastError,
+         queryCount: dbManager?.queryCount,
+       };
+     } catch {
+       return {
+         connectionStatus: 'error',
+       };
+     }
+   }
 
   /**
    * Get metadata about this search strategy

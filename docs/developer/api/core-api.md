@@ -123,6 +123,37 @@ const filteredResults = await memori.searchMemories('programming concepts', {
   limit: 10,
   includeMetadata: true
 });
+
+// Advanced filter expressions (GAPS1)
+const advancedResults = await memori.searchMemories('', {
+  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
+  limit: 10
+});
+
+// Memory consolidation (GAPS1)
+const consolidationResult = await memori.consolidateDuplicateMemories(
+  'memory-id-1',
+  ['memory-id-2', 'memory-id-3']
+);
+
+if (consolidationResult.consolidated > 0) {
+  console.log(`Consolidated ${consolidationResult.consolidated} duplicate memories`);
+}
+
+// Search with relationships (GAPS1)
+const relationshipSearch = await memori.searchMemories('related to project setup', {
+  includeRelatedMemories: true,
+  maxRelationshipDepth: 2
+});
+
+// Get index health report (GAPS1)
+const healthReport = await memori.getIndexHealthReport();
+console.log(`Index health: ${healthReport.health}`);
+console.log(`Issues found: ${healthReport.issues.length}`);
+
+// Optimize search index (GAPS1)
+const optimizationResult = await memori.optimizeIndex('merge');
+console.log(`Optimization saved ${optimizationResult.spaceSaved} bytes`);
 ```
 
 #### `close()`
@@ -220,6 +251,117 @@ getBackgroundUpdateInterval(): number
 ```
 
 **Returns:** Update interval in milliseconds
+
+### GAPS1 Advanced Methods
+
+#### `consolidateDuplicateMemories()`
+
+Consolidate duplicate memories with transaction safety and intelligent data merging.
+
+```typescript
+async consolidateDuplicateMemories(
+  primaryMemoryId: string,
+  duplicateIds: string[],
+  namespace?: string
+): Promise<ConsolidationResult>
+```
+
+**Parameters:**
+- `primaryMemoryId`: ID of the primary memory to keep
+- `duplicateIds`: Array of duplicate memory IDs to merge
+- `namespace` (optional): Memory namespace (default: 'default')
+
+**Returns:** Consolidation result with count and any errors
+
+**Example:**
+```typescript
+const result = await memori.consolidateDuplicateMemories(
+  'primary-memory-id',
+  ['duplicate-1', 'duplicate-2'],
+  'my-namespace'
+);
+
+console.log(`Consolidated ${result.consolidated} memories`);
+if (result.errors.length > 0) {
+  console.error('Consolidation errors:', result.errors);
+}
+```
+
+#### `getIndexHealthReport()`
+
+Get comprehensive health report for the search index.
+
+```typescript
+async getIndexHealthReport(): Promise<IndexHealthReport>
+```
+
+**Returns:** Detailed health report including statistics, issues, and recommendations
+
+**Example:**
+```typescript
+const report = await memori.getIndexHealthReport();
+console.log(`Index health: ${report.health}`);
+console.log(`Total documents: ${report.statistics.totalDocuments}`);
+console.log(`Issues: ${report.issues.join(', ')}`);
+```
+
+#### `optimizeIndex()`
+
+Perform index optimization with specified strategy.
+
+```typescript
+async optimizeIndex(type?: OptimizationType): Promise<OptimizationResult>
+```
+
+**Parameters:**
+- `type` (optional): Optimization type (default: 'merge')
+
+**Returns:** Optimization result with performance metrics
+
+**Example:**
+```typescript
+const result = await memori.optimizeIndex('rebuild');
+console.log(`Optimization completed in ${result.duration}ms`);
+console.log(`Space saved: ${result.spaceSaved} bytes`);
+```
+
+#### `createIndexBackup()`
+
+Create a backup of the current search index.
+
+```typescript
+async createIndexBackup(): Promise<BackupMetadata>
+```
+
+**Returns:** Backup metadata including timestamp, size, and checksum
+
+**Example:**
+```typescript
+const backup = await memori.createIndexBackup();
+console.log(`Backup created: ${backup.timestamp}`);
+console.log(`Document count: ${backup.documentCount}`);
+```
+
+#### `restoreIndexFromBackup()`
+
+Restore search index from a backup.
+
+```typescript
+async restoreIndexFromBackup(backupId: string): Promise<boolean>
+```
+
+**Parameters:**
+- `backupId`: ID of the backup to restore from
+
+**Returns:** `true` if restoration was successful
+
+**Example:**
+```typescript
+const success = await memori.restoreIndexFromBackup('backup-2024-01-01');
+if (success) {
+  console.log('Index restored successfully');
+}
+```
 
 ## Configuration Management
 

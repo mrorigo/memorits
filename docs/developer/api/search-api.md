@@ -27,6 +27,12 @@ interface SearchOptions {
   strategy?: SearchStrategy;             // Force specific strategy
   timeout?: number;                      // Search timeout (ms)
   enableCache?: boolean;                 // Enable result caching
+
+  // GAPS1 Advanced Features
+  filterExpression?: string;             // Advanced filter expression with boolean logic
+  includeRelatedMemories?: boolean;      // Include related memories in results
+  maxRelationshipDepth?: number;         // Maximum depth for relationship traversal
+  searchStrategy?: SearchStrategy;       // Force specific search strategy
 }
 ```
 
@@ -40,7 +46,9 @@ enum SearchStrategy {
   SEMANTIC = 'semantic',           // Vector-based similarity search (planned)
   CATEGORY_FILTER = 'category_filter',    // Classification-based filtering
   TEMPORAL_FILTER = 'temporal_filter',    // Time-based filtering
-  METADATA_FILTER = 'metadata_filter'     // Advanced metadata filtering
+  METADATA_FILTER = 'metadata_filter',    // Advanced metadata filtering
+  RELATIONSHIP = 'relationship',   // Relationship-based search (GAPS1)
+  ADVANCED_FILTER = 'advanced_filter'     // Advanced filter expressions (GAPS1)
 }
 ```
 
@@ -117,6 +125,91 @@ const filteredMemories = await memori.searchMemories('configuration', {
   },
   limit: 10
 });
+
+// Advanced Filter Expressions (GAPS1)
+const advancedFilterResults = await memori.searchMemories('', {
+  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
+  limit: 20
+});
+
+// Complex boolean filter expressions (GAPS1)
+const complexFilterResults = await memori.searchMemories('', {
+  filterExpression: '(category = "essential" OR category = "contextual") AND importance_score >= 0.6 AND created_at BETWEEN "2024-01-01" AND "2024-12-31"',
+  limit: 50
+});
+
+// Filter templates with parameters (GAPS1)
+const templateSearch = await memori.searchMemories('', {
+  filterExpression: 'recent_important: { days_ago: "7" }',
+  limit: 10
+});
+
+// Relationship-based search (GAPS1)
+const relationshipResults = await memori.searchMemories('related to project setup', {
+  includeRelatedMemories: true,
+  maxRelationshipDepth: 3,
+  limit: 30
+});
+```
+
+### GAPS1 Filter Expression Syntax
+
+Advanced filter expressions support complex boolean logic with field comparisons and operators:
+
+```typescript
+// Basic field comparison
+const basicFilter = await memori.searchMemories('', {
+  filterExpression: 'importance_score >= 0.7',
+  limit: 10
+});
+
+// Boolean logic with multiple conditions
+const booleanFilter = await memori.searchMemories('', {
+  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
+  limit: 20
+});
+
+// Complex nested expressions
+const complexFilter = await memori.searchMemories('', {
+  filterExpression: '(category = "essential" OR category = "contextual") AND importance_score >= 0.6',
+  limit: 30
+});
+
+// Range queries
+const rangeFilter = await memori.searchMemories('', {
+  filterExpression: 'created_at BETWEEN "2024-01-01" AND "2024-12-31"',
+  limit: 15
+});
+
+// Template-based filters with parameters
+const templateFilter = await memori.searchMemories('', {
+  filterExpression: 'recent_important: { days_ago: "7" }',
+  limit: 10
+});
+```
+
+**Supported Operators:**
+- **Comparison**: `=`, `!=`, `>`, `>=`, `<`, `<=`
+- **String**: `LIKE`, `NOT LIKE`, `IN`, `NOT IN`
+- **Logical**: `AND`, `OR`, `NOT`
+- **Range**: `BETWEEN`, `NOT BETWEEN`
+- **Null checks**: `IS NULL`, `IS NOT NULL`
+
+**Filter Expression Examples:**
+```typescript
+// Date filtering
+'created_at > "2024-01-01"'
+'created_at BETWEEN "2024-01-01" AND "2024-12-31"'
+
+// Category and importance filtering
+'category IN ("essential", "contextual") AND importance_score >= 0.7'
+
+// Complex nested conditions
+'(category = "essential" OR category = "reference") AND importance_score >= 0.6 AND created_at > "2024-01-01"'
+
+// String pattern matching
+'summary LIKE "%important%" AND category != "conversational"'
+```
 ```
 
 ## Search Result Interface

@@ -1,11 +1,16 @@
 import { PrismaClient } from '@prisma/client';
-import { Prisma } from '@prisma/client';
 import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } from '../types/schemas';
 import { MemorySearchResult, SearchOptions, DatabaseStats } from '../types/models';
 import { logInfo, logError } from '../utils/Logger';
 import { initializeSearchSchema, verifyFTSSchema } from './init-search-schema';
 import { SearchService } from '../search/SearchService';
+import { SearchIndexManager } from '../search/SearchIndexManager';
 import { SearchQuery } from '../search/types';
+import {
+  ProcessingStateManager,
+  MemoryProcessingState,
+} from '../memory/MemoryProcessingStateManager';
+import { MemoryRelationship, MemoryRelationshipType } from '../types/schemas';
 
 // Type definitions for database operations
 export interface ChatHistoryData {
@@ -62,17 +67,46 @@ export interface DatabaseWhereClause {
   isPermanentContext?: boolean;
 }
 
+// Relationship Query Interface
+export interface RelationshipQuery {
+  sourceMemoryId?: string;
+  targetMemoryId?: string;
+  relationshipType?: MemoryRelationshipType;
+  minConfidence?: number;
+  minStrength?: number;
+  namespace?: string;
+  limit?: number;
+}
+
+// Relationship Statistics Interface
+export interface RelationshipStatistics {
+  totalRelationships: number;
+  relationshipsByType: Record<MemoryRelationshipType, number>;
+  averageConfidence: number;
+  averageStrength: number;
+  topEntities: Array<{ entity: string; count: number }>;
+  recentRelationships: number; // Last 30 days
+}
+
 export class DatabaseManager {
   private prisma: PrismaClient;
   private ftsEnabled: boolean = false;
   private initializationInProgress: boolean = false;
   private searchService?: SearchService;
+  private searchIndexManager?: SearchIndexManager;
+  private stateManager: ProcessingStateManager;
 
   constructor(databaseUrl: string) {
     // Configure Prisma to use system SQLite with FTS5 support
     this.prisma = new PrismaClient({
       datasourceUrl: databaseUrl,
       // Note: FTS5 is available in system SQLite, will be verified at runtime
+    });
+    // Initialize state manager for memory processing state tracking
+    this.stateManager = new ProcessingStateManager({
+      enableHistoryTracking: true,
+      enableMetrics: true,
+      maxHistoryEntries: 100,
     });
     // Don't initialize FTS support in constructor to avoid schema conflicts
     // It will be initialized lazily when first needed
@@ -83,14 +117,24 @@ export class DatabaseManager {
   }
 
   /**
-   * Initialize or get the SearchService instance
-   */
-  public getSearchService(): SearchService {
-    if (!this.searchService) {
-      this.searchService = new SearchService(this);
-    }
-    return this.searchService;
-  }
+    * Initialize or get the SearchService instance
+    */
+   public getSearchService(): SearchService {
+     if (!this.searchService) {
+       this.searchService = new SearchService(this);
+     }
+     return this.searchService;
+   }
+
+   /**
+    * Initialize or get the SearchIndexManager instance
+    */
+   public getSearchIndexManager(): SearchIndexManager {
+     if (!this.searchIndexManager) {
+       this.searchIndexManager = new SearchIndexManager(this);
+     }
+     return this.searchIndexManager;
+   }
 
   private async ensureFTSSupport(): Promise<void> {
     if (this.ftsEnabled || this.initializationInProgress) {
@@ -120,7 +164,7 @@ export class DatabaseManager {
         component: 'DatabaseManager',
         tables: verification.stats.tables,
         triggers: verification.stats.triggers,
-        indexes: verification.stats.indexes
+        indexes: verification.stats.indexes,
       });
     } catch (error) {
       logError('Failed to initialize FTS5 search support, falling back to basic search', {
@@ -175,6 +219,38 @@ export class DatabaseManager {
         consciousProcessed: false, // Default to unprocessed
       },
     });
+
+    // Initialize state tracking for the new memory
+    try {
+      await this.stateManager.initializeMemoryState(
+        result.id,
+        MemoryProcessingState.PROCESSED,
+      );
+
+      // Track the creation in state history
+      await this.stateManager.transitionToState(
+        result.id,
+        MemoryProcessingState.PROCESSED,
+        {
+          reason: 'Memory created and stored in long-term storage',
+          agentId: 'DatabaseManager',
+          metadata: {
+            chatId,
+            namespace,
+            classification: memoryData.classification,
+            importance: memoryData.importance,
+          },
+        },
+      );
+    } catch (error) {
+      logError('Failed to initialize state tracking for new memory', {
+        component: 'DatabaseManager',
+        memoryId: result.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw here - state tracking failure shouldn't prevent memory storage
+    }
+
     return result.id;
   }
 
@@ -445,7 +521,1342 @@ export class DatabaseManager {
   }
 
   async close(): Promise<void> {
+    // Cleanup search index manager
+    if (this.searchIndexManager) {
+      this.searchIndexManager.cleanup();
+    }
+
     await this.prisma.$disconnect();
+  }
+
+  // Memory Relationship Operations
+
+  /**
+   * Store memory relationships for a given memory
+   * Updates the relatedMemoriesJson and supersedesJson fields with extracted relationships
+   */
+  async storeMemoryRelationships(
+    memoryId: string,
+    relationships: MemoryRelationship[],
+    namespace: string = 'default',
+  ): Promise<{ stored: number; errors: string[] }> {
+    const errors: string[] = [];
+    let stored = 0;
+
+    try {
+      logInfo(`Storing ${relationships.length} relationships for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        relationshipCount: relationships.length,
+        namespace,
+      });
+
+      // Separate relationships by type for storage
+      const generalRelationships = relationships.filter(r => r.type !== MemoryRelationshipType.SUPERSEDES);
+      const supersedingRelationships = relationships.filter(r => r.type === MemoryRelationshipType.SUPERSEDES);
+
+      // Store general relationships
+      if (generalRelationships.length > 0) {
+        try {
+          // Get existing relationships to merge with new ones
+          const existingMemory = await this.prisma.longTermMemory.findUnique({
+            where: { id: memoryId },
+            select: { relatedMemoriesJson: true, processedData: true },
+          });
+
+          const existingRelationships = existingMemory?.relatedMemoriesJson ?
+            (existingMemory.relatedMemoriesJson as MemoryRelationship[]) : [];
+
+          // Merge relationships, avoiding duplicates
+          const mergedRelationships = this.mergeRelationships(existingRelationships, generalRelationships);
+
+          await this.prisma.longTermMemory.update({
+            where: { id: memoryId },
+            data: {
+              relatedMemoriesJson: mergedRelationships as any,
+              processedData: {
+                ...(existingMemory?.processedData as any),
+                relationshipCount: mergedRelationships.length,
+                lastRelationshipUpdate: new Date(),
+              } as any,
+            },
+          });
+
+          stored += generalRelationships.length;
+          logInfo(`Stored ${generalRelationships.length} general relationships for memory ${memoryId}`, {
+            component: 'DatabaseManager',
+            memoryId,
+            relationshipCount: generalRelationships.length,
+          });
+        } catch (error) {
+          const errorMsg = `Failed to store general relationships: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMsg);
+          logError(errorMsg, {
+            component: 'DatabaseManager',
+            memoryId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Store superseding relationships separately
+      if (supersedingRelationships.length > 0) {
+        try {
+          // Get existing superseding relationships to merge
+          const existingMemory = await this.prisma.longTermMemory.findUnique({
+            where: { id: memoryId },
+            select: { supersedesJson: true, processedData: true },
+          });
+
+          const existingSuperseding = existingMemory?.supersedesJson ?
+            (existingMemory.supersedesJson as MemoryRelationship[]) : [];
+
+          // Merge superseding relationships
+          const mergedSuperseding = this.mergeRelationships(existingSuperseding, supersedingRelationships);
+
+          await this.prisma.longTermMemory.update({
+            where: { id: memoryId },
+            data: {
+              supersedesJson: mergedSuperseding as any,
+              processedData: {
+                ...(existingMemory?.processedData as any),
+                supersedingCount: mergedSuperseding.length,
+                lastSupersedingUpdate: new Date(),
+              } as any,
+            },
+          });
+
+          stored += supersedingRelationships.length;
+          logInfo(`Stored ${supersedingRelationships.length} superseding relationships for memory ${memoryId}`, {
+            component: 'DatabaseManager',
+            memoryId,
+            supersedingCount: supersedingRelationships.length,
+          });
+        } catch (error) {
+          const errorMsg = `Failed to store superseding relationships: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMsg);
+          logError(errorMsg, {
+            component: 'DatabaseManager',
+            memoryId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Update state tracking for relationship processing
+      try {
+        await this.stateManager.transitionToState(
+          memoryId,
+          MemoryProcessingState.PROCESSED,
+          {
+            reason: 'Memory relationships stored successfully',
+            agentId: 'DatabaseManager',
+            metadata: {
+              relationshipsStored: stored,
+              errors: errors.length,
+            },
+          },
+        );
+      } catch (stateError) {
+        logError('Failed to update state tracking for relationship storage', {
+          component: 'DatabaseManager',
+          memoryId,
+          error: stateError instanceof Error ? stateError.message : String(stateError),
+        });
+      }
+
+      logInfo(`Successfully stored relationships for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        totalStored: stored,
+        errors: errors.length,
+      });
+
+      return { stored, errors };
+    } catch (error) {
+      const errorMsg = `Failed to store relationships for memory ${memoryId}: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errorMsg);
+      logError(errorMsg, {
+        component: 'DatabaseManager',
+        memoryId,
+        relationshipCount: relationships.length,
+        namespace,
+        error: error instanceof Error ? error.stack : String(error),
+      });
+      return { stored, errors };
+    }
+  }
+
+  /**
+   * Query memories by relationship type
+   * Returns memories that have relationships of the specified type
+   */
+  async getMemoriesByRelationship(
+    query: RelationshipQuery,
+  ): Promise<Array<{
+    memory: any;
+    relationships: MemoryRelationship[];
+    matchReason: string;
+  }>> {
+    try {
+      const namespace = query.namespace || 'default';
+      const limit = query.limit || 50;
+
+      logInfo('Querying memories by relationship', {
+        component: 'DatabaseManager',
+        relationshipType: query.relationshipType,
+        namespace,
+        limit,
+        filters: {
+          sourceMemoryId: query.sourceMemoryId,
+          targetMemoryId: query.targetMemoryId,
+          minConfidence: query.minConfidence,
+          minStrength: query.minStrength,
+        },
+      });
+
+      // Get memories that have relationships based on query criteria
+      const whereClause: any = { namespace };
+
+      const memories = await this.prisma.longTermMemory.findMany({
+        where: whereClause,
+        take: limit * 2, // Get more to account for filtering
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const results: Array<{
+        memory: any;
+        relationships: MemoryRelationship[];
+        matchReason: string;
+      }> = [];
+
+      for (const memory of memories) {
+        const allRelationships: MemoryRelationship[] = [];
+
+        // Get relationships from relatedMemoriesJson
+        if (memory.relatedMemoriesJson) {
+          const relatedMemories = memory.relatedMemoriesJson as MemoryRelationship[];
+          allRelationships.push(...relatedMemories);
+        }
+
+        // Get relationships from supersedesJson
+        if (memory.supersedesJson) {
+          const supersedingMemories = memory.supersedesJson as MemoryRelationship[];
+          allRelationships.push(...supersedingMemories);
+        }
+
+        // Filter relationships based on query criteria
+        const filteredRelationships = allRelationships.filter(relationship => {
+          // Filter by relationship type if specified
+          if (query.relationshipType && relationship.type !== query.relationshipType) {
+            return false;
+          }
+
+          // Filter by source memory ID if specified
+          if (query.sourceMemoryId && relationship.targetMemoryId !== query.sourceMemoryId) {
+            return false;
+          }
+
+          // Filter by target memory ID if specified
+          if (query.targetMemoryId && relationship.targetMemoryId !== query.targetMemoryId) {
+            return false;
+          }
+
+          // Filter by minimum confidence if specified
+          if (query.minConfidence && relationship.confidence < query.minConfidence) {
+            return false;
+          }
+
+          // Filter by minimum strength if specified
+          if (query.minStrength && relationship.strength < query.minStrength) {
+            return false;
+          }
+
+          return true;
+        });
+
+        if (filteredRelationships.length > 0) {
+          results.push({
+            memory,
+            relationships: filteredRelationships,
+            matchReason: `Found ${filteredRelationships.length} matching relationship(s)`,
+          });
+
+          // Limit results
+          if (results.length >= limit) {
+            break;
+          }
+        }
+      }
+
+      logInfo(`Retrieved ${results.length} memories with matching relationships`, {
+        component: 'DatabaseManager',
+        query: {
+          relationshipType: query.relationshipType,
+          namespace,
+          minConfidence: query.minConfidence,
+          minStrength: query.minStrength,
+        },
+        resultCount: results.length,
+      });
+
+      return results;
+    } catch (error) {
+      const errorMsg = `Failed to query memories by relationship: ${error instanceof Error ? error.message : String(error)}`;
+      logError(errorMsg, {
+        component: 'DatabaseManager',
+        query,
+        error: error instanceof Error ? error.stack : String(error),
+      });
+      throw new Error(errorMsg);
+    }
+  }
+
+  /**
+   * Get memories related to a specific memory through relationships
+   */
+  async getRelatedMemories(
+    memoryId: string,
+    options: {
+      relationshipType?: MemoryRelationshipType;
+      minConfidence?: number;
+      minStrength?: number;
+      namespace?: string;
+      limit?: number;
+    } = {},
+  ): Promise<Array<{
+    memory: any;
+    relationship: MemoryRelationship;
+    direction: 'incoming' | 'outgoing';
+  }>> {
+    try {
+      const namespace = options.namespace || 'default';
+      const limit = options.limit || 20;
+
+      logInfo(`Getting related memories for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        namespace,
+        relationshipType: options.relationshipType,
+        minConfidence: options.minConfidence,
+        minStrength: options.minStrength,
+        limit,
+      });
+
+      // First, get the source memory to understand its relationships
+      const sourceMemory = await this.prisma.longTermMemory.findUnique({
+        where: { id: memoryId },
+        select: {
+          id: true,
+          relatedMemoriesJson: true,
+          supersedesJson: true,
+          namespace: true,
+        },
+      });
+
+      if (!sourceMemory) {
+        throw new Error(`Memory ${memoryId} not found`);
+      }
+
+      if (sourceMemory.namespace !== namespace) {
+        logInfo(`Memory ${memoryId} is not in namespace ${namespace}`, {
+          component: 'DatabaseManager',
+          memoryId,
+          memoryNamespace: sourceMemory.namespace,
+          requestedNamespace: namespace,
+        });
+        return [];
+      }
+
+      const results: Array<{
+        memory: any;
+        relationship: MemoryRelationship;
+        direction: 'incoming' | 'outgoing';
+      }> = [];
+
+      // Get outgoing relationships (memories this memory references)
+      const outgoingRelationships: MemoryRelationship[] = [];
+
+      if (sourceMemory.relatedMemoriesJson) {
+        const related = sourceMemory.relatedMemoriesJson as MemoryRelationship[];
+        outgoingRelationships.push(...related);
+      }
+
+      if (sourceMemory.supersedesJson) {
+        const superseding = sourceMemory.supersedesJson as MemoryRelationship[];
+        outgoingRelationships.push(...superseding);
+      }
+
+      // Filter outgoing relationships based on criteria
+      const filteredOutgoing = outgoingRelationships.filter(rel => {
+        if (options.relationshipType && rel.type !== options.relationshipType) return false;
+        if (options.minConfidence && rel.confidence < options.minConfidence) return false;
+        if (options.minStrength && rel.strength < options.minStrength) return false;
+        return true;
+      });
+
+      // Get target memories for outgoing relationships
+      for (const relationship of filteredOutgoing) {
+        if (!relationship.targetMemoryId) continue;
+
+        try {
+          const targetMemory = await this.prisma.longTermMemory.findUnique({
+            where: { id: relationship.targetMemoryId },
+          });
+
+          if (targetMemory) {
+            results.push({
+              memory: targetMemory,
+              relationship,
+              direction: 'outgoing',
+            });
+          }
+        } catch (error) {
+          logError(`Failed to retrieve target memory ${relationship.targetMemoryId}`, {
+            component: 'DatabaseManager',
+            targetMemoryId: relationship.targetMemoryId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Get incoming relationships (memories that reference this memory)
+      const incomingMemories = await this.prisma.longTermMemory.findMany({
+        where: {
+          namespace,
+          OR: [
+            {
+              relatedMemoriesJson: {
+                path: ['targetMemoryId'],
+                equals: memoryId,
+              } as any,
+            },
+            {
+              supersedesJson: {
+                path: ['targetMemoryId'],
+                equals: memoryId,
+              } as any,
+            },
+          ],
+        },
+        take: limit,
+        select: {
+          id: true,
+          relatedMemoriesJson: true,
+          supersedesJson: true,
+        },
+      });
+
+      // Process incoming relationships
+      for (const incomingMemory of incomingMemories) {
+        const allRelationships: MemoryRelationship[] = [];
+
+        if (incomingMemory.relatedMemoriesJson) {
+          const related = incomingMemory.relatedMemoriesJson as MemoryRelationship[];
+          allRelationships.push(...related);
+        }
+
+        if (incomingMemory.supersedesJson) {
+          const superseding = incomingMemory.supersedesJson as MemoryRelationship[];
+          allRelationships.push(...superseding);
+        }
+
+        // Find the specific relationship that targets our memory
+        const targetRelationship = allRelationships.find(rel => rel.targetMemoryId === memoryId);
+
+        if (targetRelationship) {
+          // Filter by criteria
+          if (options.relationshipType && targetRelationship.type !== options.relationshipType) continue;
+          if (options.minConfidence && targetRelationship.confidence < options.minConfidence) continue;
+          if (options.minStrength && targetRelationship.strength < options.minStrength) continue;
+
+          try {
+            const fullMemory = await this.prisma.longTermMemory.findUnique({
+              where: { id: incomingMemory.id },
+            });
+
+            if (fullMemory) {
+              results.push({
+                memory: fullMemory,
+                relationship: targetRelationship,
+                direction: 'incoming',
+              });
+            }
+          } catch (error) {
+            logError(`Failed to retrieve incoming memory ${incomingMemory.id}`, {
+              component: 'DatabaseManager',
+              incomingMemoryId: incomingMemory.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+
+      // Sort by relationship strength and confidence
+      results.sort((a, b) => {
+        const scoreA = (a.relationship.strength + a.relationship.confidence) / 2;
+        const scoreB = (b.relationship.strength + b.relationship.confidence) / 2;
+        return scoreB - scoreA;
+      });
+
+      // Apply limit
+      const limitedResults = results.slice(0, limit);
+
+      logInfo(`Retrieved ${limitedResults.length} related memories for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        namespace,
+        resultsCount: limitedResults.length,
+        outgoingCount: limitedResults.filter(r => r.direction === 'outgoing').length,
+        incomingCount: limitedResults.filter(r => r.direction === 'incoming').length,
+      });
+
+      return limitedResults;
+    } catch (error) {
+      const errorMsg = `Failed to get related memories for ${memoryId}: ${error instanceof Error ? error.message : String(error)}`;
+      logError(errorMsg, {
+        component: 'DatabaseManager',
+        memoryId,
+        options,
+        error: error instanceof Error ? error.stack : String(error),
+      });
+      throw new Error(errorMsg);
+    }
+  }
+
+  /**
+   * Update relationships for an existing memory
+   * Allows adding, updating, or removing specific relationships
+   */
+  async updateMemoryRelationships(
+    memoryId: string,
+    updates: Array<{
+      relationship: MemoryRelationship;
+      operation: 'add' | 'update' | 'remove';
+    }>,
+    namespace: string = 'default',
+  ): Promise<{ updated: number; errors: string[] }> {
+    const errors: string[] = [];
+    let updated = 0;
+
+    try {
+      logInfo(`Updating ${updates.length} relationships for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        updateCount: updates.length,
+        namespace,
+      });
+
+      // Get the current memory with its relationships
+      const existingMemory = await this.prisma.longTermMemory.findUnique({
+        where: { id: memoryId },
+        select: {
+          id: true,
+          namespace: true,
+          relatedMemoriesJson: true,
+          supersedesJson: true,
+          processedData: true,
+        },
+      });
+
+      if (!existingMemory) {
+        throw new Error(`Memory ${memoryId} not found`);
+      }
+
+      if (existingMemory.namespace !== namespace) {
+        throw new Error(`Memory ${memoryId} is not in namespace ${namespace}`);
+      }
+
+      // Get existing relationships
+      const existingGeneralRelationships = (existingMemory.relatedMemoriesJson as MemoryRelationship[]) || [];
+      const existingSupersedingRelationships = (existingMemory.supersedesJson as MemoryRelationship[]) || [];
+
+      // Process updates
+      for (const update of updates) {
+        try {
+          const { relationship, operation } = update;
+          const isSuperseding = relationship.type === MemoryRelationshipType.SUPERSEDES;
+
+          let targetRelationships = isSuperseding ? existingSupersedingRelationships : existingGeneralRelationships;
+
+          switch (operation) {
+          case 'add': {
+            // Check if relationship already exists
+            const existingIndex = targetRelationships.findIndex(
+              r => r.type === relationship.type &&
+                   r.targetMemoryId === relationship.targetMemoryId,
+            );
+
+            if (existingIndex >= 0) {
+              // Update existing relationship
+              targetRelationships[existingIndex] = {
+                ...relationship,
+                // Preserve higher confidence/strength
+                confidence: Math.max(targetRelationships[existingIndex].confidence, relationship.confidence),
+                strength: Math.max(targetRelationships[existingIndex].strength, relationship.strength),
+              };
+            } else {
+              // Add new relationship
+              targetRelationships.push(relationship);
+            }
+            break;
+          }
+
+          case 'update': {
+            // Find and update existing relationship
+            const updateIndex = targetRelationships.findIndex(
+              r => r.type === relationship.type &&
+                   r.targetMemoryId === relationship.targetMemoryId,
+            );
+
+            if (updateIndex >= 0) {
+              targetRelationships[updateIndex] = relationship;
+            } else {
+              errors.push(`Relationship not found for update: ${relationship.type} -> ${relationship.targetMemoryId}`);
+              continue;
+            }
+            break;
+          }
+
+          case 'remove': {
+            // Remove relationship if it exists
+            const removeIndex = targetRelationships.findIndex(
+              r => r.type === relationship.type &&
+                   r.targetMemoryId === relationship.targetMemoryId,
+            );
+
+            if (removeIndex >= 0) {
+              targetRelationships.splice(removeIndex, 1);
+            } else {
+              logInfo(`Relationship not found for removal: ${relationship.type} -> ${relationship.targetMemoryId}`, {
+                component: 'DatabaseManager',
+                memoryId,
+                relationshipType: relationship.type,
+                targetMemoryId: relationship.targetMemoryId,
+              });
+            }
+            break;
+          }
+
+          default:
+            errors.push(`Unknown operation: ${operation}`);
+            continue;
+          }
+
+          updated++;
+        } catch (error) {
+          const errorMsg = `Failed to ${update.operation} relationship ${update.relationship.type} -> ${update.relationship.targetMemoryId}: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMsg);
+          logError(errorMsg, {
+            component: 'DatabaseManager',
+            memoryId,
+            relationship: update.relationship,
+            operation: update.operation,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Save updated relationships back to database
+      await this.prisma.longTermMemory.update({
+        where: { id: memoryId },
+        data: {
+          relatedMemoriesJson: existingGeneralRelationships as any,
+          supersedesJson: existingSupersedingRelationships as any,
+          processedData: {
+            ...(existingMemory.processedData as any),
+            relationshipUpdateCount: (existingMemory.processedData as any)?.relationshipUpdateCount || 0 + 1,
+            lastRelationshipUpdate: new Date(),
+          } as any,
+        },
+      });
+
+      // Update state tracking
+      try {
+        await this.stateManager.transitionToState(
+          memoryId,
+          MemoryProcessingState.PROCESSED,
+          {
+            reason: 'Memory relationships updated',
+            agentId: 'DatabaseManager',
+            metadata: {
+              relationshipsUpdated: updated,
+              errors: errors.length,
+            },
+          },
+        );
+      } catch (stateError) {
+        logError('Failed to update state tracking for relationship update', {
+          component: 'DatabaseManager',
+          memoryId,
+          error: stateError instanceof Error ? stateError.message : String(stateError),
+        });
+      }
+
+      logInfo(`Successfully updated relationships for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        totalUpdated: updated,
+        errors: errors.length,
+      });
+
+      return { updated, errors };
+    } catch (error) {
+      const errorMsg = `Failed to update relationships for memory ${memoryId}: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errorMsg);
+      logError(errorMsg, {
+        component: 'DatabaseManager',
+        memoryId,
+        updates: updates.length,
+        namespace,
+        error: error instanceof Error ? error.stack : String(error),
+      });
+      return { updated, errors };
+    }
+  }
+
+  /**
+   * Generate comprehensive relationship statistics and analytics
+   */
+  async getRelationshipStatistics(namespace: string = 'default'): Promise<RelationshipStatistics> {
+    try {
+      logInfo(`Generating relationship statistics for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+      });
+
+      // Get all memories with relationships
+      const memories = await this.prisma.longTermMemory.findMany({
+        where: { namespace },
+        select: {
+          id: true,
+          relatedMemoriesJson: true,
+          supersedesJson: true,
+          createdAt: true,
+        },
+      });
+
+      let totalRelationships = 0;
+      const relationshipsByType = {
+        [MemoryRelationshipType.CONTINUATION]: 0,
+        [MemoryRelationshipType.REFERENCE]: 0,
+        [MemoryRelationshipType.RELATED]: 0,
+        [MemoryRelationshipType.SUPERSEDES]: 0,
+        [MemoryRelationshipType.CONTRADICTION]: 0,
+      };
+
+      let totalConfidence = 0;
+      let totalStrength = 0;
+      let relationshipCount = 0;
+      const entityFrequency = new Map<string, number>();
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      let recentRelationships = 0;
+
+      for (const memory of memories) {
+        const allRelationships: MemoryRelationship[] = [];
+
+        // Collect all relationships from this memory
+        if (memory.relatedMemoriesJson) {
+          const related = memory.relatedMemoriesJson as MemoryRelationship[];
+          allRelationships.push(...related);
+        }
+
+        if (memory.supersedesJson) {
+          const superseding = memory.supersedesJson as MemoryRelationship[];
+          allRelationships.push(...superseding);
+        }
+
+        // Process each relationship
+        for (const relationship of allRelationships) {
+          totalRelationships++;
+          relationshipsByType[relationship.type]++;
+          totalConfidence += relationship.confidence;
+          totalStrength += relationship.strength;
+          relationshipCount++;
+
+          // Track entity frequency
+          for (const entity of relationship.entities || []) {
+            entityFrequency.set(entity, (entityFrequency.get(entity) || 0) + 1);
+          }
+
+          // Count recent relationships
+          if (memory.createdAt >= thirtyDaysAgo) {
+            recentRelationships++;
+          }
+        }
+      }
+
+      // Calculate averages
+      const averageConfidence = relationshipCount > 0 ? totalConfidence / relationshipCount : 0;
+      const averageStrength = relationshipCount > 0 ? totalStrength / relationshipCount : 0;
+
+      // Get top entities
+      const topEntities = Array.from(entityFrequency.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20)
+        .map(([entity, count]) => ({ entity, count }));
+
+      const statistics: RelationshipStatistics = {
+        totalRelationships,
+        relationshipsByType,
+        averageConfidence: Math.round(averageConfidence * 100) / 100,
+        averageStrength: Math.round(averageStrength * 100) / 100,
+        topEntities,
+        recentRelationships,
+      };
+
+      logInfo('Generated relationship statistics', {
+        component: 'DatabaseManager',
+        namespace,
+        ...statistics,
+      });
+
+      return statistics;
+    } catch (error) {
+      const errorMsg = `Failed to generate relationship statistics: ${error instanceof Error ? error.message : String(error)}`;
+      logError(errorMsg, {
+        component: 'DatabaseManager',
+        namespace,
+        error: error instanceof Error ? error.stack : String(error),
+      });
+      throw new Error(errorMsg);
+    }
+  }
+
+  /**
+   * Validate relationships for consistency and quality
+   */
+  validateRelationships(relationships: MemoryRelationship[]): { valid: MemoryRelationship[], invalid: Array<{ relationship: MemoryRelationship, reason: string }> } {
+    const valid: MemoryRelationship[] = [];
+    const invalid: Array<{ relationship: MemoryRelationship, reason: string }> = [];
+
+    for (const relationship of relationships) {
+      const validation = this.validateSingleRelationship(relationship);
+      if (validation.isValid) {
+        valid.push(relationship);
+      } else {
+        invalid.push({ relationship, reason: validation.reason || 'Unknown validation error' });
+      }
+    }
+
+    return { valid, invalid };
+  }
+
+  /**
+   * Validate a single relationship
+   */
+  private validateSingleRelationship(relationship: MemoryRelationship): { isValid: boolean, reason?: string } {
+    // Check required fields
+    if (!relationship.type) {
+      return { isValid: false, reason: 'Missing relationship type' };
+    }
+
+    if (!relationship.reason || relationship.reason.trim().length < 10) {
+      return { isValid: false, reason: 'Insufficient reasoning provided' };
+    }
+
+    if (!relationship.context || relationship.context.trim().length < 5) {
+      return { isValid: false, reason: 'Insufficient context provided' };
+    }
+
+    // Validate confidence and strength scores
+    if (relationship.confidence < 0 || relationship.confidence > 1) {
+      return { isValid: false, reason: 'Confidence must be between 0 and 1' };
+    }
+
+    if (relationship.strength < 0 || relationship.strength > 1) {
+      return { isValid: false, reason: 'Strength must be between 0 and 1' };
+    }
+
+    // Validate relationship type
+    const validTypes = Object.values(MemoryRelationshipType);
+    if (!validTypes.includes(relationship.type)) {
+      return { isValid: false, reason: `Invalid relationship type: ${relationship.type}` };
+    }
+
+    // Validate entities if provided
+    if (relationship.entities && relationship.entities.length > 0) {
+      const validEntities = relationship.entities.filter(entity =>
+        entity && typeof entity === 'string' && entity.trim().length > 0,
+      );
+
+      if (validEntities.length !== relationship.entities.length) {
+        return { isValid: false, reason: 'Invalid entities in relationship' };
+      }
+    }
+
+    // Check for reasonable confidence/strength ratio
+    if (relationship.strength > relationship.confidence + 0.3) {
+      return { isValid: false, reason: 'Strength cannot significantly exceed confidence' };
+    }
+
+    return { isValid: true };
+  }
+
+  /**
+   * Detect and resolve relationship conflicts
+   */
+  async resolveRelationshipConflicts(
+    memoryId: string,
+    namespace: string = 'default',
+  ): Promise<{ resolved: number, conflicts: Array<{ type: string, description: string }> }> {
+    const conflicts: Array<{ type: string, description: string }> = [];
+    let resolved = 0;
+
+    try {
+      logInfo(`Resolving relationship conflicts for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        namespace,
+      });
+
+      // Get the memory and its relationships
+      const memory = await this.prisma.longTermMemory.findUnique({
+        where: { id: memoryId },
+        select: {
+          id: true,
+          relatedMemoriesJson: true,
+          supersedesJson: true,
+          processedData: true,
+        },
+      });
+
+      if (!memory) {
+        throw new Error(`Memory ${memoryId} not found`);
+      }
+
+      const allRelationships: MemoryRelationship[] = [];
+
+      if (memory.relatedMemoriesJson) {
+        const related = memory.relatedMemoriesJson as MemoryRelationship[];
+        allRelationships.push(...related);
+      }
+
+      if (memory.supersedesJson) {
+        const superseding = memory.supersedesJson as MemoryRelationship[];
+        allRelationships.push(...superseding);
+      }
+
+      // Detect conflicts
+      const conflictsDetected = this.detectRelationshipConflicts(allRelationships);
+
+      if (conflictsDetected.length > 0) {
+        // Resolve conflicts by keeping the highest quality relationships
+        const resolvedRelationships = this.resolveConflictsByQuality(allRelationships);
+
+        // Update the memory with resolved relationships
+        const generalRelationships = resolvedRelationships.filter(r => r.type !== MemoryRelationshipType.SUPERSEDES);
+        const supersedingRelationships = resolvedRelationships.filter(r => r.type === MemoryRelationshipType.SUPERSEDES);
+
+        await this.prisma.longTermMemory.update({
+          where: { id: memoryId },
+          data: {
+            relatedMemoriesJson: generalRelationships as any,
+            supersedesJson: supersedingRelationships as any,
+            processedData: {
+              ...(memory.processedData as any),
+              conflictResolutionCount: (memory.processedData as any)?.conflictResolutionCount || 0 + 1,
+              lastConflictResolution: new Date(),
+            } as any,
+          },
+        });
+
+        resolved = conflictsDetected.length;
+        conflicts.push(...conflictsDetected);
+      }
+
+      logInfo(`Resolved ${resolved} relationship conflicts for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        resolved,
+        conflictCount: conflictsDetected.length,
+      });
+
+      return { resolved, conflicts };
+    } catch (error) {
+      logError(`Failed to resolve relationship conflicts for memory ${memoryId}`, {
+        component: 'DatabaseManager',
+        memoryId,
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to resolve relationship conflicts: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Detect conflicts in a set of relationships
+   */
+  private detectRelationshipConflicts(relationships: MemoryRelationship[]): Array<{ type: string, description: string }> {
+    const conflicts: Array<{ type: string, description: string }> = [];
+
+    // Group relationships by target memory
+    const relationshipsByTarget = new Map<string, MemoryRelationship[]>();
+    for (const relationship of relationships) {
+      if (relationship.targetMemoryId) {
+        const key = relationship.targetMemoryId;
+        if (!relationshipsByTarget.has(key)) {
+          relationshipsByTarget.set(key, []);
+        }
+        relationshipsByTarget.get(key)!.push(relationship);
+      }
+    }
+
+    // Check for conflicts within each target group
+    for (const [targetId, rels] of relationshipsByTarget.entries()) {
+      if (rels.length > 1) {
+        // Check for contradictory relationship types
+        const types = rels.map(r => r.type);
+        if (types.includes(MemoryRelationshipType.CONTRADICTION) && types.includes(MemoryRelationshipType.CONTINUATION)) {
+          conflicts.push({
+            type: 'contradictory_types',
+            description: `Memory has both CONTRADICTION and CONTINUATION relationships with ${targetId}`,
+          });
+        }
+
+        // Check for superseding conflicts
+        const supersedingRels = rels.filter(r => r.type === MemoryRelationshipType.SUPERSEDES);
+        if (supersedingRels.length > 1) {
+          conflicts.push({
+            type: 'multiple_superseding',
+            description: `Memory has multiple SUPERSEDES relationships with ${targetId}`,
+          });
+        }
+
+        // Check for significant confidence/strength variance
+        const confidences = rels.map(r => r.confidence);
+        const maxConfidence = Math.max(...confidences);
+        const minConfidence = Math.min(...confidences);
+        if (maxConfidence - minConfidence > 0.5) {
+          conflicts.push({
+            type: 'confidence_variance',
+            description: `High confidence variance (${minConfidence.toFixed(2)}-${maxConfidence.toFixed(2)}) for relationships with ${targetId}`,
+          });
+        }
+      }
+    }
+
+    return conflicts;
+  }
+
+  /**
+   * Resolve conflicts by selecting highest quality relationships
+   */
+  private resolveConflictsByQuality(relationships: MemoryRelationship[]): MemoryRelationship[] {
+    // Group by target memory
+    const relationshipsByTarget = new Map<string, MemoryRelationship[]>();
+    for (const relationship of relationships) {
+      if (relationship.targetMemoryId) {
+        const key = relationship.targetMemoryId;
+        if (!relationshipsByTarget.has(key)) {
+          relationshipsByTarget.set(key, []);
+        }
+        relationshipsByTarget.get(key)!.push(relationship);
+      }
+    }
+
+    const resolved: MemoryRelationship[] = [];
+
+    // For each target, keep the highest quality relationship(s)
+    for (const [, rels] of relationshipsByTarget.entries()) {
+      if (rels.length === 1) {
+        resolved.push(...rels);
+      } else {
+        // Sort by quality score (weighted combination of confidence and strength)
+        rels.sort((a, b) => {
+          const scoreA = (a.confidence * 0.6) + (a.strength * 0.4);
+          const scoreB = (b.confidence * 0.6) + (b.strength * 0.4);
+          return scoreB - scoreA;
+        });
+
+        // Keep top 2 relationships for each target to preserve multiple perspectives
+        resolved.push(...rels.slice(0, 2));
+      }
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Clean up invalid or outdated relationships
+   */
+  async cleanupInvalidRelationships(
+    namespace: string = 'default',
+    options: {
+      minConfidence?: number;
+      maxAgeDays?: number;
+      dryRun?: boolean;
+    } = {},
+  ): Promise<{ cleaned: number, errors: string[], skipped: number }> {
+    const errors: string[] = [];
+    let cleaned = 0;
+    let skipped = 0;
+
+    try {
+      const minConfidence = options.minConfidence || 0.2;
+      const maxAgeDays = options.maxAgeDays || 90;
+      const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
+
+      logInfo(`Cleaning up invalid relationships in namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        minConfidence,
+        maxAgeDays,
+        dryRun: options.dryRun,
+      });
+
+      // Get memories with potentially invalid relationships
+      const memories = await this.prisma.longTermMemory.findMany({
+        where: {
+          namespace,
+          createdAt: { lt: cutoffDate },
+        },
+        select: {
+          id: true,
+          relatedMemoriesJson: true,
+          supersedesJson: true,
+          processedData: true,
+          createdAt: true,
+        },
+      });
+
+      for (const memory of memories) {
+        try {
+          const allRelationships: MemoryRelationship[] = [];
+
+          if (memory.relatedMemoriesJson) {
+            const related = memory.relatedMemoriesJson as MemoryRelationship[];
+            allRelationships.push(...related);
+          }
+
+          if (memory.supersedesJson) {
+            const superseding = memory.supersedesJson as MemoryRelationship[];
+            allRelationships.push(...superseding);
+          }
+
+          // Filter out invalid relationships
+          const { valid, invalid } = this.validateRelationships(allRelationships);
+
+          // Also filter by age and confidence
+          const filteredValid = valid.filter(r =>
+            r.confidence >= minConfidence &&
+            (!options.maxAgeDays || memory.createdAt >= cutoffDate),
+          );
+
+          if (filteredValid.length !== allRelationships.length) {
+            if (options.dryRun) {
+              cleaned += (allRelationships.length - filteredValid.length);
+              logInfo(`DRY RUN: Would clean ${allRelationships.length - filteredValid.length} invalid relationships from memory ${memory.id}`, {
+                component: 'DatabaseManager',
+                memoryId: memory.id,
+                invalidCount: invalid.length,
+                lowConfidenceCount: valid.length - filteredValid.length,
+              });
+            } else {
+              // Update memory with cleaned relationships
+              const generalRelationships = filteredValid.filter(r => r.type !== MemoryRelationshipType.SUPERSEDES);
+              const supersedingRelationships = filteredValid.filter(r => r.type === MemoryRelationshipType.SUPERSEDES);
+
+              await this.prisma.longTermMemory.update({
+                where: { id: memory.id },
+                data: {
+                  relatedMemoriesJson: generalRelationships as any,
+                  supersedesJson: supersedingRelationships as any,
+                  processedData: {
+                    ...(memory.processedData as any),
+                    relationshipCleanupCount: (memory.processedData as any)?.relationshipCleanupCount || 0 + 1,
+                    lastRelationshipCleanup: new Date(),
+                  } as any,
+                },
+              });
+
+              cleaned += (allRelationships.length - filteredValid.length);
+              logInfo(`Cleaned ${allRelationships.length - filteredValid.length} invalid relationships from memory ${memory.id}`, {
+                component: 'DatabaseManager',
+                memoryId: memory.id,
+                invalidCount: invalid.length,
+                lowConfidenceCount: valid.length - filteredValid.length,
+              });
+            }
+          } else {
+            skipped++;
+          }
+        } catch (error) {
+          const errorMsg = `Failed to cleanup relationships for memory ${memory.id}: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMsg);
+          logError(errorMsg, {
+            component: 'DatabaseManager',
+            memoryId: memory.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      logInfo(`Relationship cleanup completed for namespace '${namespace}'`, {
+        component: 'DatabaseManager',
+        namespace,
+        cleaned,
+        skipped,
+        errors: errors.length,
+      });
+
+      return { cleaned, errors, skipped };
+    } catch (error) {
+      const errorMsg = `Failed to cleanup invalid relationships: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errorMsg);
+      logError(errorMsg, {
+        component: 'DatabaseManager',
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { cleaned, errors, skipped };
+    }
+  }
+
+  // Memory State Management Operations
+
+  /**
+   * Get the state manager instance for direct access
+   */
+  getStateManager(): ProcessingStateManager {
+    return this.stateManager;
+  }
+
+  /**
+   * Get memories by processing state
+   */
+  async getMemoriesByState(
+    state: MemoryProcessingState,
+    namespace: string = 'default',
+    limit?: number,
+  ): Promise<string[]> {
+    const memoryIds = this.stateManager.getMemoriesByState(state);
+    // Filter by namespace if needed
+    if (namespace !== 'default') {
+      const filteredIds: string[] = [];
+      for (const memoryId of memoryIds) {
+        const memory = await this.prisma.longTermMemory.findUnique({
+          where: { id: memoryId },
+          select: { namespace: true },
+        });
+        if (memory?.namespace === namespace) {
+          filteredIds.push(memoryId);
+        }
+      }
+      return limit ? filteredIds.slice(0, limit) : filteredIds;
+    }
+    return limit ? memoryIds.slice(0, limit) : memoryIds;
+  }
+
+  /**
+   * Get memory processing state
+   */
+  async getMemoryState(memoryId: string): Promise<MemoryProcessingState | undefined> {
+    return this.stateManager.getCurrentState(memoryId);
+  }
+
+  /**
+   * Get memory state history
+   */
+  async getMemoryStateHistory(memoryId: string): Promise<import('../memory/MemoryProcessingStateManager').MemoryStateTransition[]> {
+    return this.stateManager.getStateHistory(memoryId);
+  }
+
+  /**
+   * Transition memory to new state
+   */
+  async transitionMemoryState(
+    memoryId: string,
+    toState: MemoryProcessingState,
+    options?: {
+      reason?: string;
+      metadata?: Record<string, unknown>;
+      userId?: string;
+      agentId?: string;
+      errorMessage?: string;
+      force?: boolean;
+    },
+  ): Promise<boolean> {
+    return this.stateManager.transitionToState(memoryId, toState, options);
+  }
+
+  /**
+   * Get processing state statistics
+   */
+  async getProcessingStateStats(namespace?: string): Promise<Record<MemoryProcessingState, number>> {
+    const stats = this.stateManager.getStateStatistics();
+
+    // If namespace filter is provided, we need to count only memories in that namespace
+    if (namespace && namespace !== 'default') {
+      const filteredStats: Record<MemoryProcessingState, number> = {} as Record<MemoryProcessingState, number>;
+      Object.values(MemoryProcessingState).forEach(state => {
+        filteredStats[state] = 0;
+      });
+
+      // Get all memory IDs for each state and filter by namespace
+      for (const state of Object.values(MemoryProcessingState)) {
+        const memoryIds = this.stateManager.getMemoriesByState(state);
+        for (const memoryId of memoryIds) {
+          try {
+            const memory = await this.prisma.longTermMemory.findUnique({
+              where: { id: memoryId },
+              select: { namespace: true },
+            });
+            if (memory?.namespace === namespace) {
+              filteredStats[state]++;
+            }
+          } catch {
+            // Skip memories that can't be found
+          }
+        }
+      }
+
+      return filteredStats;
+    }
+
+    return stats;
+  }
+
+  /**
+   * Initialize memory state (for existing memories without state tracking)
+   */
+  async initializeExistingMemoryState(
+    memoryId: string,
+    initialState: MemoryProcessingState = MemoryProcessingState.PENDING,
+  ): Promise<void> {
+    await this.stateManager.initializeMemoryState(memoryId, initialState);
+  }
+
+  /**
+   * Get all memory states
+   */
+  async getAllMemoryStates(): Promise<Record<string, MemoryProcessingState>> {
+    return this.stateManager.getAllMemoryStates();
+  }
+
+  /**
+   * Check if memory can transition to specific state
+   */
+  async canMemoryTransitionTo(memoryId: string, toState: MemoryProcessingState): Promise<boolean> {
+    return this.stateManager.canTransitionTo(memoryId, toState);
+  }
+
+  /**
+   * Retry failed memory state transition
+   */
+  async retryMemoryStateTransition(
+    memoryId: string,
+    targetState: MemoryProcessingState,
+    options?: { maxRetries?: number; delayMs?: number },
+  ): Promise<boolean> {
+    return this.stateManager.retryTransition(memoryId, targetState, options);
+  }
+
+  /**
+   * Get processing metrics
+   */
+  async getProcessingMetrics(): Promise<Record<string, number>> {
+    return this.stateManager.getMetrics();
   }
 
   /**
@@ -1019,30 +2430,661 @@ export class DatabaseManager {
   async consolidateDuplicateMemories(
     primaryMemoryId: string,
     duplicateIds: string[],
-    _namespace: string = 'default',
+    namespace: string = 'default',
   ): Promise<{ consolidated: number; errors: string[] }> {
-    const consolidatedCount = 0;
     const errors: string[] = [];
+    let consolidatedCount = 0;
 
-    // Note: This is a placeholder implementation
-    // In a real implementation, this would:
-    // 1. Merge metadata from duplicates into the primary memory
-    // 2. Update any references to point to the primary memory
-    // 3. Mark duplicates as consolidated/removed
-    // 4. Update search indexes
+    // Validate inputs
+    if (!primaryMemoryId || duplicateIds.length === 0) {
+      errors.push('Primary memory ID and at least one duplicate ID are required');
+      return { consolidated: 0, errors };
+    }
 
-    logInfo(`Would consolidate ${duplicateIds.length} duplicates into primary memory ${primaryMemoryId}`, {
-      component: 'DatabaseManager',
-      primaryMemoryId,
-      duplicateCount: duplicateIds.length,
-    });
+    if (duplicateIds.includes(primaryMemoryId)) {
+      errors.push('Primary memory cannot be in the duplicate list');
+      return { consolidated: 0, errors };
+    }
 
-    return { consolidated: consolidatedCount, errors };
+    try {
+      logInfo(`Starting consolidation of ${duplicateIds.length} duplicates into primary memory ${primaryMemoryId}`, {
+        component: 'DatabaseManager',
+        primaryMemoryId,
+        duplicateCount: duplicateIds.length,
+        namespace,
+      });
+
+      // Execute consolidation within a transaction for data integrity
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Get the primary memory first
+        const primaryMemory = await tx.longTermMemory.findUnique({
+          where: { id: primaryMemoryId },
+        });
+
+        if (!primaryMemory) {
+          throw new Error(`Primary memory ${primaryMemoryId} not found`);
+        }
+
+        // Get all duplicate memories
+        const duplicateMemories = await tx.longTermMemory.findMany({
+          where: {
+            id: { in: duplicateIds },
+            namespace,
+          },
+        });
+
+        if (duplicateMemories.length !== duplicateIds.length) {
+          const foundIds = duplicateMemories.map(m => m.id);
+          const missingIds = duplicateIds.filter(id => !foundIds.includes(id));
+          throw new Error(`Some duplicate memories not found: ${missingIds.join(', ')}`);
+        }
+
+        // Merge duplicate data into primary memory
+        const mergedData = await this.mergeDuplicateData(primaryMemory, duplicateMemories);
+
+        // Update the primary memory with consolidated data
+        await tx.longTermMemory.update({
+          where: { id: primaryMemoryId },
+          data: {
+            searchableContent: mergedData.content,
+            summary: mergedData.summary,
+            entitiesJson: mergedData.entities,
+            keywordsJson: mergedData.keywords,
+            topic: mergedData.topic,
+            confidenceScore: mergedData.confidenceScore,
+            classificationReason: mergedData.classificationReason,
+            processedData: {
+              ...(primaryMemory.processedData as any),
+              consolidatedAt: new Date(),
+              consolidatedFrom: duplicateIds,
+              consolidationReason: 'duplicate_consolidation',
+              originalImportance: primaryMemory.memoryImportance,
+              originalClassification: primaryMemory.classification,
+              duplicateCount: duplicateIds.length,
+            } as any,
+          },
+        });
+
+        // Mark all duplicates as consolidated
+        const consolidationTimestamp = new Date();
+        for (const duplicateId of duplicateIds) {
+          await tx.longTermMemory.update({
+            where: { id: duplicateId },
+            data: {
+              processedData: {
+                isConsolidated: true,
+                consolidatedInto: primaryMemoryId,
+                consolidatedAt: consolidationTimestamp,
+                consolidationReason: 'duplicate_consolidation',
+              } as any,
+              // Mark in searchable content for easy identification
+              searchableContent: `[CONSOLIDATED] ${duplicateMemories.find(m => m.id === duplicateId)?.searchableContent}`,
+            },
+          });
+        }
+
+        return { consolidated: duplicateIds.length, duplicateMemories };
+      }, {
+        timeout: 30000, // 30 second timeout for large consolidations
+      });
+
+      consolidatedCount = result.consolidated;
+
+      logInfo(`Successfully consolidated ${consolidatedCount} duplicates into primary memory ${primaryMemoryId}`, {
+        component: 'DatabaseManager',
+        primaryMemoryId,
+        consolidatedCount,
+        namespace,
+        consolidationTimestamp: new Date().toISOString(),
+      });
+
+      return { consolidated: consolidatedCount, errors };
+
+    } catch (error) {
+      const errorMsg = `Consolidation failed for primary memory ${primaryMemoryId}: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errorMsg);
+
+      logError(errorMsg, {
+        component: 'DatabaseManager',
+        primaryMemoryId,
+        duplicateIds,
+        namespace,
+        error: error instanceof Error ? error.stack : String(error),
+      });
+
+      return { consolidated: consolidatedCount, errors };
+    }
   }
 
   /**
-   * Get consolidation statistics for a namespace
+   * Merge relationships to avoid duplicates and combine metadata
    */
+  private mergeRelationships(
+    existingRelationships: MemoryRelationship[],
+    newRelationships: MemoryRelationship[],
+  ): MemoryRelationship[] {
+    const merged = [...existingRelationships];
+
+    for (const newRel of newRelationships) {
+      // Check if relationship already exists (same type and target)
+      const existingIndex = merged.findIndex(
+        existing => existing.type === newRel.type &&
+                   existing.targetMemoryId === newRel.targetMemoryId,
+      );
+
+      if (existingIndex >= 0) {
+        // Update existing relationship with higher confidence/strength
+        const existing = merged[existingIndex];
+        if (newRel.confidence > existing.confidence || newRel.strength > existing.strength) {
+          merged[existingIndex] = {
+            ...newRel,
+            // Preserve the better metadata from both
+            reason: newRel.confidence > existing.confidence ? newRel.reason : existing.reason,
+            context: newRel.confidence > existing.confidence ? newRel.context : existing.context,
+          };
+        }
+      } else {
+        // Add new relationship
+        merged.push(newRel);
+      }
+    }
+
+    return merged;
+  }
+
+  /**
+   * Merge data from duplicate memories into consolidated data for the primary memory
+   */
+  private async mergeDuplicateData(
+    primaryMemory: any,
+    duplicateMemories: any[],
+  ): Promise<{
+    content: string;
+    summary: string;
+    entities: string[];
+    keywords: string[];
+    topic?: string;
+    confidenceScore: number;
+    classificationReason: string;
+  }> {
+    try {
+      // Input validation
+      if (!primaryMemory || !Array.isArray(duplicateMemories)) {
+        throw new Error('Invalid input: primaryMemory and duplicateMemories array are required');
+      }
+
+      if (duplicateMemories.length === 0) {
+        throw new Error('No duplicate memories provided for merging');
+      }
+
+      logInfo('Starting intelligent duplicate data merge', {
+        component: 'DatabaseManager',
+        primaryMemoryId: primaryMemory.id,
+        duplicateCount: duplicateMemories.length,
+      });
+
+      // Merge entities with frequency-based weighting and 2x primary weight
+      const mergedEntities = this.mergeEntitiesWithWeighting(
+        (primaryMemory.entitiesJson as string[]) || [],
+        duplicateMemories.map(m => (m.entitiesJson as string[]) || []),
+      );
+
+      // Merge keywords with priority ranking based on importance
+      const mergedKeywords = this.mergeKeywordsWithPriority(
+        (primaryMemory.keywordsJson as string[]) || [],
+        duplicateMemories.map(m => (m.keywordsJson as string[]) || []),
+        primaryMemory,
+        duplicateMemories,
+      );
+
+      // Calculate weighted confidence scores from all memories
+      const consolidatedConfidenceScore = this.calculateWeightedConfidenceScore(
+        primaryMemory.confidenceScore,
+        duplicateMemories.map(m => m.confidenceScore),
+      );
+
+      // Combine classification reasons intelligently
+      const consolidatedClassificationReason = this.combineClassificationReasons(
+        primaryMemory.classificationReason || '',
+        duplicateMemories.map(m => m.classificationReason || ''),
+      );
+
+      // Preserve most important topic information from primary memory
+      const consolidatedTopic = this.consolidateTopicInformation(
+        primaryMemory.topic,
+        duplicateMemories.map(m => m.topic).filter(Boolean),
+      );
+
+      // Generate consolidated summary with intelligent merging
+      const consolidatedSummary = this.generateConsolidatedSummary(
+        primaryMemory.summary || '',
+        duplicateMemories.map(m => m.summary || '').filter(Boolean),
+      );
+
+      // Generate consolidated content with deduplication
+      const consolidatedContent = this.generateMergedContent(
+        primaryMemory.searchableContent || '',
+        duplicateMemories.map(m => m.searchableContent || ''),
+      );
+
+      logInfo('Successfully completed intelligent duplicate data merge', {
+        component: 'DatabaseManager',
+        primaryMemoryId: primaryMemory.id,
+        duplicateCount: duplicateMemories.length,
+        mergedEntitiesCount: mergedEntities.length,
+        mergedKeywordsCount: mergedKeywords.length,
+        consolidatedConfidenceScore,
+      });
+
+      return {
+        content: consolidatedContent,
+        summary: consolidatedSummary,
+        entities: mergedEntities,
+        keywords: mergedKeywords,
+        topic: consolidatedTopic,
+        confidenceScore: consolidatedConfidenceScore,
+        classificationReason: consolidatedClassificationReason,
+      };
+
+    } catch (error) {
+      logError('Failed to merge duplicate data', {
+        component: 'DatabaseManager',
+        primaryMemoryId: primaryMemory.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to merge duplicate data: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Helper method: Merge entities with frequency-based weighting (primary gets 2x weight)
+   */
+  private mergeEntitiesWithWeighting(
+    primaryEntities: string[],
+    duplicateEntitiesList: string[][],
+  ): string[] {
+    const entityCount = new Map<string, number>();
+
+    // Process primary entities with 2x weighting
+    primaryEntities.forEach(entity => {
+      entityCount.set(entity.toLowerCase().trim(), (entityCount.get(entity.toLowerCase().trim()) || 0) + 2);
+    });
+
+    // Process duplicate entities with normal weighting
+    duplicateEntitiesList.forEach(entities => {
+      entities.forEach(entity => {
+        entityCount.set(entity.toLowerCase().trim(), (entityCount.get(entity.toLowerCase().trim()) || 0) + 1);
+      });
+    });
+
+    // Sort by frequency and take top entities (limit to prevent excessive growth)
+    return Array.from(entityCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([entity]) => entity);
+  }
+
+  /**
+   * Helper method: Merge keywords with priority ranking based on importance
+   */
+  private mergeKeywordsWithPriority(
+    primaryKeywords: string[],
+    duplicateKeywordsList: string[][],
+    primaryMemory: any,
+    duplicateMemories: any[],
+  ): string[] {
+    const keywordCount = new Map<string, number>();
+    const primaryImportance = this.calculateImportanceScore(primaryMemory.memoryImportance || 'medium');
+
+    // Process primary keywords with importance-based weighting
+    primaryKeywords.forEach(keyword => {
+      const weight = Math.ceil(primaryImportance * 2); // 2x weighting plus importance factor
+      keywordCount.set(keyword.toLowerCase().trim(), (keywordCount.get(keyword.toLowerCase().trim()) || 0) + weight);
+    });
+
+    // Process duplicate keywords with their respective importance
+    duplicateMemories.forEach((memory, index) => {
+      const importance = this.calculateImportanceScore(memory.memoryImportance || 'medium');
+      const keywords = duplicateKeywordsList[index] || [];
+
+      keywords.forEach(keyword => {
+        const weight = Math.ceil(importance * 1); // Normal weighting with importance factor
+        keywordCount.set(keyword.toLowerCase().trim(), (keywordCount.get(keyword.toLowerCase().trim()) || 0) + weight);
+      });
+    });
+
+    // Sort by priority score and take top keywords
+    return Array.from(keywordCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 30)
+      .map(([keyword]) => keyword);
+  }
+
+  /**
+   * Helper method: Calculate weighted confidence scores from all memories
+   */
+  private calculateWeightedConfidenceScore(
+    primaryConfidence: number,
+    duplicateConfidences: number[],
+  ): number {
+    const primaryWeight = 0.6; // Primary memory gets 60% weight
+    const totalDuplicateWeight = 0.4; // Remaining 40% distributed among duplicates
+    const duplicateWeight = duplicateConfidences.length > 0 ? totalDuplicateWeight / duplicateConfidences.length : 0;
+
+    let totalConfidenceScore = primaryConfidence * primaryWeight;
+    duplicateConfidences.forEach(confidence => {
+      totalConfidenceScore += confidence * duplicateWeight;
+    });
+
+    return Math.round(totalConfidenceScore * 100) / 100;
+  }
+
+  /**
+   * Helper method: Combine classification reasons intelligently
+   */
+  private combineClassificationReasons(
+    primaryReason: string,
+    duplicateReasons: string[],
+  ): string {
+    const allReasons = [primaryReason, ...duplicateReasons].filter(Boolean);
+
+    // Remove duplicates while preserving order
+    const uniqueReasons = Array.from(new Set(allReasons));
+
+    // Combine into a single coherent explanation
+    if (uniqueReasons.length === 1) {
+      return uniqueReasons[0];
+    }
+
+    return `Primary classification: ${uniqueReasons[0]}. Additional context: ${uniqueReasons.slice(1).join('; ')}`;
+  }
+
+  /**
+   * Helper method: Consolidate topic information from all memories
+   */
+  private consolidateTopicInformation(
+    primaryTopic: string | undefined,
+    duplicateTopics: string[],
+  ): string | undefined {
+    // Always prefer primary topic if available
+    if (primaryTopic && primaryTopic.trim()) {
+      return primaryTopic.trim();
+    }
+
+    // If no primary topic, find most frequent topic from duplicates
+    const topicCount = new Map<string, number>();
+    duplicateTopics.forEach(topic => {
+      if (topic && topic.trim()) {
+        topicCount.set(topic.trim(), (topicCount.get(topic.trim()) || 0) + 1);
+      }
+    });
+
+    const topTopic = Array.from(topicCount.entries())
+      .sort((a, b) => b[1] - a[1])[0];
+
+    return topTopic ? topTopic[0] : undefined;
+  }
+
+  /**
+   * Helper method: Generate consolidated summary with intelligent merging
+   */
+  private generateConsolidatedSummary(
+    primarySummary: string,
+    duplicateSummaries: string[],
+  ): string {
+    if (!primarySummary && duplicateSummaries.length === 0) {
+      return 'Consolidated memory summary';
+    }
+
+    if (!primarySummary) {
+      return duplicateSummaries[0] || 'Consolidated memory summary';
+    }
+
+    if (duplicateSummaries.length === 0) {
+      return primarySummary;
+    }
+
+    // Extract key information from duplicate summaries
+    const keyDuplicateInfo = duplicateSummaries
+      .slice(0, 3) // Limit to top 3 duplicates
+      .map(summary => summary.split('.')[0]) // Take first sentence
+      .filter(info => info.length > 10) // Filter very short info
+      .join('; ');
+
+    if (keyDuplicateInfo) {
+      return `${primarySummary} (Consolidated from ${duplicateSummaries.length + 1} memories: ${keyDuplicateInfo})`;
+    }
+
+    return primarySummary;
+  }
+
+  /**
+   * Generate consolidated content by merging and deduplicating information
+   */
+  private generateMergedContent(primaryContent: string, duplicateContents: string[]): string {
+    try {
+      // Input validation
+      if (!primaryContent && duplicateContents.length === 0) {
+        return 'No content available for consolidation';
+      }
+
+      logInfo('Starting intelligent content consolidation', {
+        component: 'DatabaseManager',
+        primaryContentLength: primaryContent.length,
+        duplicateContentsCount: duplicateContents.length,
+      });
+
+      // Fallback to primary content if no duplicates
+      if (duplicateContents.length === 0) {
+        return primaryContent;
+      }
+
+      // Perform sentence-level deduplication with frequency analysis
+      const { topSentences, keyTopics } = this.performSentenceLevelDeduplication(
+        primaryContent,
+        duplicateContents,
+      );
+
+      // Extract key topics based on word frequency
+      const importantTopics = this.extractKeyTopics(
+        [primaryContent, ...duplicateContents],
+        keyTopics,
+      );
+
+      // Generate consolidated content with intelligent length management
+      const consolidatedContent = this.buildConsolidatedContent(
+        topSentences,
+        importantTopics,
+        primaryContent,
+        duplicateContents.length,
+      );
+
+      logInfo('Successfully generated consolidated content', {
+        component: 'DatabaseManager',
+        originalLength: primaryContent.length,
+        consolidatedLength: consolidatedContent.length,
+        sentencesCount: topSentences.length,
+        topicsCount: importantTopics.length,
+      });
+
+      return consolidatedContent;
+
+    } catch (error) {
+      logError('Failed to generate merged content, using primary content as fallback', {
+        component: 'DatabaseManager',
+        error: error instanceof Error ? error.message : String(error),
+        primaryContentLength: primaryContent?.length || 0,
+        duplicateCount: duplicateContents?.length || 0,
+      });
+      return primaryContent || 'Content consolidation failed'; // Safe fallback
+    }
+  }
+
+  /**
+   * Helper method: Perform sentence-level deduplication with frequency analysis
+   */
+  private performSentenceLevelDeduplication(
+    primaryContent: string,
+    duplicateContents: string[],
+  ): { topSentences: string[], keyTopics: Set<string> } {
+    const sentences = new Map<string, number>();
+    const words = new Set<string>();
+    const allContents = [primaryContent, ...duplicateContents];
+
+    allContents.forEach((content, index) => {
+      const isPrimary = index === 0;
+      const weight = isPrimary ? 2 : 1; // Primary content gets 2x weight
+
+      // Extract words for topic analysis
+      const contentWords = content.toLowerCase()
+        .replace(/[^\w\s]/g, ' ') // Remove punctuation
+        .split(/\s+/)
+        .filter(word => word.length > 3 && !this.isStopWord(word))
+        .map(word => word.toLowerCase().trim());
+
+      contentWords.forEach(word => words.add(word));
+
+      // Split into sentences with improved pattern
+      const contentSentences = content.split(/[.!?]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 15) // Filter very short sentences
+        .map(s => s.replace(/\s+/g, ' ').trim()); // Normalize whitespace
+
+      contentSentences.forEach(sentence => {
+        const cleanSentence = sentence.toLowerCase().replace(/[^\w\s]/g, ' ').trim();
+        if (cleanSentence.length > 10) { // Additional length check after cleaning
+          sentences.set(cleanSentence, (sentences.get(cleanSentence) || 0) + weight);
+        }
+      });
+    });
+
+    // Select most representative sentences (appear most frequently, with primary bias)
+    const topSentences = Array.from(sentences.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12) // Slightly increased limit for better coverage
+      .map(([sentence]) => {
+        // Capitalize first letter of each sentence
+        return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+      });
+
+    return { topSentences, keyTopics: words };
+  }
+
+  /**
+   * Helper method: Extract key topics based on word frequency
+   */
+  private extractKeyTopics(
+    allContents: string[],
+    keyWords: Set<string>,
+  ): string[] {
+    const wordFrequency = new Map<string, number>();
+
+    allContents.forEach(content => {
+      const words = content.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 3 && !this.isStopWord(word))
+        .map(word => word.toLowerCase().trim());
+
+      words.forEach(word => {
+        if (keyWords.has(word)) {
+          wordFrequency.set(word, (wordFrequency.get(word) || 0) + 1);
+        }
+      });
+    });
+
+    // Return top topics by frequency
+    return Array.from(wordFrequency.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([word]) => word);
+  }
+
+  /**
+   * Helper method: Build consolidated content with intelligent length management
+   */
+  private buildConsolidatedContent(
+    topSentences: string[],
+    importantTopics: string[],
+    primaryContent: string,
+    duplicateCount: number,
+  ): string {
+    // Ensure we have sentences to work with
+    if (topSentences.length === 0) {
+      return primaryContent; // Fallback to primary content
+    }
+
+    // Start with the most important sentences
+    let consolidatedContent = topSentences.slice(0, 8).join('. ') + '.';
+
+    // Add key topics if we have meaningful content
+    if (importantTopics.length > 0 && consolidatedContent.length > 50) {
+      const topicsText = importantTopics.slice(0, 10).join(', ');
+      consolidatedContent += ` Key topics include: ${topicsText}.`;
+    }
+
+    // Manage content length intelligently
+    const maxLength = 2000; // Reasonable maximum length
+    const minLength = 100;  // Minimum meaningful length
+
+    if (consolidatedContent.length > maxLength) {
+      // Truncate to maximum length while preserving sentence boundaries
+      const truncated = consolidatedContent.substring(0, maxLength);
+      const lastSentenceEnd = Math.max(
+        truncated.lastIndexOf('.'),
+        truncated.lastIndexOf('!'),
+        truncated.lastIndexOf('?'),
+      );
+
+      if (lastSentenceEnd > maxLength * 0.7) { // Only truncate if we're not cutting too much
+        consolidatedContent = truncated.substring(0, lastSentenceEnd + 1);
+      } else {
+        consolidatedContent = truncated; // Keep as-is if sentence boundary is too early
+      }
+    }
+
+    // Ensure minimum content length
+    if (consolidatedContent.length < minLength && primaryContent) {
+      // If consolidated content is too short, blend with primary content
+      const primarySentences = primaryContent.split(/[.!?]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 15)
+        .slice(0, 3);
+
+      if (primarySentences.length > 0) {
+        consolidatedContent = primarySentences.join('. ') + '. ' + consolidatedContent;
+      }
+    }
+
+    // Add consolidation metadata
+    if (duplicateCount > 0) {
+      consolidatedContent += ` (Consolidated from ${duplicateCount + 1} source memories)`;
+    }
+
+    return consolidatedContent;
+  }
+
+  /**
+   * Helper method: Check if a word is a common stop word
+   */
+  private isStopWord(word: string): boolean {
+    const stopWords = new Set([
+      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+      'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did',
+      'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that',
+      'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her',
+      'us', 'them', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'what', 'which',
+      'who', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more',
+      'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
+      'than', 'too', 'very', 'just', 'like', 'also', 'well', 'now', 'here', 'there',
+    ]);
+
+    return stopWords.has(word.toLowerCase());
+  }
+
+  /**
+    * Get consolidation statistics for a namespace
+    */
   async getConsolidationStats(namespace: string = 'default'): Promise<{
     totalMemories: number;
     potentialDuplicates: number;

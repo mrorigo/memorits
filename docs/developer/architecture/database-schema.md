@@ -74,12 +74,22 @@ CREATE TABLE LongTermMemory (
   processedForDuplicates BOOLEAN DEFAULT FALSE,
   consciousProcessed     BOOLEAN DEFAULT FALSE,
 
+  -- GAPS1 Enhanced Features
+  processingState       VARCHAR(50) DEFAULT 'PENDING',    -- Memory processing workflow state
+  stateTransitionsJson  JSON,                              -- State transition history
+  duplicateGroupId      VARCHAR(255),                      -- Duplicate consolidation group
+  relationshipMetadataJson JSON,                           -- Memory relationship metadata
+  consolidationInfoJson JSON,                              -- Consolidation tracking info
+  searchIndexOptimized  BOOLEAN DEFAULT FALSE,            -- Search index optimization status
+
   -- Indexes for performance
   INDEX idx_namespace_created (namespace, createdAt),
   INDEX idx_category_importance (categoryPrimary, importanceScore),
   INDEX idx_searchable_content (searchableContent),
   INDEX idx_topic (topic),
-  INDEX idx_classification (classification)
+  INDEX idx_classification (classification),
+  INDEX idx_processing_state (namespace, processingState),
+  INDEX idx_duplicate_group (duplicateGroupId)
 );
 ```
 
@@ -108,6 +118,176 @@ CREATE TABLE ShortTermMemory (
   INDEX idx_namespace_expires (namespace, expiresAt),
   INDEX idx_permanent_context (namespace, isPermanentContext),
   INDEX idx_access_count (accessCount)
+```
+
+## GAPS1 Enhanced Database Features
+
+### Memory Processing State Tracking
+
+Comprehensive workflow state management for memory processing operations:
+
+```sql
+CREATE TABLE MemoryProcessingStates (
+ id              VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
+ memoryId        VARCHAR(255) NOT NULL,       -- Reference to memory being processed
+ currentState    VARCHAR(50) NOT NULL,        -- Current processing state
+ stateHistory    JSON NOT NULL,               -- Complete transition history
+ createdAt       DATETIME DEFAULT CURRENT_TIMESTAMP,
+ updatedAt       DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+ -- Processing metadata
+ processingAgent VARCHAR(100),                -- Agent performing the processing
+ errorMessage    TEXT,                        -- Last error message if failed
+ retryCount      INTEGER DEFAULT 0,           -- Number of retry attempts
+ metadata        JSON,                        -- Additional processing metadata
+
+ -- Indexes for performance
+ INDEX idx_memory_processing (memoryId, currentState),
+ INDEX idx_state_timestamp (currentState, updatedAt),
+ INDEX idx_processing_agent (processingAgent, updatedAt),
+
+ -- Foreign key constraint
+ FOREIGN KEY (memoryId) REFERENCES LongTermMemory(id) ON DELETE CASCADE
+);
+```
+
+### Search Index Backup System
+
+Automated backup and recovery system for search indexes:
+
+```sql
+CREATE TABLE SearchIndexBackups (
+ id           VARCHAR(255) PRIMARY KEY,     -- Backup unique identifier
+ timestamp    DATETIME NOT NULL,            -- When backup was created
+ version      VARCHAR(20) NOT NULL,        -- Backup format version
+ data         BLOB NOT NULL,               -- Compressed index data
+ metadata     JSON NOT NULL,               -- Backup metadata (size, document count, etc.)
+ checksum     VARCHAR(64) NOT NULL,        -- Integrity verification checksum
+
+ -- Backup management
+ isActive     BOOLEAN DEFAULT TRUE,        -- Whether this backup is current
+ expiresAt    DATETIME,                    -- Optional expiration date
+ createdBy    VARCHAR(100),                -- System component that created backup
+
+ -- Indexes for performance
+ INDEX idx_backup_timestamp (timestamp DESC),
+ INDEX idx_backup_active (isActive, timestamp DESC),
+ INDEX idx_backup_expires (expiresAt)
+);
+```
+
+### Memory Relationship Storage
+
+Enhanced relationship tracking between memories:
+
+```sql
+CREATE TABLE MemoryRelationships (
+ id              VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
+ sourceMemoryId  VARCHAR(255) NOT NULL,       -- Source memory reference
+ targetMemoryId  VARCHAR(255) NOT NULL,       -- Target memory reference
+ relationshipType VARCHAR(50) NOT NULL,      -- Type: continuation, reference, related, supersedes, contradiction
+
+ -- Relationship scoring
+ confidence      REAL DEFAULT 0.0,           -- Relationship confidence (0.0-1.0)
+ strength        REAL DEFAULT 0.0,           -- Relationship strength (0.0-1.0)
+
+ -- Metadata
+ entities        JSON,                        -- Common entities between memories
+ context         TEXT,                        -- Relationship context/description
+ extractedAt     DATETIME DEFAULT CURRENT_TIMESTAMP,
+ extractionMethod VARCHAR(50),               -- How relationship was detected
+
+ -- Indexes for performance
+ INDEX idx_source_relationship (sourceMemoryId, relationshipType),
+ INDEX idx_target_relationship (targetMemoryId, relationshipType),
+ INDEX idx_relationship_confidence (confidence DESC),
+ INDEX idx_bidirectional (sourceMemoryId, targetMemoryId),
+
+ -- Foreign key constraints
+ FOREIGN KEY (sourceMemoryId) REFERENCES LongTermMemory(id) ON DELETE CASCADE,
+ FOREIGN KEY (targetMemoryId) REFERENCES LongTermMemory(id) ON DELETE CASCADE,
+
+ -- Prevent self-references and duplicate relationships
+ CONSTRAINT no_self_reference CHECK (sourceMemoryId != targetMemoryId),
+ CONSTRAINT unique_relationship UNIQUE (sourceMemoryId, targetMemoryId, relationshipType)
+);
+```
+
+### Enhanced FTS5 Search Index
+
+Advanced full-text search index with metadata support:
+
+```sql
+CREATE VIRTUAL TABLE memory_fts_enhanced USING fts5(
+ -- Core content fields
+ content,                    -- Main searchable content
+ summary,                    -- Memory summary
+ topic,                      -- Primary topic/keyword
+ entities,                   -- Extracted entities (space-separated)
+ keywords,                   -- Key terms (space-separated)
+
+ -- Metadata fields for filtering
+ category_primary,           -- Memory classification
+ importance_score,           -- Numeric importance score
+ created_at,                 -- Creation timestamp
+ namespace,                  -- Multi-tenant isolation
+ memory_type,                -- short_term vs long_term
+ processing_state,           -- Current processing state
+
+ -- Content and metadata storage
+ content=LongTermMemory,
+ content_rowid=id,
+
+ -- Advanced tokenization options
+ tokenize='porter unicode61 remove_diacritics 2',
+ prefix='2,3,4'
+);
+
+-- Enhanced FTS5 indexes for different query patterns
+CREATE INDEX idx_fts_content ON memory_fts_enhanced(content);
+CREATE INDEX idx_fts_metadata ON memory_fts_enhanced(category_primary, importance_score);
+CREATE INDEX idx_fts_temporal ON memory_fts_enhanced(created_at, namespace);
+CREATE INDEX idx_fts_entities ON memory_fts_enhanced(entities);
+CREATE INDEX idx_fts_combined ON memory_fts_enhanced(namespace, category_primary, importance_score);
+```
+
+### Duplicate Consolidation Tracking
+
+Audit trail for memory consolidation operations:
+
+```sql
+CREATE TABLE MemoryConsolidationLog (
+ id                VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
+ primaryMemoryId   VARCHAR(255) NOT NULL,       -- Primary memory that was kept
+ consolidatedIds   JSON NOT NULL,               -- Array of consolidated memory IDs
+ consolidationReason VARCHAR(100) NOT NULL,     -- Reason for consolidation
+
+ -- Operation details
+ operationType     VARCHAR(50) NOT NULL,        -- Type: duplicate_merge, content_merge, etc.
+ consolidationDate DATETIME NOT NULL,
+ processingTimeMs  INTEGER,                    -- Time taken for operation
+
+ -- Data metrics
+ entitiesMerged    INTEGER DEFAULT 0,          -- Number of entities merged
+ keywordsMerged    INTEGER DEFAULT 0,          -- Number of keywords merged
+ contentLengthBefore INTEGER,                  -- Original total content length
+ contentLengthAfter  INTEGER,                  -- Final content length
+
+ -- Status and metadata
+ status            VARCHAR(20) DEFAULT 'completed',
+ errorMessage      TEXT,                        -- Error details if failed
+ metadata          JSON,                        -- Additional operation metadata
+ performedBy       VARCHAR(100),               -- System component that performed consolidation
+
+ -- Indexes for performance
+ INDEX idx_primary_memory (primaryMemoryId),
+ INDEX idx_consolidation_date (consolidationDate DESC),
+ INDEX idx_consolidated_memories (consolidatedIds(255)),
+ INDEX idx_consolidation_status (status, consolidationDate),
+
+ -- Foreign key constraint
+ FOREIGN KEY (primaryMemoryId) REFERENCES LongTermMemory(id) ON DELETE CASCADE
+);
 );
 ```
 

@@ -197,6 +197,104 @@ class MetadataFilterStrategy implements ISearchStrategy {
 }
 ```
 
+### 6. Relationship Search Strategy (GAPS1)
+
+**Memory relationship-based search with graph traversal capabilities.**
+
+```typescript
+class RelationshipSearchStrategy implements ISearchStrategy {
+  readonly name = SearchStrategy.RELATIONSHIP;
+  readonly priority = 6;
+  readonly capabilities = [SearchCapability.RELATIONSHIP_SEARCH, SearchCapability.GRAPH_TRAVERSAL];
+  readonly maxDepth = 3;
+  readonly minRelationshipStrength = 0.3;
+
+  async search(query: SearchQuery): Promise<SearchResult[]> {
+    const relationshipQuery = query as RelationshipSearchQuery;
+
+    // Build relationship graph traversal query
+    const sql = `
+      WITH RECURSIVE related_memories AS (
+        -- Start with source memories matching the query
+        SELECT DISTINCT m.*,
+               0 as depth,
+               1.0 as relationship_strength,
+               mr.relationshipType,
+               mr.confidence as relationship_confidence
+        FROM LongTermMemory m
+        JOIN MemoryRelationships mr ON m.id = mr.targetMemoryId
+        WHERE m.namespace = ?
+          AND MATCH(memory_fts, ?)
+          AND mr.strength >= ?
+
+        UNION ALL
+
+        -- Recursively find related memories
+        SELECT m.*,
+               rm.depth + 1,
+               rm.relationship_strength * mr.strength,
+               mr.relationshipType,
+               mr.confidence
+        FROM related_memories rm
+        JOIN MemoryRelationships mr ON rm.id = mr.sourceMemoryId
+        JOIN LongTermMemory m ON mr.targetMemoryId = m.id
+        WHERE rm.depth < ?
+          AND (rm.relationship_strength * mr.strength) >= ?
+      )
+      SELECT DISTINCT *,
+             MAX(relationship_strength) as max_strength,
+             GROUP_CONCAT(DISTINCT relationshipType) as relationship_types
+      FROM related_memories
+      GROUP BY id
+      ORDER BY max_strength DESC, createdAt DESC
+      LIMIT ?
+    `;
+
+    return this.executeQuery(sql, [
+      query.namespace,
+      query.text || '',
+      this.minRelationshipStrength,
+      this.maxDepth,
+      this.minRelationshipStrength * 0.5,
+      query.limit || 20
+    ]);
+  }
+}
+```
+
+### 7. Advanced Filter Engine (GAPS1)
+
+**Sophisticated filter expression processing with boolean logic and template system.**
+
+```typescript
+class AdvancedFilterEngine {
+  private templateManager: FilterTemplateManager;
+  private expressionParser: ExpressionParser;
+  private executionEngine: FilterExecutionEngine;
+
+  async parseFilter(filterExpression: string): Promise<FilterNode> {
+    // Parse complex boolean expressions
+    // Support: field comparisons, ranges, operators, nested conditions
+    return this.expressionParser.parse(filterExpression);
+  }
+
+  async executeFilter(
+    filterNode: FilterNode,
+    searchResults: SearchResult[]
+  ): Promise<FilterResult> {
+    // Execute filter against result set
+    // Support early termination for performance
+    return this.executionEngine.execute(filterNode, searchResults);
+  }
+
+  registerTemplate(template: FilterTemplate): void {
+    // Register reusable filter templates
+    // Example: 'recent_important: {days_ago: "7"}'
+    this.templateManager.register(template);
+  }
+}
+```
+
 ## Strategy Orchestration
 
 ### SearchService Coordinator
@@ -530,6 +628,191 @@ async searchWithDegradation(query: SearchQuery): Promise<SearchResult[]> {
   console.warn('All search strategies failed, returning empty results');
   return [];
 }
+```
+
+## GAPS1 Advanced Features
+
+### Search Strategy Configuration Management
+
+Runtime configuration management for all search strategies with persistence and validation:
+
+```typescript
+class SearchStrategyConfigManager {
+  private configStore: ConfigurationStore;
+  private validators: Map<SearchStrategy, ConfigurationValidator>;
+
+  async loadConfiguration(strategyName: string): Promise<SearchStrategyConfiguration> {
+    // Load from persistent storage with fallback to defaults
+    const stored = await this.configStore.get(strategyName);
+    if (stored) {
+      return this.validateConfiguration(strategyName, stored);
+    }
+    return this.getDefaultConfiguration(strategyName);
+  }
+
+  async saveConfiguration(
+    strategyName: string,
+    config: SearchStrategyConfiguration
+  ): Promise<boolean> {
+    // Validate before saving
+    const validation = await this.validateConfiguration(strategyName, config);
+    if (!validation.isValid) {
+      throw new ConfigurationError(validation.errors);
+    }
+
+    return this.configStore.set(strategyName, config);
+  }
+
+  getDefaultConfiguration(strategyName: string): SearchStrategyConfiguration {
+    // Strategy-specific defaults with performance optimization
+    const defaults: Record<string, SearchStrategyConfiguration> = {
+      [SearchStrategy.FTS5]: {
+        enabled: true,
+        priority: 10,
+        timeout: 5000,
+        maxResults: 100,
+        strategySpecific: {
+          bm25Weights: { title: 2.0, content: 1.0, category: 1.5 },
+          queryTimeout: 10000,
+          resultBatchSize: 100
+        }
+      },
+      [SearchStrategy.RELATIONSHIP]: {
+        enabled: true,
+        priority: 6,
+        timeout: 3000,
+        maxResults: 50,
+        strategySpecific: {
+          maxDepth: 3,
+          minRelationshipStrength: 0.3,
+          includeRelationshipPaths: true,
+          traversalStrategy: 'breadth_first'
+        }
+      }
+    };
+
+    return defaults[strategyName] || { enabled: true, priority: 5, timeout: 5000, maxResults: 20 };
+  }
+}
+```
+
+### Advanced Filter Expression System
+
+Sophisticated filter expression processing with template support:
+
+```typescript
+class AdvancedFilterEngine {
+  private parser: FilterExpressionParser;
+  private templateManager: FilterTemplateManager;
+
+  async processFilterExpression(
+    expression: string,
+    context: FilterContext
+  ): Promise<ProcessedFilter> {
+    // 1. Template substitution
+    const resolvedExpression = await this.templateManager.resolve(expression, context);
+
+    // 2. Expression parsing
+    const parsedFilter = this.parser.parse(resolvedExpression);
+
+    // 3. Optimization
+    const optimizedFilter = this.optimizeFilter(parsedFilter);
+
+    return {
+      originalExpression: expression,
+      resolvedExpression,
+      parsedFilter: optimizedFilter,
+      estimatedComplexity: this.estimateComplexity(optimizedFilter)
+    };
+  }
+
+  // Template registration for common filter patterns
+  registerTemplate(name: string, template: FilterTemplate): void {
+    this.templateManager.register(name, template);
+  }
+}
+```
+
+### Search Index Management System
+
+Comprehensive index maintenance, optimization, and monitoring:
+
+```typescript
+class SearchIndexManager {
+  private healthMonitor: IndexHealthMonitor;
+  private optimizationEngine: IndexOptimizationEngine;
+  private backupManager: IndexBackupManager;
+
+  async getHealthReport(): Promise<IndexHealthReport> {
+    const statistics = await this.getIndexStatistics();
+    const issues = await this.detectIssues(statistics);
+    const recommendations = await this.generateRecommendations(issues);
+
+    return {
+      health: this.calculateHealthScore(statistics, issues),
+      statistics,
+      issues,
+      recommendations,
+      timestamp: new Date(),
+      estimatedOptimizationTime: await this.estimateOptimizationTime(statistics)
+    };
+  }
+
+  async optimizeIndex(type: OptimizationType = OptimizationType.MERGE): Promise<OptimizationResult> {
+    // Perform index optimization with progress tracking
+    const startTime = Date.now();
+    const statsBefore = await this.getIndexStatistics();
+
+    // Execute optimization based on type
+    switch (type) {
+      case OptimizationType.REBUILD:
+        await this.rebuildIndex();
+        break;
+      case OptimizationType.MERGE:
+        await this.mergeIndex();
+        break;
+      case OptimizationType.COMPACT:
+        await this.compactIndex();
+        break;
+    }
+
+    const statsAfter = await this.getIndexStatistics();
+    const duration = Date.now() - startTime;
+
+    return {
+      success: true,
+      optimizationType: type,
+      startTime: new Date(startTime),
+      endTime: new Date(),
+      duration,
+      documentsProcessed: statsAfter.totalDocuments,
+      sizeBefore: statsBefore.totalSize,
+      sizeAfter: statsAfter.totalSize,
+      spaceSaved: statsBefore.totalSize - statsAfter.totalSize,
+      performanceImprovement: this.calculatePerformanceImprovement(statsBefore, statsAfter)
+    };
+  }
+
+  async createBackup(): Promise<BackupMetadata> {
+    // Create integrity-checked backup with compression
+    const indexData = await this.exportIndexData();
+    const compressedData = await this.compressData(indexData);
+    const checksum = await this.generateChecksum(compressedData);
+
+    const metadata: BackupMetadata = {
+      timestamp: new Date(),
+      version: '1.0.0',
+      indexSize: compressedData.length,
+      documentCount: indexData.length,
+      optimizationLevel: 'standard',
+      checksum
+    };
+
+    await this.backupManager.storeBackup(metadata, compressedData);
+    return metadata;
+  }
+}
+```
 ```
 
 This search architecture provides a robust, scalable, and intelligent search system capable of handling complex queries across multiple dimensions while maintaining high performance and reliability.

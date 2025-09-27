@@ -1,11 +1,16 @@
-import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, ISearchService, StrategyNotFoundError, DatabaseQueryResult } from './types';
+import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, ISearchService, StrategyNotFoundError, DatabaseQueryResult, SearchStrategyConfiguration } from './types';
 import { SearchCapability, SearchStrategyMetadata, SearchError, SearchStrategyError, SearchDatabaseError, SearchValidationError, SearchTimeoutError, SearchConfigurationError, SearchErrorCategory } from './SearchStrategy';
+import { SearchIndexManager, IndexHealth, IndexHealthReport } from './SearchIndexManager';
 import { LikeSearchStrategy } from './LikeSearchStrategy';
 import { RecentMemoriesStrategy } from './RecentMemoriesStrategy';
+import { RelationshipSearchStrategy } from './strategies/RelationshipSearchStrategy';
 import { CategoryFilterStrategy } from './filtering/CategoryFilterStrategy';
 import { TemporalFilterStrategy } from './filtering/TemporalFilterStrategy';
 import { MetadataFilterStrategy } from './filtering/MetadataFilterStrategy';
+import { AdvancedFilterEngine } from './filtering/AdvancedFilterEngine';
 import { DatabaseManager } from '../database/DatabaseManager';
+import { SearchStrategyConfigManager } from './SearchStrategyConfigManager';
+import { logError } from '../utils/Logger';
 
 /**
  * Enhanced SQLite FTS5 search strategy implementation with BM25 ranking and metadata filtering
@@ -88,21 +93,58 @@ class SQLiteFTSStrategy implements ISearchStrategy {
       const results = await this.executeFTSQuery(sql, parameters, query);
       const processedResults = this.processFTSResults(results, query);
 
-      // Log performance metrics
+      // Log performance metrics with enhanced context
       const duration = Date.now() - startTime;
-      console.log(`FTS5 search completed in ${duration}ms, found ${processedResults.length} results`);
+      console.log(`FTS5 search completed in ${duration}ms, found ${processedResults.length} results`, {
+        strategy: this.name,
+        query: query.text,
+        resultCount: processedResults.length,
+        executionTime: duration,
+        parameters: {
+          limit: query.limit,
+          offset: query.offset,
+          hasFilters: !!query.filters,
+          hasFilterExpression: !!query.filterExpression,
+        }
+      });
 
       return processedResults;
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`FTS5 search failed after ${duration}ms:`, error);
+
+      // Enhanced error context with detailed information
+      const errorContext = {
+        strategy: this.name,
+        operation: 'fts_search',
+        query: query.text,
+        parameters: {
+          limit: query.limit,
+          offset: query.offset,
+          filters: query.filters,
+          hasFilterExpression: !!query.filterExpression,
+          executionTime: duration,
+        },
+        executionTime: duration,
+        timestamp: new Date(),
+        severity: this.categorizeFTSError(error) as 'low' | 'medium' | 'high' | 'critical',
+      };
+
+      // Log detailed error information
+      console.error(`FTS5 search failed after ${duration}ms:`, {
+        error: error instanceof Error ? error.message : String(error),
+        strategy: this.name,
+        query: query.text,
+        executionTime: duration,
+        errorCategory: this.categorizeFTSError(error),
+        databaseState: this.getDatabaseState(),
+      });
 
       throw new SearchStrategyError(
         this.name,
         `FTS5 strategy failed: ${error instanceof Error ? error.message : String(error)}`,
         'fts_search',
-        { query: query.text, limit: query.limit, offset: query.offset, duration },
+        errorContext,
         error instanceof Error ? error : undefined
       );
     }
@@ -424,22 +466,65 @@ class SQLiteFTSStrategy implements ISearchStrategy {
   }
 
   /**
-   * Validate strategy-specific configuration
-   */
-  protected validateStrategyConfiguration(): boolean {
-    // Validate BM25 weights
-    const weights = this.bm25Weights;
-    if (weights.title < 0 || weights.content < 0 || weights.category < 0) {
-      return false;
-    }
+    * Validate strategy-specific configuration
+    */
+   protected validateStrategyConfiguration(): boolean {
+     // Validate BM25 weights
+     const weights = this.bm25Weights;
+     if (weights.title < 0 || weights.content < 0 || weights.category < 0) {
+       return false;
+     }
 
-    // Validate query timeout
-    if (this.queryTimeout < 1000 || this.queryTimeout > 30000) {
-      return false;
-    }
+     // Validate query timeout
+     if (this.queryTimeout < 1000 || this.queryTimeout > 30000) {
+       return false;
+     }
 
-    return true;
-  }
+     return true;
+   }
+
+   /**
+    * Categorize FTS-specific errors for better error handling
+    */
+   private categorizeFTSError(error: unknown): string {
+     const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+     if (errorMessage.includes('no such table') || errorMessage.includes('table not found')) {
+       return 'critical'; // FTS table missing
+     }
+
+     if (errorMessage.includes('syntax error') || errorMessage.includes('malformed query')) {
+       return 'high'; // Query syntax issues
+     }
+
+     if (errorMessage.includes('database locked') || errorMessage.includes('busy')) {
+       return 'medium'; // Temporary database issues
+     }
+
+     if (errorMessage.includes('out of memory') || errorMessage.includes('too many terms')) {
+       return 'high'; // Resource issues
+     }
+
+     return 'medium'; // Default category
+   }
+
+   /**
+    * Get database state for error context
+    */
+   private getDatabaseState(): Record<string, unknown> {
+     try {
+       const dbManager = this.databaseManager as any;
+       return {
+         connectionStatus: dbManager?.isConnected ? 'connected' : 'disconnected',
+         ftsEnabled: dbManager?.isFTSEnabled ? dbManager.isFTSEnabled() : false,
+         lastError: dbManager?.lastError,
+       };
+     } catch {
+       return {
+         connectionStatus: 'error',
+       };
+     }
+   }
 
 }
 
@@ -498,80 +583,393 @@ class SemanticSearchStrategy implements ISearchStrategy {
  * Main SearchService implementation that orchestrates multiple search strategies
  */
 export class SearchService implements ISearchService {
-  private strategies: Map<SearchStrategy, ISearchStrategy> = new Map();
-  private dbManager!: DatabaseManager;
+     private strategies: Map<SearchStrategy, ISearchStrategy> = new Map();
+     private dbManager!: DatabaseManager;
+     private advancedFilterEngine?: AdvancedFilterEngine;
+     private configManager: SearchStrategyConfigManager;
+     private searchIndexManager?: SearchIndexManager;
 
-  constructor(dbManager: DatabaseManager) {
-    this.dbManager = dbManager;
-    this.initializeStrategies();
-  }
+    constructor(dbManager: DatabaseManager, configManager?: SearchStrategyConfigManager) {
+      this.dbManager = dbManager;
+      this.advancedFilterEngine = new AdvancedFilterEngine();
+      this.configManager = configManager || new SearchStrategyConfigManager();
+      this.initializeStrategies();
+    }
 
   /**
-   * Initialize all available search strategies
-   */
-  private initializeStrategies(): void {
-    this.strategies.set(SearchStrategy.FTS5, new SQLiteFTSStrategy(this.dbManager));
-    this.strategies.set(SearchStrategy.LIKE, new LikeSearchStrategy(this.dbManager));
-    this.strategies.set(SearchStrategy.RECENT, new RecentMemoriesStrategy({
-      enabled: true,
-      priority: 3,
-      timeout: 5000,
-      maxResults: 100,
-      minScore: 0.1
-    }, this.dbManager));
-    this.strategies.set(SearchStrategy.SEMANTIC, new SemanticSearchStrategy());
+    * Initialize all available search strategies
+    */
+   private async initializeStrategies(): Promise<void> {
+     try {
+       // Initialize configuration manager and load configurations
+       await this.initializeStrategyConfigurations();
 
-    // Add Category Filter Strategy
-    this.strategies.set(SearchStrategy.CATEGORY_FILTER, new CategoryFilterStrategy({
-      hierarchy: {
-        maxDepth: 5,
-        enableCaching: true,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-      },
-    }, this.dbManager));
+       // Initialize strategies with their configurations
+       await this.initializeFTSStrategy();
+       await this.initializeLikeStrategy();
+       await this.initializeRecentStrategy();
+       await this.initializeSemanticStrategy();
+       await this.initializeCategoryFilterStrategy();
+       await this.initializeTemporalFilterStrategy();
+       await this.initializeMetadataFilterStrategy();
+       await this.initializeRelationshipStrategy();
 
-    // Add Temporal Filter Strategy
-    this.strategies.set(SearchStrategy.TEMPORAL_FILTER, new TemporalFilterStrategy({
-      naturalLanguage: {
-        enableParsing: true,
-        enablePatternMatching: true,
-        confidenceThreshold: 0.3,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-      },
-    }, this.dbManager));
+     } catch (error) {
+       console.error('Failed to initialize search strategies:', error);
+       // Fall back to basic initialization
+       this.initializeStrategiesFallback();
+     }
+   }
 
-    // Add Metadata Filter Strategy
-    this.strategies.set(SearchStrategy.METADATA_FILTER, new MetadataFilterStrategy({
-      fields: {
-        enableNestedAccess: true,
-        maxDepth: 5,
-        enableTypeValidation: true,
-        enableFieldDiscovery: true,
-      },
-      validation: {
-        strictValidation: false,
-        enableCustomValidators: true,
-        failOnInvalidMetadata: false,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-        cacheSize: 100
-      },
-    }, this.dbManager));
-  }
+   /**
+    * Initialize strategy configurations
+    */
+   private async initializeStrategyConfigurations(): Promise<void> {
+     const strategyNames = Object.values(SearchStrategy);
+
+     for (const strategyName of strategyNames) {
+       try {
+         // Try to load existing configuration
+         let config = await this.configManager.loadConfiguration(strategyName);
+
+         // If no configuration exists, use default
+         if (!config) {
+           config = this.configManager.getDefaultConfiguration(strategyName);
+           // Save the default configuration for future use
+           await this.configManager.saveConfiguration(strategyName, config);
+         }
+
+         // Cache the configuration for this strategy
+         (this as any)[`${strategyName}_config`] = config;
+       } catch (error) {
+         console.warn(`Failed to load configuration for ${strategyName}, using defaults:`, error);
+         // Use default configuration as fallback
+         const config = this.configManager.getDefaultConfiguration(strategyName);
+         (this as any)[`${strategyName}_config`] = config;
+       }
+     }
+   }
+
+   /**
+    * Initialize FTS5 strategy with configuration
+    */
+   private async initializeFTSStrategy(): Promise<void> {
+     const config = (this as any)[`${SearchStrategy.FTS5}_config`] as SearchStrategyConfiguration;
+
+     if (config?.enabled) {
+       const ftsStrategy = new SQLiteFTSStrategy(this.dbManager);
+
+       // Apply FTS5-specific configuration
+       if (config.strategySpecific) {
+         const ftsConfig = config.strategySpecific as any;
+         if (ftsConfig.bm25Weights) {
+           // Update BM25 weights if configured
+           (ftsStrategy as any).bm25Weights = { ... (ftsStrategy as any).bm25Weights, ...ftsConfig.bm25Weights };
+         }
+         if (ftsConfig.queryTimeout) {
+           (ftsStrategy as any).queryTimeout = ftsConfig.queryTimeout;
+         }
+         if (ftsConfig.resultBatchSize) {
+           (ftsStrategy as any).resultBatchSize = ftsConfig.resultBatchSize;
+         }
+       }
+
+       this.strategies.set(SearchStrategy.FTS5, ftsStrategy);
+     }
+   }
+
+   /**
+    * Initialize LIKE strategy with configuration
+    */
+   private async initializeLikeStrategy(): Promise<void> {
+     const config = (this as any)[`${SearchStrategy.LIKE}_config`] as SearchStrategyConfiguration;
+
+     if (config?.enabled) {
+       const likeStrategy = new LikeSearchStrategy(this.dbManager);
+
+       // Apply LIKE-specific configuration
+       if (config.strategySpecific) {
+         const likeConfig = config.strategySpecific as any;
+
+         // Update LIKE configuration
+         if (likeConfig.wildcardSensitivity) {
+           (likeStrategy as any).likeConfig.wildcardSensitivity = likeConfig.wildcardSensitivity;
+         }
+         if (likeConfig.maxWildcardTerms) {
+           (likeStrategy as any).likeConfig.maxWildcardTerms = likeConfig.maxWildcardTerms;
+         }
+         if (likeConfig.enablePhraseSearch !== undefined) {
+           (likeStrategy as any).likeConfig.enablePhraseSearch = likeConfig.enablePhraseSearch;
+         }
+         if (likeConfig.caseSensitive !== undefined) {
+           (likeStrategy as any).likeConfig.caseSensitive = likeConfig.caseSensitive;
+         }
+         if (likeConfig.relevanceBoost) {
+           (likeStrategy as any).likeConfig.relevanceBoost = { ... (likeStrategy as any).likeConfig.relevanceBoost, ...likeConfig.relevanceBoost };
+         }
+       }
+
+       this.strategies.set(SearchStrategy.LIKE, likeStrategy);
+     }
+   }
+
+   /**
+    * Initialize Recent Memories strategy with configuration
+    */
+   private async initializeRecentStrategy(): Promise<void> {
+     const config = (this as any)[`${SearchStrategy.RECENT}_config`] as SearchStrategyConfiguration;
+
+     if (config?.enabled) {
+       const strategyConfig = {
+         enabled: config.enabled,
+         priority: config.priority,
+         timeout: config.timeout,
+         maxResults: config.maxResults,
+         minScore: config.scoring?.baseWeight || 0.1
+       };
+
+       const recentStrategy = new RecentMemoriesStrategy(strategyConfig, this.dbManager);
+
+       // Apply strategy-specific configuration
+       if (config.strategySpecific) {
+         const recentConfig = config.strategySpecific as any;
+         // Update time windows if configured
+         if (recentConfig.timeWindows) {
+           (recentStrategy as any).timeWindows = { ... (recentStrategy as any).timeWindows, ...recentConfig.timeWindows };
+         }
+         if (recentConfig.maxAge) {
+           (recentStrategy as any).maxAge = recentConfig.maxAge;
+         }
+       }
+
+       this.strategies.set(SearchStrategy.RECENT, recentStrategy);
+     }
+   }
+
+   /**
+    * Initialize Semantic strategy with configuration
+    */
+   private async initializeSemanticStrategy(): Promise<void> {
+     const config = (this as any)[`${SearchStrategy.SEMANTIC}_config`] as SearchStrategyConfiguration;
+
+     if (config?.enabled) {
+       const semanticStrategy = new SemanticSearchStrategy();
+
+       // Apply semantic-specific configuration
+       if (config.strategySpecific) {
+         // Store configuration for runtime use
+         (semanticStrategy as any).config = config.strategySpecific;
+       }
+
+       this.strategies.set(SearchStrategy.SEMANTIC, semanticStrategy);
+     }
+   }
+
+   /**
+    * Initialize Category Filter strategy with configuration
+    */
+   private async initializeCategoryFilterStrategy(): Promise<void> {
+     const config = (this as any)[`${SearchStrategy.CATEGORY_FILTER}_config`] as SearchStrategyConfiguration;
+
+     if (config?.enabled) {
+       const hierarchyConfig = config.strategySpecific?.hierarchy as any || {};
+       const performanceConfig = config.strategySpecific?.performance as any || {};
+
+       const categoryConfig = {
+         hierarchy: {
+           maxDepth: 5,
+           enableCaching: true,
+           ...hierarchyConfig,
+         },
+         performance: {
+           enableQueryOptimization: true,
+           enableResultCaching: true,
+           maxExecutionTime: 10000,
+           batchSize: 100,
+           ...performanceConfig,
+         },
+       };
+
+       const categoryStrategy = new CategoryFilterStrategy(categoryConfig, this.dbManager);
+       this.strategies.set(SearchStrategy.CATEGORY_FILTER, categoryStrategy);
+     }
+   }
+
+   /**
+    * Initialize Temporal Filter strategy with configuration
+    */
+   private async initializeTemporalFilterStrategy(): Promise<void> {
+     const config = (this as any)[`${SearchStrategy.TEMPORAL_FILTER}_config`] as SearchStrategyConfiguration;
+
+     if (config?.enabled) {
+       const naturalLanguageConfig = config.strategySpecific?.naturalLanguage as any || {};
+       const temporalPerformanceConfig = config.strategySpecific?.performance as any || {};
+
+       const temporalConfig = {
+         naturalLanguage: {
+           enableParsing: true,
+           enablePatternMatching: true,
+           confidenceThreshold: 0.3,
+           ...naturalLanguageConfig,
+         },
+         performance: {
+           enableQueryOptimization: true,
+           enableResultCaching: true,
+           maxExecutionTime: 10000,
+           batchSize: 100,
+           ...temporalPerformanceConfig,
+         },
+       };
+
+       const temporalStrategy = new TemporalFilterStrategy(temporalConfig, this.dbManager);
+       this.strategies.set(SearchStrategy.TEMPORAL_FILTER, temporalStrategy);
+     }
+   }
+
+   /**
+    * Initialize Metadata Filter strategy with configuration
+    */
+   private async initializeMetadataFilterStrategy(): Promise<void> {
+     const config = (this as any)[`${SearchStrategy.METADATA_FILTER}_config`] as SearchStrategyConfiguration;
+
+     if (config?.enabled) {
+       const fieldsConfig = config.strategySpecific?.fields as any || {};
+       const validationConfig = config.strategySpecific?.validation as any || {};
+       const metadataPerformanceConfig = config.strategySpecific?.performance as any || {};
+
+       const metadataConfig = {
+         fields: {
+           enableNestedAccess: true,
+           maxDepth: 5,
+           enableTypeValidation: true,
+           enableFieldDiscovery: true,
+           ...fieldsConfig,
+         },
+         validation: {
+           strictValidation: false,
+           enableCustomValidators: true,
+           failOnInvalidMetadata: false,
+           ...validationConfig,
+         },
+         performance: {
+           enableQueryOptimization: true,
+           enableResultCaching: true,
+           maxExecutionTime: 10000,
+           batchSize: 100,
+           cacheSize: 100,
+           ...metadataPerformanceConfig,
+         },
+       };
+
+       const metadataStrategy = new MetadataFilterStrategy(metadataConfig, this.dbManager);
+       this.strategies.set(SearchStrategy.METADATA_FILTER, metadataStrategy);
+     }
+   }
+
+   /**
+    * Initialize Relationship strategy with configuration
+    */
+   private async initializeRelationshipStrategy(): Promise<void> {
+     const config = (this as any)[`${SearchStrategy.RELATIONSHIP}_config`] as SearchStrategyConfiguration;
+
+     if (config?.enabled) {
+       const relationshipStrategy = new RelationshipSearchStrategy(this.dbManager);
+
+       // Apply relationship-specific configuration
+       if (config.strategySpecific) {
+         const relationshipConfig = config.strategySpecific as any;
+
+         // Update relationship configuration
+         if (relationshipConfig.maxDepth) {
+           (relationshipStrategy as any).maxDepth = relationshipConfig.maxDepth;
+         }
+         if (relationshipConfig.minRelationshipStrength !== undefined) {
+           (relationshipStrategy as any).minRelationshipStrength = relationshipConfig.minRelationshipStrength;
+         }
+         if (relationshipConfig.minRelationshipConfidence !== undefined) {
+           (relationshipStrategy as any).minRelationshipConfidence = relationshipConfig.minRelationshipConfidence;
+         }
+         if (relationshipConfig.includeRelationshipPaths !== undefined) {
+           (relationshipStrategy as any).includeRelationshipPaths = relationshipConfig.includeRelationshipPaths;
+         }
+         if (relationshipConfig.traversalStrategy) {
+           (relationshipStrategy as any).traversalStrategy = relationshipConfig.traversalStrategy;
+         }
+       }
+
+       this.strategies.set(SearchStrategy.RELATIONSHIP, relationshipStrategy);
+     }
+   }
+
+   /**
+    * Fallback strategy initialization (when configuration loading fails)
+    */
+   private initializeStrategiesFallback(): void {
+     this.strategies.set(SearchStrategy.FTS5, new SQLiteFTSStrategy(this.dbManager));
+     this.strategies.set(SearchStrategy.LIKE, new LikeSearchStrategy(this.dbManager));
+     this.strategies.set(SearchStrategy.RECENT, new RecentMemoriesStrategy({
+       enabled: true,
+       priority: 3,
+       timeout: 5000,
+       maxResults: 100,
+       minScore: 0.1
+     }, this.dbManager));
+     this.strategies.set(SearchStrategy.SEMANTIC, new SemanticSearchStrategy());
+
+     // Add Category Filter Strategy
+     this.strategies.set(SearchStrategy.CATEGORY_FILTER, new CategoryFilterStrategy({
+       hierarchy: {
+         maxDepth: 5,
+         enableCaching: true,
+       },
+       performance: {
+         enableQueryOptimization: true,
+         enableResultCaching: true,
+         maxExecutionTime: 10000,
+         batchSize: 100,
+       },
+     }, this.dbManager));
+
+     // Add Temporal Filter Strategy
+     this.strategies.set(SearchStrategy.TEMPORAL_FILTER, new TemporalFilterStrategy({
+       naturalLanguage: {
+         enableParsing: true,
+         enablePatternMatching: true,
+         confidenceThreshold: 0.3,
+       },
+       performance: {
+         enableQueryOptimization: true,
+         enableResultCaching: true,
+         maxExecutionTime: 10000,
+         batchSize: 100,
+       },
+     }, this.dbManager));
+
+     // Add Metadata Filter Strategy
+     this.strategies.set(SearchStrategy.METADATA_FILTER, new MetadataFilterStrategy({
+       fields: {
+         enableNestedAccess: true,
+         maxDepth: 5,
+         enableTypeValidation: true,
+         enableFieldDiscovery: true,
+       },
+       validation: {
+         strictValidation: false,
+         enableCustomValidators: true,
+         failOnInvalidMetadata: false,
+       },
+       performance: {
+         enableQueryOptimization: true,
+         enableResultCaching: true,
+         maxExecutionTime: 10000,
+         batchSize: 100,
+         cacheSize: 100
+       },
+     }, this.dbManager));
+
+     // Add Relationship Search Strategy
+     this.strategies.set(SearchStrategy.RELATIONSHIP, new RelationshipSearchStrategy(this.dbManager));
+   }
 
   /**
    * Main search method that orchestrates multiple strategies
@@ -603,8 +1001,43 @@ export class SearchService implements ISearchService {
           if (results.length >= (query.limit || 10)) break;
 
         } catch (error) {
-          console.warn(`Strategy ${strategyName} failed:`, error);
+          // Enhanced error handling with fallback logic
+          const shouldRetry = this.shouldRetryStrategy(strategyName, error);
+          const shouldFallback = this.shouldFallbackToAlternative(strategyName, error);
+
+          if (shouldRetry) {
+            try {
+              console.warn(`Retrying strategy ${strategyName} after error:`, error);
+              const retryResults = await this.executeStrategyWithRetry(strategy, query, 2);
+              for (const result of retryResults) {
+                if (!seenIds.has(result.id)) {
+                  seenIds.add(result.id);
+                  results.push(result);
+                }
+              }
+            } catch (retryError) {
+              console.warn(`Retry failed for strategy ${strategyName}:`, retryError);
+              if (shouldFallback) {
+                await this.executeFallbackStrategy(strategyName, query, results, seenIds);
+              }
+            }
+          } else if (shouldFallback) {
+            await this.executeFallbackStrategy(strategyName, query, results, seenIds);
+          } else {
+            console.warn(`Strategy ${strategyName} failed and no retry/fallback available:`, error);
+          }
           continue;
+        }
+      }
+
+      // Apply advanced filtering if filterExpression is provided
+      if (query.filterExpression && this.advancedFilterEngine) {
+        try {
+          const filteredResults = await this.applyAdvancedFilter(results, query.filterExpression);
+          return this.rankAndSortResults(filteredResults, query);
+        } catch (error) {
+          console.warn('Advanced filter execution failed, falling back to regular results:', error);
+          // Fall back to regular results if filtering fails
         }
       }
 
@@ -830,5 +1263,228 @@ export class SearchService implements ISearchService {
 
     const lowerQuery = query.toLowerCase();
     return metadataKeywords.some(keyword => lowerQuery.includes(keyword));
+  }
+
+  /**
+   * Apply advanced filter expression to search results
+   */
+  private async applyAdvancedFilter(results: SearchResult[], filterExpression: string): Promise<SearchResult[]> {
+    if (!this.advancedFilterEngine || !filterExpression.trim()) {
+      return results;
+    }
+
+    try {
+      // Parse the filter expression
+      const filterNode = this.advancedFilterEngine.parseFilter(filterExpression);
+
+      // Execute the filter on the results
+      const filterResult = await this.advancedFilterEngine.executeFilter(filterNode, results);
+
+      // Return filtered results as SearchResult array
+      return filterResult.filteredItems as SearchResult[];
+    } catch (error) {
+      console.error('Failed to apply advanced filter:', error);
+      throw new SearchError(
+        `Advanced filter execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        'search_service',
+        {
+          strategy: 'search_service',
+          operation: 'advanced_filter',
+          filterExpression,
+          resultCount: results.length,
+          timestamp: new Date(),
+        },
+        error instanceof Error ? error : undefined,
+        SearchErrorCategory.EXECUTION,
+      );
+    }
+  }
+
+  /**
+   * Determine if a strategy should be retried after failure
+   */
+  private shouldRetryStrategy(strategyName: SearchStrategy, error: unknown): boolean {
+    // Retry on transient errors for certain strategies
+    const retryableStrategies = [SearchStrategy.FTS5, SearchStrategy.LIKE];
+    if (!retryableStrategies.includes(strategyName)) {
+      return false;
+    }
+
+    const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+    // Retry on database busy/locked errors
+    if (errorMessage.includes('database locked') || errorMessage.includes('busy') || errorMessage.includes('timeout')) {
+      return true;
+    }
+
+    // Retry on network-related errors (if applicable)
+    if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Determine if fallback strategy should be used
+   */
+  private shouldFallbackToAlternative(strategyName: SearchStrategy, error: unknown): boolean {
+    const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+    // Always fallback for critical errors
+    if (errorMessage.includes('no such table') || errorMessage.includes('database not found')) {
+      return true;
+    }
+
+    // Fallback for configuration errors
+    if (errorMessage.includes('configuration') || errorMessage.includes('invalid config')) {
+      return true;
+    }
+
+    // Don't fallback for validation errors (user input issues)
+    if (errorMessage.includes('validation') || errorMessage.includes('invalid query')) {
+      return false;
+    }
+
+    return true; // Default to fallback for most cases
+  }
+
+  /**
+   * Execute strategy with retry logic
+   */
+  private async executeStrategyWithRetry(strategy: ISearchStrategy, query: SearchQuery, maxRetries: number): Promise<SearchResult[]> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.executeStrategy(strategy, query);
+      } catch (error) {
+        lastError = error;
+
+        // Don't retry on the last attempt
+        if (attempt === maxRetries) {
+          break;
+        }
+
+        // Exponential backoff delay
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
+   * Execute fallback strategy when primary strategy fails
+   */
+  private async executeFallbackStrategy(failedStrategy: SearchStrategy, query: SearchQuery, results: SearchResult[], seenIds: Set<string>): Promise<void> {
+    // Determine appropriate fallback strategy
+    let fallbackStrategy: SearchStrategy;
+
+    switch (failedStrategy) {
+      case SearchStrategy.FTS5:
+        fallbackStrategy = SearchStrategy.LIKE;
+        break;
+      case SearchStrategy.LIKE:
+        fallbackStrategy = SearchStrategy.RECENT;
+        break;
+      default:
+        fallbackStrategy = SearchStrategy.RECENT;
+        break;
+    }
+
+    const fallbackStrategyInstance = this.strategies.get(fallbackStrategy);
+    if (!fallbackStrategyInstance) {
+      console.warn(`No fallback strategy available for ${failedStrategy}`);
+      return;
+    }
+
+    try {
+      console.log(`Executing fallback strategy ${fallbackStrategy} for failed strategy ${failedStrategy}`);
+      const fallbackResults = await this.executeStrategy(fallbackStrategyInstance, query);
+
+      // Add fallback results that haven't been seen before
+      for (const result of fallbackResults) {
+        if (!seenIds.has(result.id)) {
+          seenIds.add(result.id);
+          results.push(result);
+        }
+      }
+    } catch (fallbackError) {
+      console.warn(`Fallback strategy ${fallbackStrategy} also failed:`, fallbackError);
+    }
+  }
+
+  /**
+   * Get index health report
+   */
+  public async getIndexHealthReport(): Promise<IndexHealthReport> {
+    const indexManager = this.getSearchIndexManager();
+    return await indexManager.getIndexHealthReport();
+  }
+
+  /**
+   * Check if index health is acceptable for search operations
+   */
+  public async isIndexHealthy(): Promise<boolean> {
+    try {
+      const report = await this.getIndexHealthReport();
+      return report.health !== IndexHealth.CORRUPTED && report.health !== IndexHealth.CRITICAL;
+    } catch (error) {
+      logError('Failed to check index health', {
+        component: 'SearchService',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Perform index optimization
+   */
+  public async optimizeIndex(): Promise<import('./SearchIndexManager').OptimizationResult> {
+    const indexManager = this.getSearchIndexManager();
+    return await indexManager.optimizeIndex();
+  }
+
+  /**
+   * Create index backup
+   */
+  public async createIndexBackup(): Promise<import('./SearchIndexManager').BackupMetadata> {
+    const indexManager = this.getSearchIndexManager();
+    return await indexManager.createBackup();
+  }
+
+  /**
+   * Restore index from backup
+   */
+  public async restoreIndexFromBackup(backupId: string): Promise<boolean> {
+    const indexManager = this.getSearchIndexManager();
+    return await indexManager.restoreFromBackup(backupId);
+  }
+
+  /**
+   * Get search index manager instance
+   */
+  private getSearchIndexManager(): SearchIndexManager {
+    if (!this.searchIndexManager) {
+      this.searchIndexManager = new SearchIndexManager(this.dbManager);
+    }
+    return this.searchIndexManager;
+  }
+
+  /**
+   * Get maintenance status
+   */
+  public getMaintenanceStatus(): {
+    isOptimizing: boolean;
+    lastHealthCheck: Date | null;
+    nextHealthCheck: Date | null;
+    nextOptimizationCheck: Date | null;
+    nextBackup: Date | null;
+  } {
+    const indexManager = this.getSearchIndexManager();
+    return indexManager.getMaintenanceStatus();
   }
 }

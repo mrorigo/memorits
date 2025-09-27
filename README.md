@@ -27,6 +27,10 @@ Memorits gives your AI applications perfect recall - automatically capturing, cl
 - **🔒 Type Safe**: 100% TypeScript coverage with compile-time validation - catch errors before they happen
 - **🤖 OpenAI Drop-in Replacement**: Zero breaking changes - existing OpenAI code works unchanged
 - **🧠 Dual Memory Modes**: Choose between conscious processing or automated background ingestion
+- **🔗 Memory Relationships**: Automatically extract and store relationships between memories for enhanced context building
+- **🔄 Intelligent Consolidation**: Detect and merge duplicate memories with transaction safety and intelligent data merging
+- **🎛️ Advanced Search & Filtering**: Powerful filter expressions, template system, and multi-strategy search orchestration
+- **📊 Index Management**: Automated search index optimization, health monitoring, backup, and corruption recovery
 
 ### 🎯 Perfect For
 
@@ -358,6 +362,10 @@ const client = new MemoriOpenAI(apiKey, { enableChatMemory: true });
 - **Category filtering**: Filter by essential, contextual, conversational, reference, personal, or conscious-info
 - **Metadata inclusion**: Get rich context with timestamps, sources, and relationships
 - **Full-text search**: Lightning-fast search across all memory content
+- **Filter Expressions**: Advanced boolean logic with field comparisons, ranges, and operators
+- **Filter Templates**: Pre-built filter templates for common search scenarios
+- **Multi-Strategy Search**: Intelligent orchestration of FTS5, LIKE, semantic, and relationship search strategies
+- **Relationship-based Search**: Find memories connected through relationship graphs with traversal capabilities
 
 ### 🛡️ Enterprise-Grade Type Safety
 
@@ -380,6 +388,23 @@ const client = new MemoriOpenAI(apiKey, { enableChatMemory: true });
 - **Optimized queries** with proper indexing and relationships
 - **Memory-efficient processing** for large conversation histories
 - **Background processing** for non-blocking memory ingestion
+
+### 🔗 Memory Relationships & Consolidation
+
+- **Relationship Extraction**: Automatically identify continuation, reference, related, superseding, and contradictory relationships between memories
+- **Relationship Confidence Scoring**: Calculate relationship strength and confidence using semantic similarity, temporal proximity, and entity overlap
+- **Intelligent Consolidation**: Detect and merge duplicate memories with transaction-safe operations
+- **Data Merging**: Intelligently combine entities, keywords, and metadata from duplicate memories
+- **Consolidation Tracking**: Maintain detailed history of consolidation operations with rollback capabilities
+- **Memory Processing States**: Comprehensive state tracking for memory processing workflows with validation and history
+
+### 📊 Search Index Management
+
+- **Automated Health Monitoring**: Continuous monitoring of search index health with corruption detection
+- **Index Optimization**: Automated optimization with merge, compact, rebuild, and vacuum operations
+- **Performance Analytics**: Detailed performance metrics including query time, throughput, and memory usage
+- **Backup & Recovery**: Automated index backups with integrity verification and corruption recovery
+- **Maintenance Scheduling**: Configurable automated maintenance with health checks, optimization, and backup schedules
 
 ---
 
@@ -454,9 +479,10 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 ### Key Developer Resources:
 - **[Core Concepts](docs/developer/core-concepts/)** - Memory management, search strategies, and classification systems
 - **[Architecture Deep Dive](docs/developer/architecture/)** - System design, database layer, and search engine implementation
-- **[Advanced Features](docs/developer/advanced-features/)** - Temporal filtering, metadata processing, and conscious memory
+- **[Advanced Features](docs/developer/advanced-features/)** - Temporal filtering, metadata processing, conscious memory, memory relationships, and consolidation
 - **[API Reference](docs/developer/api-reference/)** - Detailed interface documentation and usage examples
 - **[Integration Guides](docs/developer/integrations/)** - OpenAI integration patterns and custom provider development
+- **[GAPS1 Implementation Guide](docs/features/GAPS1.md)** - Detailed documentation of advanced search, filtering, relationships, and optimization features
 
 ---
 
@@ -560,13 +586,44 @@ const filteredMemories = await memori.searchMemories('programming', {
   categories: ['essential', 'contextual'], // Filter by memory categories
   includeMetadata: true // Include additional metadata
 });
+
+// Advanced filter expressions
+const advancedResults = await memori.searchMemories('', {
+  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
+  limit: 10
+});
+
+// Memory consolidation
+const consolidationResult = await memori.consolidateDuplicateMemories(
+  'memory-id-1',
+  ['memory-id-2', 'memory-id-3']
+);
+
+if (consolidationResult.consolidated > 0) {
+  console.log(`Consolidated ${consolidationResult.consolidated} duplicate memories`);
+}
+
+// Search with relationships
+const relationshipSearch = await memori.searchMemories('related to project setup', {
+  includeRelatedMemories: true,
+  maxRelationshipDepth: 2
+});
+
+// Get index health report
+const healthReport = await memori.getIndexHealthReport();
+console.log(`Index health: ${healthReport.health}`);
+console.log(`Issues found: ${healthReport.issues.length}`);
+
+// Optimize search index
+const optimizationResult = await memori.optimizeIndex('merge');
+console.log(`Optimization saved ${optimizationResult.spaceSaved} bytes`);
 ```
 
 ## Advanced Features
 
 ### Enhanced Search API
 
-The search API now supports advanced filtering options:
+The search API now supports advanced filtering options including filter expressions and relationship search:
 
 ```typescript
 interface SearchOptions {
@@ -574,6 +631,10 @@ interface SearchOptions {
   minImportance?: MemoryImportanceLevel; // Filter by importance level
   categories?: MemoryClassification[];   // Filter by memory categories
   includeMetadata?: boolean;         // Include additional metadata
+  filterExpression?: string;         // Advanced filter expression with boolean logic
+  includeRelatedMemories?: boolean;  // Include related memories in results
+  maxRelationshipDepth?: number;     // Maximum depth for relationship traversal
+  searchStrategy?: SearchStrategy;   // Force specific search strategy
 }
 
 // Search with importance filtering
@@ -584,6 +645,43 @@ const importantMemories = await memori.searchMemories('critical', {
 // Search specific categories
 const technicalMemories = await memori.searchMemories('code', {
   categories: ['essential', 'reference'] // Only technical memories
+});
+
+// Advanced filter expressions
+const recentImportantMemories = await memori.searchMemories('', {
+  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
+  limit: 20
+});
+
+// Complex boolean filter expressions
+const complexSearch = await memori.searchMemories('', {
+  filterExpression: '(category = "essential" OR category = "contextual") AND importance_score >= 0.6 AND created_at BETWEEN "2024-01-01" AND "2024-12-31"',
+  limit: 50
+});
+
+// Filter templates (pre-registered)
+const templateSearch = await memori.searchMemories('', {
+  filterExpression: 'recent_important: { days_ago: "7" }', // Template with parameters
+  limit: 10
+});
+
+// Memory consolidation with state tracking
+const memories = await memori.searchMemories('similar topic', { limit: 100 });
+const duplicates = await memori.findDuplicateMemories(memories);
+
+if (duplicates.length > 0) {
+  const consolidationResult = await memori.consolidateDuplicateMemories(
+    duplicates[0].id,
+    duplicates.slice(1).map(d => d.id)
+  );
+
+  console.log(`Consolidated ${consolidationResult.consolidated} memories`);
+}
+
+// Relationship-based search
+const relatedMemories = await memori.searchMemories('related to project setup', {
+  includeRelatedMemories: true,
+  maxRelationshipDepth: 3
 });
 ```
 

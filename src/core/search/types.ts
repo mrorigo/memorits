@@ -6,8 +6,13 @@ export enum SearchStrategy {
   SEMANTIC = 'semantic',
   CATEGORY_FILTER = 'category_filter',
   TEMPORAL_FILTER = 'temporal_filter',
-  METADATA_FILTER = 'metadata_filter'
+  METADATA_FILTER = 'metadata_filter',
+  RELATIONSHIP = 'relationship'
 }
+
+// Import relationship types from schemas
+import { MemoryRelationshipType } from '../types/schemas';
+import type { MemoryRelationship } from '../types/schemas';
 
 // Import and re-export interfaces from SearchStrategy
 import type {
@@ -28,6 +33,7 @@ import type {
   SearchErrorContext,
   SearchErrorCategory,
 } from './SearchStrategy';
+
 
 export type {
   SearchQuery,
@@ -143,12 +149,118 @@ export interface SortCriteria {
   direction: 'asc' | 'desc';
 }
 
+// Configuration Management Interfaces
+export interface SearchStrategyConfiguration {
+  strategyName: string;
+  enabled: boolean;
+  priority: number;
+  timeout: number;
+  maxResults: number;
+  performance: {
+    enableCaching: boolean;
+    cacheSize: number;
+    enableParallelExecution: boolean;
+  };
+  scoring: {
+    baseWeight: number;
+    recencyWeight: number;
+    importanceWeight: number;
+    relationshipWeight: number;
+  };
+  strategySpecific?: Record<string, unknown>;
+}
+
+export interface ConfigurationSchema {
+  type: 'object';
+  properties: Record<string, unknown>;
+  required: string[];
+  additionalProperties?: boolean;
+}
+
+export interface ConfigurationValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  validatedConfig?: SearchStrategyConfiguration;
+}
+
+export interface ConfigurationManager {
+  loadConfiguration(name: string): Promise<SearchStrategyConfiguration | null>;
+  saveConfiguration(name: string, config: SearchStrategyConfiguration): Promise<void>;
+  getConfigurationNames(): Promise<string[]>;
+  deleteConfiguration(name: string): Promise<void>;
+  validateConfiguration(config: SearchStrategyConfiguration): Promise<ConfigurationValidationResult>;
+  getDefaultConfiguration(strategyName: string): SearchStrategyConfiguration;
+  mergeConfigurations(base: SearchStrategyConfiguration, override: Partial<SearchStrategyConfiguration>): SearchStrategyConfiguration;
+}
+
+export interface ConfigurationPersistenceManager {
+  save(config: SearchStrategyConfiguration): Promise<void>;
+  load(strategyName: string): Promise<SearchStrategyConfiguration | null>;
+  delete(strategyName: string): Promise<void>;
+  list(): Promise<string[]>;
+  backup(name: string): Promise<string>;
+  restore(name: string, backupId: string): Promise<SearchStrategyConfiguration>;
+  export(): Promise<Record<string, SearchStrategyConfiguration>>;
+  import(configs: Record<string, SearchStrategyConfiguration>): Promise<void>;
+}
+
+export interface ConfigurationAuditEntry {
+  timestamp: Date;
+  action: 'create' | 'update' | 'delete' | 'load' | 'validate' | 'save' | 'import';
+  strategyName: string;
+  configurationName?: string;
+  userId?: string;
+  changes?: Record<string, { from: unknown; to: unknown }>;
+  success: boolean;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ConfigurationAuditManager {
+  log(entry: ConfigurationAuditEntry): Promise<void>;
+  getHistory(strategyName?: string, limit?: number): Promise<ConfigurationAuditEntry[]>;
+  getChanges(strategyName: string, fromTimestamp: Date, toTimestamp: Date): Promise<ConfigurationAuditEntry[]>;
+}
+
 // Search Service Interface
 export interface ISearchService {
   search(query: SearchQuery): Promise<SearchResult[]>;
   searchWithStrategy(query: SearchQuery, strategy: SearchStrategy): Promise<SearchResult[]>;
   getAvailableStrategies(): SearchStrategy[];
   getStrategy(name: string): ISearchStrategy | null;
+}
+
+// Relationship-based search interfaces
+export interface RelationshipSearchQuery {
+  startMemoryId?: string;
+  maxDepth?: number;
+  relationshipTypes?: MemoryRelationshipType[];
+  minRelationshipStrength?: number;
+  minRelationshipConfidence?: number;
+  includeRelationshipPaths?: boolean;
+  traversalStrategy?: 'breadth_first' | 'depth_first' | 'strength_weighted';
+  targetMemoryId?: string;
+  namespace?: string;
+}
+
+export interface RelationshipPath {
+  memoryId: string;
+  relationship: MemoryRelationship;
+  path: string[];
+  depth: number;
+  cumulativeStrength: number;
+  cumulativeConfidence: number;
+}
+
+export interface RelationshipSearchResult extends SearchResult {
+  relationshipContext?: {
+    paths: RelationshipPath[];
+    distance: number;
+    connectionStrength: number;
+    relatedEntities: string[];
+    relationshipTypes: MemoryRelationshipType[];
+  };
 }
 
 // Custom error class that extends the imported SearchError
