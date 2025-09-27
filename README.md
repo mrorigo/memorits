@@ -460,6 +460,19 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 
 ---
 
+## Developer Documentation
+
+📚 **[Comprehensive Developer Guide](docs/developer/index.md)** - Complete architecture overview, implementation details, and advanced usage patterns.
+
+### Key Developer Resources:
+- **[Core Concepts](docs/developer/core-concepts/)** - Memory management, search strategies, and classification systems
+- **[Architecture Deep Dive](docs/developer/architecture/)** - System design, database layer, and search engine implementation
+- **[Advanced Features](docs/developer/advanced-features/)** - Temporal filtering, metadata processing, and conscious memory
+- **[API Reference](docs/developer/api-reference/)** - Detailed interface documentation and usage examples
+- **[Integration Guides](docs/developer/integrations/)** - OpenAI integration patterns and custom provider development
+
+---
+
 ## API Reference
 
 For complete API documentation, see [`docs/API.md`](docs/API.md) or visit our [GitHub repository](https://github.com/mrorigo/memorits).
