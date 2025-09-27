@@ -136,7 +136,7 @@ export class TemporalFilterStrategy implements ISearchStrategy {
   /**
    * Execute method to match ISearchStrategy interface
    */
-  async execute(query: SearchQuery, _dbManager: any): Promise<SearchResult[]> {
+  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
     return this.search(query);
   }
 

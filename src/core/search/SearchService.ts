@@ -1,328 +1,11 @@
-import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, ISearchService, SearchError, StrategyNotFoundError } from './types';
-import { SearchCapability, SearchStrategyMetadata, SearchStrategyConfig } from './SearchStrategy';
+import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, ISearchService, StrategyNotFoundError, DatabaseQueryResult } from './types';
+import { SearchCapability, SearchStrategyMetadata, SearchError, SearchStrategyError, SearchDatabaseError, SearchValidationError, SearchTimeoutError, SearchConfigurationError, SearchErrorCategory } from './SearchStrategy';
 import { LikeSearchStrategy } from './LikeSearchStrategy';
 import { RecentMemoriesStrategy } from './RecentMemoriesStrategy';
 import { CategoryFilterStrategy } from './filtering/CategoryFilterStrategy';
 import { TemporalFilterStrategy } from './filtering/TemporalFilterStrategy';
 import { MetadataFilterStrategy } from './filtering/MetadataFilterStrategy';
 import { DatabaseManager } from '../database/DatabaseManager';
-
-/**
- * Main SearchService implementation that orchestrates multiple search strategies
- */
-export class SearchService implements ISearchService {
-  private strategies: Map<SearchStrategy, ISearchStrategy> = new Map();
-  private dbManager: DatabaseManager;
-
-  constructor(dbManager: DatabaseManager) {
-    this.dbManager = dbManager;
-    this.initializeStrategies();
-  }
-
-  /**
-   * Initialize all available search strategies
-   */
-  private initializeStrategies(): void {
-    this.strategies.set(SearchStrategy.FTS5, new SQLiteFTSStrategy(this.dbManager));
-    this.strategies.set(SearchStrategy.LIKE, new LikeSearchStrategy(this.dbManager));
-    // this.strategies.set(SearchStrategy.RECENT, new RecentMemoriesStrategy({}, this.dbManager));
-    this.strategies.set(SearchStrategy.SEMANTIC, new SemanticSearchStrategy());
-
-    // Add Category Filter Strategy
-    this.strategies.set(SearchStrategy.CATEGORY_FILTER, new CategoryFilterStrategy({
-      hierarchy: {
-        maxDepth: 5,
-        enableCaching: true,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-      },
-    }, this.dbManager));
-
-    // Add Temporal Filter Strategy
-    this.strategies.set(SearchStrategy.TEMPORAL_FILTER, new TemporalFilterStrategy({
-      naturalLanguage: {
-        enableParsing: true,
-        enablePatternMatching: true,
-        confidenceThreshold: 0.3,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-      },
-    }, this.dbManager));
-
-    // Add Metadata Filter Strategy
-    this.strategies.set(SearchStrategy.METADATA_FILTER, new MetadataFilterStrategy({
-      fields: {
-        enableNestedAccess: true,
-        maxDepth: 5,
-        enableTypeValidation: true,
-        enableFieldDiscovery: true,
-      },
-      validation: {
-        strictValidation: false,
-        enableCustomValidators: true,
-        failOnInvalidMetadata: false,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-        cacheSize: 100
-      },
-    }, this.dbManager));
-  }
-
-  /**
-   * Main search method that orchestrates multiple strategies
-   */
-  async search(query: SearchQuery): Promise<SearchResult[]> {
-    try {
-      const results: SearchResult[] = [];
-      const seenIds = new Set<string>();
-
-      // Determine strategy execution order based on query characteristics
-      const strategyOrder = this.determineStrategyOrder(query);
-
-      for (const strategyName of strategyOrder) {
-        const strategy = this.strategies.get(strategyName);
-        if (!strategy) continue;
-
-        try {
-          const strategyResults = await this.executeStrategy(strategy, query);
-
-          // Deduplicate results across strategies
-          for (const result of strategyResults) {
-            if (!seenIds.has(result.id)) {
-              seenIds.add(result.id);
-              results.push(result);
-            }
-          }
-
-          // Stop if we have enough results
-          if (results.length >= (query.limit || 10)) break;
-
-        } catch (error) {
-          console.warn(`Strategy ${strategyName} failed:`, error);
-          continue;
-        }
-      }
-
-      return this.rankAndSortResults(results, query);
-
-    } catch (error) {
-      throw new SearchError(
-        `Search operation failed: ${error instanceof Error ? error.message : String(error)}`,
-        undefined,
-        query,
-        error instanceof Error ? error : undefined,
-      );
-    }
-  }
-
-  /**
-   * Search with a specific strategy
-   */
-  async searchWithStrategy(query: SearchQuery, strategy: SearchStrategy): Promise<SearchResult[]> {
-    const searchStrategy = this.strategies.get(strategy);
-    if (!searchStrategy) {
-      throw new StrategyNotFoundError(strategy);
-    }
-
-    try {
-      const results = await this.executeStrategy(searchStrategy, query);
-      return this.rankAndSortResults(results, query);
-    } catch (error) {
-      throw new SearchError(
-        `Strategy ${strategy} failed: ${error instanceof Error ? error.message : String(error)}`,
-        strategy,
-        query,
-        error instanceof Error ? error : undefined,
-      );
-    }
-  }
-
-  /**
-   * Get all available strategies
-   */
-  getAvailableStrategies(): SearchStrategy[] {
-    return Array.from(this.strategies.keys());
-  }
-
-  /**
-   * Get a specific strategy by name
-   */
-  getStrategy(name: string): ISearchStrategy | null {
-    const strategy = this.strategies.get(name as SearchStrategy);
-    return strategy || null;
-  }
-
-  /**
-   * Determine the order of strategy execution based on query characteristics
-   */
-  private determineStrategyOrder(query: SearchQuery): SearchStrategy[] {
-    const strategies: SearchStrategy[] = [];
-
-    // If query is empty, prioritize recent memories
-    if (!query.text || query.text.trim() === '') {
-      return [SearchStrategy.RECENT];
-    }
-
-    // Add FTS5 as primary strategy for keyword searches
-    strategies.push(SearchStrategy.FTS5);
-
-    // Add category filter strategy for category-based queries
-    const categoryQuery = query as any;
-    if (categoryQuery.categories || this.hasCategoryIndicators(query.text)) {
-      strategies.splice(1, 0, SearchStrategy.CATEGORY_FILTER); // Insert after FTS5
-    }
-
-    // Add temporal filter strategy for temporal queries
-    if (this.hasTemporalIndicators(query.text) || this.hasTemporalFilters(query)) {
-      strategies.splice(2, 0, SearchStrategy.TEMPORAL_FILTER); // Insert after category filter
-    }
-
-    // Add metadata filter strategy for metadata-based queries
-    const metadataQuery = query as any;
-    if (metadataQuery.metadataFilters || this.hasMetadataIndicators(query.text)) {
-      strategies.splice(3, 0, SearchStrategy.METADATA_FILTER); // Insert after temporal filter
-    }
-
-    // Add semantic search for complex queries
-    if (this.isComplexQuery(query.text)) {
-      strategies.push(SearchStrategy.SEMANTIC);
-    }
-
-    // Add LIKE as fallback
-    strategies.push(SearchStrategy.LIKE);
-
-    return strategies;
-  }
-
-  /**
-   * Execute a single strategy with error handling
-   */
-  private async executeStrategy(strategy: ISearchStrategy, query: SearchQuery): Promise<SearchResult[]> {
-    const timeout = 5000; // 5 second timeout
-
-    return Promise.race([
-      strategy.execute(query, this.dbManager),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Strategy ${strategy.name} timed out`)), timeout);
-      })
-    ]);
-  }
-
-  /**
-   * Rank and sort results based on relevance and query criteria
-   */
-  private rankAndSortResults(results: SearchResult[], query: SearchQuery): SearchResult[] {
-    // Calculate composite scores for ranking
-    results.forEach(result => {
-      result.score = this.calculateCompositeScore(result, query);
-    });
-
-    // Sort by composite score
-    results.sort((a, b) => b.score - a.score);
-
-    // Apply limit
-    const limit = query.limit || 10;
-    return results.slice(0, limit);
-  }
-
-  /**
-   * Calculate composite score for ranking results
-   */
-  private calculateCompositeScore(result: SearchResult, query: SearchQuery): number {
-    let score = result.score;
-
-    // Boost score based on strategy priority
-    const strategy = this.strategies.get(result.strategy as SearchStrategy);
-    if (strategy) {
-      score *= (1 + strategy.priority / 100);
-    }
-
-    // Apply query-specific boosts
-    if (query.text && result.content.toLowerCase().includes(query.text.toLowerCase())) {
-      score *= 1.2; // Boost exact matches
-    }
-
-    return score;
-  }
-
-  /**
-    * Determine if a query is complex and should use semantic search
-    */
-   private isComplexQuery(query: string): boolean {
-     const words = query.split(/\s+/).length;
-     return words > 3 || query.includes('because') || query.includes('therefore') || query.includes('however');
-   }
-
-   /**
-    * Check if query text contains category indicators
-    */
-   private hasCategoryIndicators(query: string): boolean {
-     if (!query) return false;
-
-     const categoryKeywords = [
-       'category', 'type', 'kind', 'sort', 'classification',
-       'programming', 'database', 'framework', 'language',
-       'personal', 'work', 'project', 'learning', 'education',
-     ];
-
-     const lowerQuery = query.toLowerCase();
-     return categoryKeywords.some(keyword => lowerQuery.includes(keyword));
-   }
-
-   /**
-    * Check if query text contains temporal indicators
-    */
-   private hasTemporalIndicators(query: string): boolean {
-     if (!query) return false;
-
-     const temporalKeywords = [
-       'time', 'date', 'when', 'before', 'after', 'during',
-       'recent', 'old', 'new', 'latest', 'earliest',
-       'today', 'yesterday', 'tomorrow', 'week', 'month', 'year',
-       'hour', 'minute', 'second', 'ago', 'since', 'until'
-     ];
-
-     const lowerQuery = query.toLowerCase();
-     return temporalKeywords.some(keyword => lowerQuery.includes(keyword));
-   }
-
-   /**
-    * Check if query has temporal filters
-    */
-   private hasTemporalFilters(query: SearchQuery): boolean {
-     if (!query.filters) return false;
-
-     const temporalFields = ['createdAfter', 'createdBefore', 'since', 'until', 'age', 'timeRange'];
-     return temporalFields.some(field => field in query.filters!);
-   }
-
-   /**
-    * Check if query text contains metadata indicators
-    */
-   private hasMetadataIndicators(query: string): boolean {
-     if (!query) return false;
-
-     const metadataKeywords = [
-       'metadata', 'meta', 'field', 'property', 'key', 'value',
-       'json_extract', 'json_type', 'json_valid'
-     ];
-
-     const lowerQuery = query.toLowerCase();
-     return metadataKeywords.some(keyword => lowerQuery.includes(keyword));
-   }
- }
 
 /**
  * Enhanced SQLite FTS5 search strategy implementation with BM25 ranking and metadata filtering
@@ -336,14 +19,14 @@ class SQLiteFTSStrategy implements ISearchStrategy {
     SearchCapability.KEYWORD_SEARCH,
     SearchCapability.RELEVANCE_SCORING,
     SearchCapability.FILTERING,
-    SearchCapability.SORTING
+    SearchCapability.SORTING,
   ] as const;
 
   // FTS5-specific configuration
   private readonly bm25Weights = {
     title: 2.0,      // Weight for title/summary matches
     content: 1.0,    // Weight for content matches
-    category: 1.5    // Weight for category matches
+    category: 1.5,    // Weight for category matches
   };
 
   private readonly maxResultsPerQuery = 1000;
@@ -360,7 +43,7 @@ class SQLiteFTSStrategy implements ISearchStrategy {
     return Boolean(query.text && query.text.trim().length > 0);
   }
 
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
+  async search(query: SearchQuery): Promise<SearchResult[]> {
     const startTime = Date.now();
 
     try {
@@ -383,13 +66,18 @@ class SQLiteFTSStrategy implements ISearchStrategy {
       const duration = Date.now() - startTime;
       console.error(`FTS5 search failed after ${duration}ms:`, error);
 
-      throw new SearchError(
-        `FTS5 strategy failed: ${error instanceof Error ? error.message : String(error)}`,
+      throw new SearchStrategyError(
         this.name,
-        query,
+        `FTS5 strategy failed: ${error instanceof Error ? error.message : String(error)}`,
+        'fts_search',
+        { query: query.text, limit: query.limit, offset: query.offset, duration },
         error instanceof Error ? error : undefined
       );
     }
+  }
+
+  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
+    return this.search(query);
   }
 
   async validateConfiguration(): Promise<boolean> {
@@ -415,16 +103,16 @@ class SQLiteFTSStrategy implements ISearchStrategy {
               title: { type: 'number', minimum: 0, maximum: 10 },
               content: { type: 'number', minimum: 0, maximum: 10 },
               category: { type: 'number', minimum: 0, maximum: 10 }
-            }
-          }
+            },
+          },
         },
         required: ['priority', 'timeout', 'maxResults']
       },
       performanceMetrics: {
         averageResponseTime: 50,
         throughput: 1000,
-        memoryUsage: 15
-      }
+        memoryUsage: 15,
+      },
     };
   }
 
@@ -563,9 +251,10 @@ class SQLiteFTSStrategy implements ISearchStrategy {
   private buildWhereClause(query: SearchQuery): string {
     const conditions: string[] = [];
 
-    // Add namespace filtering if available
-    if ((this.databaseManager as any).currentNamespace) {
-      conditions.push(`json_extract(fts.metadata, '$.namespace') = '${(this.databaseManager as any).currentNamespace}'`);
+    // Add namespace filtering - use the database manager's namespace if available
+    const dbManager = this.databaseManager as any;
+    if (dbManager && dbManager.namespace) {
+      conditions.push(`json_extract(fts.metadata, '$.namespace') = '${dbManager.namespace}'`);
     }
 
     return conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
@@ -586,15 +275,21 @@ class SQLiteFTSStrategy implements ISearchStrategy {
   }
 
   /**
-   * Execute FTS query with comprehensive error handling and timeout
-   */
+    * Execute FTS query with comprehensive error handling and timeout
+    */
   private async executeFTSQuery(sql: string, parameters: unknown[], query: SearchQuery): Promise<unknown[]> {
-    const db = (this.databaseManager as any).prisma || this.databaseManager;
+    const dbManager = this.databaseManager as any;
+    const db = dbManager?.prisma || this.databaseManager;
 
     return Promise.race([
       db.$queryRawUnsafe(sql, ...parameters),
       new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`FTS query timed out after ${this.queryTimeout}ms`)), this.queryTimeout);
+        setTimeout(() => reject(new SearchTimeoutError(
+          this.name,
+          this.queryTimeout,
+          'fts_database_query',
+          { query: query.text, sql: sql.substring(0, 100) + '...' }
+        )), this.queryTimeout);
       })
     ]);
   }
@@ -605,7 +300,7 @@ class SQLiteFTSStrategy implements ISearchStrategy {
   private processFTSResults(results: unknown[], query: SearchQuery): SearchResult[] {
     const searchResults: SearchResult[] = [];
 
-    for (const row of results as any[]) {
+    for (const row of results as DatabaseQueryResult[]) {
       try {
         const metadata = JSON.parse(row.metadata);
 
@@ -619,7 +314,7 @@ class SQLiteFTSStrategy implements ISearchStrategy {
           metadata: {
             summary: metadata.summary || '',
             category: row.category_primary,
-            importanceScore: parseFloat(row.importance_score) || 0.5,
+            importanceScore: row.importance_score || 0.5,
             memoryType: row.memory_type,
             createdAt: new Date(row.created_at),
             rawBM25Score: rawScore,
@@ -716,8 +411,6 @@ class SQLiteFTSStrategy implements ISearchStrategy {
 
 }
 
-
-
 /**
  * Semantic search strategy (placeholder for future implementation)
  */
@@ -758,9 +451,349 @@ class SemanticSearchStrategy implements ISearchStrategy {
     return true;
   }
 
-  async execute(_query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
+  async search(_query: SearchQuery): Promise<SearchResult[]> {
     // Placeholder implementation - would use embeddings for semantic search
     console.log('Semantic search not yet implemented, skipping...');
     return [];
+  }
+
+  async execute(_query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
+    return this.search(_query);
+  }
+}
+
+/**
+ * Main SearchService implementation that orchestrates multiple search strategies
+ */
+export class SearchService implements ISearchService {
+  private strategies: Map<SearchStrategy, ISearchStrategy> = new Map();
+  private dbManager!: DatabaseManager;
+
+  constructor(dbManager: DatabaseManager) {
+    this.dbManager = dbManager;
+    this.initializeStrategies();
+  }
+
+  /**
+   * Initialize all available search strategies
+   */
+  private initializeStrategies(): void {
+    this.strategies.set(SearchStrategy.FTS5, new SQLiteFTSStrategy(this.dbManager));
+    this.strategies.set(SearchStrategy.LIKE, new LikeSearchStrategy(this.dbManager));
+    this.strategies.set(SearchStrategy.RECENT, new RecentMemoriesStrategy({
+      enabled: true,
+      priority: 3,
+      timeout: 5000,
+      maxResults: 100,
+      minScore: 0.1
+    }, this.dbManager));
+    this.strategies.set(SearchStrategy.SEMANTIC, new SemanticSearchStrategy());
+
+    // Add Category Filter Strategy
+    this.strategies.set(SearchStrategy.CATEGORY_FILTER, new CategoryFilterStrategy({
+      hierarchy: {
+        maxDepth: 5,
+        enableCaching: true,
+      },
+      performance: {
+        enableQueryOptimization: true,
+        enableResultCaching: true,
+        maxExecutionTime: 10000,
+        batchSize: 100,
+      },
+    }, this.dbManager));
+
+    // Add Temporal Filter Strategy
+    this.strategies.set(SearchStrategy.TEMPORAL_FILTER, new TemporalFilterStrategy({
+      naturalLanguage: {
+        enableParsing: true,
+        enablePatternMatching: true,
+        confidenceThreshold: 0.3,
+      },
+      performance: {
+        enableQueryOptimization: true,
+        enableResultCaching: true,
+        maxExecutionTime: 10000,
+        batchSize: 100,
+      },
+    }, this.dbManager));
+
+    // Add Metadata Filter Strategy
+    this.strategies.set(SearchStrategy.METADATA_FILTER, new MetadataFilterStrategy({
+      fields: {
+        enableNestedAccess: true,
+        maxDepth: 5,
+        enableTypeValidation: true,
+        enableFieldDiscovery: true,
+      },
+      validation: {
+        strictValidation: false,
+        enableCustomValidators: true,
+        failOnInvalidMetadata: false,
+      },
+      performance: {
+        enableQueryOptimization: true,
+        enableResultCaching: true,
+        maxExecutionTime: 10000,
+        batchSize: 100,
+        cacheSize: 100
+      },
+    }, this.dbManager));
+  }
+
+  /**
+   * Main search method that orchestrates multiple strategies
+   */
+  async search(query: SearchQuery): Promise<SearchResult[]> {
+    try {
+      const results: SearchResult[] = [];
+      const seenIds = new Set<string>();
+
+      // Determine strategy execution order based on query characteristics
+      const strategyOrder = this.determineStrategyOrder(query);
+
+      for (const strategyName of strategyOrder) {
+        const strategy = this.strategies.get(strategyName);
+        if (!strategy) continue;
+
+        try {
+          const strategyResults = await this.executeStrategy(strategy, query);
+
+          // Deduplicate results across strategies
+          for (const result of strategyResults) {
+            if (!seenIds.has(result.id)) {
+              seenIds.add(result.id);
+              results.push(result);
+            }
+          }
+
+          // Stop if we have enough results
+          if (results.length >= (query.limit || 10)) break;
+
+        } catch (error) {
+          console.warn(`Strategy ${strategyName} failed:`, error);
+          continue;
+        }
+      }
+
+      return this.rankAndSortResults(results, query);
+
+    } catch (error) {
+      throw new SearchError(
+        `Search operation failed: ${error instanceof Error ? error.message : String(error)}`,
+        'search_service',
+        {
+          strategy: 'search_service',
+          operation: 'orchestrated_search',
+          query: query.text,
+          parameters: { limit: query.limit, offset: query.offset },
+          timestamp: new Date(),
+        },
+        error instanceof Error ? error : undefined,
+        SearchErrorCategory.EXECUTION,
+      );
+    }
+  }
+
+  /**
+   * Search with a specific strategy
+   */
+  async searchWithStrategy(query: SearchQuery, strategy: SearchStrategy): Promise<SearchResult[]> {
+    const searchStrategy = this.strategies.get(strategy);
+    if (!searchStrategy) {
+      throw new StrategyNotFoundError(strategy);
+    }
+
+    try {
+      const results = await this.executeStrategy(searchStrategy, query);
+      return this.rankAndSortResults(results, query);
+    } catch (error) {
+      throw new SearchStrategyError(
+        strategy,
+        `Strategy ${strategy} failed: ${error instanceof Error ? error.message : String(error)}`,
+        'search_with_strategy',
+        { query: query.text, limit: query.limit, offset: query.offset },
+        error instanceof Error ? error : undefined,
+      );
+    }
+  }
+
+  /**
+   * Get all available strategies
+   */
+  getAvailableStrategies(): SearchStrategy[] {
+    return Array.from(this.strategies.keys());
+  }
+
+  /**
+   * Get a specific strategy by name
+   */
+  getStrategy(name: string): ISearchStrategy | null {
+    const strategy = this.strategies.get(name as SearchStrategy);
+    return strategy || null;
+  }
+
+  /**
+   * Determine the order of strategy execution based on query characteristics
+   */
+  private determineStrategyOrder(query: SearchQuery): SearchStrategy[] {
+    const strategies: SearchStrategy[] = [];
+
+    // If query is empty, prioritize recent memories
+    if (!query.text || query.text.trim() === '') {
+      return [SearchStrategy.RECENT];
+    }
+
+    // Add FTS5 as primary strategy for keyword searches
+    strategies.push(SearchStrategy.FTS5);
+
+    // Add category filter strategy for category-based queries
+    const queryFilters = query.filters || {};
+    if (queryFilters.categories || this.hasCategoryIndicators(query.text)) {
+      strategies.splice(1, 0, SearchStrategy.CATEGORY_FILTER); // Insert after FTS5
+    }
+
+    // Add temporal filter strategy for temporal queries
+    if (this.hasTemporalIndicators(query.text) || this.hasTemporalFilters(query)) {
+      strategies.splice(2, 0, SearchStrategy.TEMPORAL_FILTER); // Insert after category filter
+    }
+
+    // Add metadata filter strategy for metadata-based queries
+    const filters = query.filters || {};
+    if (filters.metadataFilters || this.hasMetadataIndicators(query.text)) {
+      strategies.splice(3, 0, SearchStrategy.METADATA_FILTER); // Insert after temporal filter
+    }
+
+    // Add semantic search for complex queries
+    if (this.isComplexQuery(query.text)) {
+      strategies.push(SearchStrategy.SEMANTIC);
+    }
+
+    // Add LIKE as fallback
+    strategies.push(SearchStrategy.LIKE);
+
+    return strategies;
+  }
+
+  /**
+    * Execute a single strategy with error handling
+    */
+  private async executeStrategy(strategy: ISearchStrategy, query: SearchQuery): Promise<SearchResult[]> {
+    const timeout = 5000; // 5 second timeout
+
+    return Promise.race([
+      strategy.execute(query, this.dbManager),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new SearchTimeoutError(
+          strategy.name,
+          timeout,
+          'strategy_execution',
+          { query: query.text, strategy: strategy.name }
+        )), timeout);
+      })
+    ]);
+  }
+
+  /**
+   * Rank and sort results based on relevance and query criteria
+   */
+  private rankAndSortResults(results: SearchResult[], query: SearchQuery): SearchResult[] {
+    // Calculate composite scores for ranking
+    results.forEach(result => {
+      result.score = this.calculateCompositeScore(result, query);
+    });
+
+    // Sort by composite score
+    results.sort((a, b) => b.score - a.score);
+
+    // Apply limit
+    const limit = query.limit || 10;
+    return results.slice(0, limit);
+  }
+
+  /**
+   * Calculate composite score for ranking results
+   */
+  private calculateCompositeScore(result: SearchResult, query: SearchQuery): number {
+    let score = result.score;
+
+    // Boost score based on strategy priority
+    const strategy = this.strategies.get(result.strategy as SearchStrategy);
+    if (strategy) {
+      score *= (1 + strategy.priority / 100);
+    }
+
+    // Apply query-specific boosts
+    if (query.text && result.content.toLowerCase().includes(query.text.toLowerCase())) {
+      score *= 1.2; // Boost exact matches
+    }
+
+    return score;
+  }
+
+  /**
+    * Determine if a query is complex and should use semantic search
+    */
+  private isComplexQuery(query: string): boolean {
+    const words = query.split(/\s+/).length;
+    return words > 3 || query.includes('because') || query.includes('therefore') || query.includes('however');
+  }
+
+  /**
+   * Check if query text contains category indicators
+   */
+  private hasCategoryIndicators(query: string): boolean {
+    if (!query) return false;
+
+    const categoryKeywords = [
+      'category', 'type', 'kind', 'sort', 'classification',
+      'programming', 'database', 'framework', 'language',
+      'personal', 'work', 'project', 'learning', 'education',
+    ];
+
+    const lowerQuery = query.toLowerCase();
+    return categoryKeywords.some(keyword => lowerQuery.includes(keyword));
+  }
+
+  /**
+   * Check if query text contains temporal indicators
+   */
+  private hasTemporalIndicators(query: string): boolean {
+    if (!query) return false;
+
+    const temporalKeywords = [
+      'time', 'date', 'when', 'before', 'after', 'during',
+      'recent', 'old', 'new', 'latest', 'earliest',
+      'today', 'yesterday', 'tomorrow', 'week', 'month', 'year',
+      'hour', 'minute', 'second', 'ago', 'since', 'until'
+    ];
+
+    const lowerQuery = query.toLowerCase();
+    return temporalKeywords.some(keyword => lowerQuery.includes(keyword));
+  }
+
+  /**
+   * Check if query has temporal filters
+   */
+  private hasTemporalFilters(query: SearchQuery): boolean {
+    if (!query.filters) return false;
+
+    const temporalFields = ['createdAfter', 'createdBefore', 'since', 'until', 'age', 'timeRange'];
+    return temporalFields.some(field => field in query.filters!);
+  }
+
+  /**
+   * Check if query text contains metadata indicators
+   */
+  private hasMetadataIndicators(query: string): boolean {
+    if (!query) return false;
+
+    const metadataKeywords = [
+      'metadata', 'meta', 'field', 'property', 'key', 'value',
+      'json_extract', 'json_type', 'json_valid'
+    ];
+
+    const lowerQuery = query.toLowerCase();
+    return metadataKeywords.some(keyword => lowerQuery.includes(keyword));
   }
 }

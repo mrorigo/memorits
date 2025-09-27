@@ -1,6 +1,6 @@
 import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy } from '../types';
 import { DatabaseManager } from '../../database/DatabaseManager';
-import { SearchStrategyMetadata, SearchCapability } from '../SearchStrategy';
+import { SearchStrategyMetadata, SearchCapability, SearchStrategyError } from '../SearchStrategy';
 
 /**
  * Extended query interface for category filtering
@@ -115,9 +115,9 @@ export class CategoryFilterStrategy implements ISearchStrategy {
   }
 
   /**
-   * Main search method implementing category-based search
+   * Main search method implementing category-based search (required by ISearchStrategy)
    */
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
+  async search(query: SearchQuery): Promise<SearchResult[]> {
     const startTime = Date.now();
 
     try {
@@ -139,8 +139,21 @@ export class CategoryFilterStrategy implements ISearchStrategy {
       const duration = Date.now() - startTime;
       this.logger.error(`Category search failed after ${duration}ms:`, error);
 
-      throw new Error(`Category strategy failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new SearchStrategyError(
+        this.name,
+        `Category strategy failed: ${error instanceof Error ? error.message : String(error)}`,
+        'category_search',
+        { query: query.text, duration: `${duration}ms` },
+        error instanceof Error ? error : undefined,
+      );
     }
+  }
+
+  /**
+   * Legacy execute method for backward compatibility
+   */
+  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
+    return this.search(query);
   }
 
   private hasCategoryFilters(query: SearchQuery): boolean {

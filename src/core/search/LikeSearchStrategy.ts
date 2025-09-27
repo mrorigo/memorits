@@ -1,5 +1,5 @@
-import { SearchCapability, SearchStrategyMetadata } from './SearchStrategy';
-import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy } from './types';
+import { SearchCapability, SearchStrategyMetadata, SearchStrategyError } from './SearchStrategy';
+import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy, ILogger, DatabaseQueryResult } from './types';
 import { DatabaseManager } from '../database/DatabaseManager';
 
 /**
@@ -34,9 +34,9 @@ export class LikeSearchStrategy implements ISearchStrategy {
   };
 
   private readonly databaseManager: DatabaseManager;
-  private readonly logger: any;
+  private readonly logger: ILogger;
 
-  constructor(databaseManager: DatabaseManager, logger?: any) {
+  constructor(databaseManager: DatabaseManager, logger?: ILogger) {
     this.databaseManager = databaseManager;
     this.logger = logger || console;
   }
@@ -50,19 +50,18 @@ export class LikeSearchStrategy implements ISearchStrategy {
   }
 
   /**
-   * Main search method implementing LIKE-based search
+   * Main search method implementing LIKE-based search (required by ISearchStrategy)
    */
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
+  async search(query: SearchQuery): Promise<SearchResult[]> {
     const startTime = Date.now();
 
     try {
       // Build LIKE query with proper escaping and wildcards
       const likeQuery = this.buildLikeQuery(query.text);
       const sql = this.buildLikeSQL(query, likeQuery);
-      const parameters = this.getQueryParameters(query);
 
       // Execute the query
-      const results = await this.executeLikeQuery(sql, parameters);
+      const results = await this.executeLikeQuery(sql);
       const processedResults = this.processLikeResults(results, query);
 
       // Log performance metrics
@@ -73,9 +72,50 @@ export class LikeSearchStrategy implements ISearchStrategy {
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`LIKE search failed after ${duration}ms:`, error);
+      this.logger.error(`LIKE search failed after ${duration}ms:`, {
+        error: error instanceof Error ? error.message : String(error),
+        duration: `${duration}ms`
+      });
 
       throw new Error(`LIKE strategy failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Legacy execute method for backward compatibility
+   */
+  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
+    const startTime = Date.now();
+
+    try {
+      // Build LIKE query with proper escaping and wildcards
+      const likeQuery = this.buildLikeQuery(query.text);
+      const sql = this.buildLikeSQL(query, likeQuery);
+
+      // Execute the query
+      const results = await this.executeLikeQuery(sql);
+      const processedResults = this.processLikeResults(results, query);
+
+      // Log performance metrics
+      const duration = Date.now() - startTime;
+      this.logger.info(`LIKE search completed in ${duration}ms, found ${processedResults.length} results`);
+
+      return processedResults;
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`LIKE search failed after ${duration}ms:`, {
+        error: error instanceof Error ? error.message : String(error),
+        duration: `${duration}ms`
+      });
+
+      throw new SearchStrategyError(
+        this.name,
+        `LIKE strategy failed: ${error instanceof Error ? error.message : String(error)}`,
+        'like_search',
+        { query: query.text, duration: `${duration}ms` },
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
@@ -126,47 +166,69 @@ export class LikeSearchStrategy implements ISearchStrategy {
     // Build ORDER BY clause for relevance scoring
     const orderByClause = this.buildOrderByClause(query);
 
-    // Construct the main LIKE query
+    // Build search patterns for embedded queries
+    const patterns: string[] = [];
+    const cleanQuery = likeQuery.trim();
+
+    if (cleanQuery) {
+      // Exact match pattern
+      patterns.push(cleanQuery);
+
+      // Word-based patterns for individual terms
+      const words = cleanQuery.split(/\s+/);
+      for (const word of words) {
+        if (word.length > 2) {
+          patterns.push(word);
+        }
+      }
+
+      // Prefix and suffix patterns for better matching
+      if (cleanQuery.length > 3) {
+        patterns.push(cleanQuery); // Already included above
+      }
+    }
+
+    const patternConditions = this.buildPatternConditions(patterns);
+
+    // Construct the main LIKE query with embedded patterns for simplicity
     const sql = `
             SELECT
-                memory_id,
-                searchable_content,
+                id as memory_id,
+                searchableContent as searchable_content,
                 summary,
-                metadata,
-                memory_type,
-                category_primary,
-                importance_score,
-                created_at,
+                processedData as metadata,
+                retentionType as memory_type,
+                categoryPrimary as category_primary,
+                importanceScore as importance_score,
+                createdAt as created_at,
                 '${this.name}' as search_strategy
             FROM (
                 SELECT
-                    memory_id,
-                    searchable_content,
+                    id,
+                    searchableContent,
                     summary,
-                    metadata,
-                    memory_type,
-                    category_primary,
-                    importance_score,
-                    created_at
+                    processedData,
+                    retentionType,
+                    categoryPrimary,
+                    importanceScore,
+                    createdAt
                 FROM short_term_memory
-                WHERE ${this.buildContentCondition('searchable_content', likeQuery)}
-                   OR ${this.buildContentCondition('summary', likeQuery)}
+                WHERE ${patternConditions}
                    ${whereClause}
 
                 UNION ALL
 
                 SELECT
-                    memory_id,
-                    searchable_content,
+                    id,
+                    searchableContent,
                     summary,
-                    metadata,
-                    memory_type,
-                    category_primary,
-                    importance_score,
-                    created_at
+                    processedData,
+                    retentionType,
+                    categoryPrimary,
+                    importanceScore,
+                    createdAt
                 FROM long_term_memory
-                WHERE ${this.buildContentCondition('searchable_content', likeQuery)}
-                   OR ${this.buildContentCondition('summary', likeQuery)}
+                WHERE ${patternConditions}
                    ${whereClause}
             ) AS combined_memories
             ${orderByClause}
@@ -184,7 +246,7 @@ export class LikeSearchStrategy implements ISearchStrategy {
 
     // Exact phrase match (highest priority)
     if (searchValue.includes('%')) {
-      conditions.push(`${fieldName} LIKE ?`);
+      conditions.push(`${fieldName} LIKE '%${this.escapeSqlString(searchValue)}%'`);
     } else {
       // Word-based matching with different strategies
       const words = searchValue.split(/\s+/);
@@ -192,7 +254,7 @@ export class LikeSearchStrategy implements ISearchStrategy {
       for (let i = 0; i < words.length && i < this.likeConfig.maxWildcardTerms; i++) {
         const word = words[i];
         if (word.length > 0) {
-          conditions.push(`${fieldName} LIKE ?`);
+          conditions.push(`${fieldName} LIKE '%${this.escapeSqlString(word)}%'`);
         }
       }
     }
@@ -201,14 +263,29 @@ export class LikeSearchStrategy implements ISearchStrategy {
   }
 
   /**
+   * Build pattern conditions with embedded patterns (simpler approach)
+   */
+  private buildPatternConditions(patterns: string[]): string {
+    const conditions: string[] = [];
+
+    for (const pattern of patterns) {
+      conditions.push(`searchableContent LIKE '%${this.escapeSqlString(pattern)}%'`);
+      conditions.push(`summary LIKE '%${this.escapeSqlString(pattern)}%'`);
+    }
+
+    return `(${conditions.join(' OR ')})`;
+  }
+
+  /**
    * Build WHERE clause for metadata filtering
    */
   private buildWhereClause(query: SearchQuery): string {
     const conditions: string[] = [];
 
-    // Add namespace filtering if available
-    if ((this.databaseManager as any).currentNamespace) {
-      conditions.push(`json_extract(metadata, '$.namespace') = '${(this.databaseManager as any).currentNamespace}'`);
+    // Add namespace filtering - use the database manager's namespace if available
+    const dbManager = this.databaseManager as any;
+    if (dbManager && dbManager.namespace) {
+      conditions.push(`json_extract(metadata, '$.namespace') = '${dbManager.namespace}'`);
     }
 
     // Add filters from query if provided
@@ -236,73 +313,28 @@ export class LikeSearchStrategy implements ISearchStrategy {
    * Build ORDER BY clause for relevance scoring
    */
   private buildOrderByClause(query: SearchQuery): string {
-    let orderBy = 'ORDER BY relevance_score DESC';
+    let orderBy = 'ORDER BY importance_score DESC, created_at DESC';
 
     // Add secondary sorting criteria
     if (query.sortBy) {
       const direction = query.sortBy.direction.toUpperCase();
-      orderBy += `, json_extract(metadata, '$.${query.sortBy.field}') ${direction}`;
-    } else {
-      // Default secondary sort by importance and recency
-      orderBy += ', importance_score DESC, created_at DESC';
+      orderBy += `, ${query.sortBy.field} ${direction}`;
     }
 
     return orderBy;
   }
 
-  /**
-   * Get query parameters for safe execution
-   */
-  private getQueryParameters(query: SearchQuery): unknown[] {
-    const likeQuery = this.buildLikeQuery(query.text);
-    const parameters: unknown[] = [];
 
-    // Build parameters based on search patterns
-    const searchPatterns = this.buildSearchPatterns(likeQuery);
-
-    // Add all search patterns as parameters
-    parameters.push(...searchPatterns);
-
-    return parameters;
-  }
-
-  /**
-   * Build search patterns for different matching strategies
-   */
-  private buildSearchPatterns(query: string): string[] {
-    const patterns: string[] = [];
-    const cleanQuery = query.trim();
-
-    if (!cleanQuery) return patterns;
-
-    // Exact match pattern
-    patterns.push(`%${cleanQuery}%`);
-
-    // Word-based patterns for individual terms
-    const words = cleanQuery.split(/\s+/);
-    for (const word of words) {
-      if (word.length > 2) {
-        patterns.push(`%${word}%`);
-      }
-    }
-
-    // Prefix and suffix patterns for better matching
-    if (cleanQuery.length > 3) {
-      patterns.push(`${cleanQuery}%`); // Prefix match
-      patterns.push(`%${cleanQuery}`); // Suffix match
-    }
-
-    return patterns.slice(0, this.likeConfig.maxWildcardTerms);
-  }
 
   /**
    * Execute LIKE query with comprehensive error handling
    */
-  private async executeLikeQuery(sql: string, parameters: unknown[]): Promise<unknown[]> {
-    const db = (this.databaseManager as any).prisma || this.databaseManager;
+  private async executeLikeQuery(sql: string): Promise<unknown[]> {
+    const dbManager = this.databaseManager as any;
+    const db = dbManager?.prisma || this.databaseManager;
 
-    // Use parameterized query to prevent SQL injection
-    return await db.$queryRawUnsafe(sql, ...parameters);
+    // Execute query with embedded patterns
+    return await db.$queryRawUnsafe(sql);
   }
 
   /**
@@ -312,7 +344,7 @@ export class LikeSearchStrategy implements ISearchStrategy {
     const searchResults: SearchResult[] = [];
     const likeQuery = this.buildLikeQuery(query.text);
 
-    for (const row of results as any[]) {
+    for (const row of results as DatabaseQueryResult[]) {
       try {
         const metadata = JSON.parse(row.metadata || '{}');
 
@@ -326,7 +358,7 @@ export class LikeSearchStrategy implements ISearchStrategy {
           metadata: {
             summary: row.summary || '',
             category: row.category_primary,
-            importanceScore: parseFloat(row.importance_score) || 0.5,
+            importanceScore: row.importance_score || 0.5,
             memoryType: row.memory_type,
             createdAt: new Date(row.created_at),
             ...metadata,
@@ -351,7 +383,7 @@ export class LikeSearchStrategy implements ISearchStrategy {
   /**
    * Calculate relevance score based on match quality and position
    */
-  private calculateRelevanceScore(row: any, searchQuery: string, _query: SearchQuery): number {
+  private calculateRelevanceScore(row: DatabaseQueryResult, searchQuery: string, _query: SearchQuery): number {
     let score = 0.3; // Base score for LIKE matches
 
     const content = (row.searchable_content || '').toLowerCase();
@@ -379,7 +411,7 @@ export class LikeSearchStrategy implements ISearchStrategy {
     }
 
     // Boost based on importance score
-    const importance = parseFloat(row.importance_score) || 0.5;
+    const importance = row.importance_score || 0.5;
     score *= (0.5 + importance);
 
     // Boost based on memory type (short_term might be more relevant)

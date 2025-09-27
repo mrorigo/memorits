@@ -65,6 +65,7 @@ export interface DatabaseWhereClause {
 export class DatabaseManager {
   private prisma: PrismaClient;
   private ftsEnabled: boolean = false;
+  private initializationInProgress: boolean = false;
   private searchService?: SearchService;
 
   constructor(databaseUrl: string) {
@@ -73,7 +74,8 @@ export class DatabaseManager {
       datasourceUrl: databaseUrl,
       // Note: FTS5 is available in system SQLite, will be verified at runtime
     });
-    this.initializeFTSSupport();
+    // Don't initialize FTS support in constructor to avoid schema conflicts
+    // It will be initialized lazily when first needed
   }
 
   getPrismaClient(): PrismaClient {
@@ -90,9 +92,18 @@ export class DatabaseManager {
     return this.searchService;
   }
 
-  private async initializeFTSSupport(): Promise<void> {
+  private async ensureFTSSupport(): Promise<void> {
+    if (this.ftsEnabled || this.initializationInProgress) {
+      return;
+    }
+
+    this.initializationInProgress = true;
     try {
       await initializeSearchSchema(this.prisma);
+
+      // Now create the triggers after the main tables exist
+      await this.createFTSTriggers();
+
       this.ftsEnabled = true;
       logInfo('FTS5 search support initialized successfully', { component: 'DatabaseManager' });
     } catch (error) {
@@ -101,6 +112,8 @@ export class DatabaseManager {
         error: error instanceof Error ? error.message : String(error),
       });
       this.ftsEnabled = false;
+    } finally {
+      this.initializationInProgress = false;
     }
   }
 
@@ -232,6 +245,8 @@ export class DatabaseManager {
    */
   private async searchMemoriesFTS(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
     try {
+      // Ensure FTS support is initialized before using it
+      await this.ensureFTSSupport();
       const limit = options.limit || 10;
       const namespace = options.namespace || 'default';
 
@@ -434,6 +449,8 @@ export class DatabaseManager {
     stats: { tables: number; triggers: number; indexes: number };
   }> {
     try {
+      // Ensure FTS support is initialized before checking status
+      await this.ensureFTSSupport();
       const verification = await verifyFTSSchema(this.prisma);
       return {
         enabled: this.ftsEnabled,
@@ -452,8 +469,108 @@ export class DatabaseManager {
   }
 
   /**
-   * Enhanced error handling for FTS operations
-   */
+    * Create FTS triggers after main tables exist
+    */
+  private async createFTSTriggers(): Promise<void> {
+    try {
+      logInfo('Creating FTS triggers after main tables exist...', { component: 'DatabaseManager' });
+
+      // Create triggers for synchronization with long_term_memory
+      await this.prisma.$executeRaw`
+        CREATE TRIGGER IF NOT EXISTS memory_fts_insert_long_term
+        AFTER INSERT ON long_term_memory
+        BEGIN
+          INSERT INTO memory_fts(rowid, content, metadata)
+          VALUES (new.id, new.searchableContent, json_object(
+            'memory_type', new.retentionType,
+            'category_primary', new.categoryPrimary,
+            'importance_score', new.importanceScore,
+            'classification', new.classification,
+            'created_at', new.extractionTimestamp,
+            'namespace', new.namespace
+          ));
+        END;
+      `;
+
+      await this.prisma.$executeRaw`
+        CREATE TRIGGER IF NOT EXISTS memory_fts_delete_long_term
+        AFTER DELETE ON long_term_memory
+        BEGIN
+          DELETE FROM memory_fts WHERE rowid = old.id;
+        END;
+      `;
+
+      await this.prisma.$executeRaw`
+        CREATE TRIGGER IF NOT EXISTS memory_fts_update_long_term
+        AFTER UPDATE ON long_term_memory
+        BEGIN
+          DELETE FROM memory_fts WHERE rowid = old.id;
+          INSERT INTO memory_fts(rowid, content, metadata)
+          VALUES (new.id, new.searchableContent, json_object(
+            'memory_type', new.retentionType,
+            'category_primary', new.categoryPrimary,
+            'importance_score', new.importanceScore,
+            'classification', new.classification,
+            'created_at', new.extractionTimestamp,
+            'namespace', new.namespace
+          ));
+        END;
+      `;
+
+      // Create triggers for synchronization with short_term_memory
+      await this.prisma.$executeRaw`
+        CREATE TRIGGER IF NOT EXISTS memory_fts_insert_short_term
+        AFTER INSERT ON short_term_memory
+        BEGIN
+          INSERT INTO memory_fts(rowid, content, metadata)
+          VALUES (new.id, new.searchableContent, json_object(
+            'memory_type', new.retentionType,
+            'category_primary', new.categoryPrimary,
+            'importance_score', new.importanceScore,
+            'created_at', new.createdAt,
+            'namespace', new.namespace
+          ));
+        END;
+      `;
+
+      await this.prisma.$executeRaw`
+        CREATE TRIGGER IF NOT EXISTS memory_fts_delete_short_term
+        AFTER DELETE ON short_term_memory
+        BEGIN
+          DELETE FROM memory_fts WHERE rowid = old.id;
+        END;
+      `;
+
+      await this.prisma.$executeRaw`
+        CREATE TRIGGER IF NOT EXISTS memory_fts_update_short_term
+        AFTER UPDATE ON short_term_memory
+        BEGIN
+          DELETE FROM memory_fts WHERE rowid = old.id;
+          INSERT INTO memory_fts(rowid, content, metadata)
+          VALUES (new.id, new.searchableContent, json_object(
+            'memory_type', new.retentionType,
+            'category_primary', new.categoryPrimary,
+            'importance_score', new.importanceScore,
+            'created_at', new.createdAt,
+            'namespace', new.namespace
+          ));
+        END;
+      `;
+
+      logInfo('FTS triggers created successfully', { component: 'DatabaseManager' });
+
+    } catch (error) {
+      logError('Failed to create FTS triggers', {
+        component: 'DatabaseManager',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+    * Enhanced error handling for FTS operations
+    */
   private handleFTSError(operation: string, error: unknown, context?: Record<string, unknown>): Error {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const enhancedError = new Error(`FTS operation '${operation}' failed: ${errorMessage}`);

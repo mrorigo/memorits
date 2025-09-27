@@ -1,5 +1,5 @@
-import { SearchCapability, SearchStrategyMetadata, BaseSearchStrategy, SearchQuery, SearchResult } from './SearchStrategy';
-import { SearchStrategy } from './types';
+import { SearchCapability, SearchStrategyMetadata, BaseSearchStrategy, SearchQuery, SearchResult, SearchStrategyConfig } from './SearchStrategy';
+import { SearchStrategy, ILogger, DatabaseQueryResult } from './types';
 import { DatabaseManager } from '../database/DatabaseManager';
 
 /**
@@ -65,7 +65,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     minScore: 0.1,
     maxScore: 1.0,
     recentBoostWindowMs: 60 * 60 * 1000, // 1 hour
-    recentBoostFactor: 1.5
+    recentBoostFactor: 1.5,
   };
 
   // Freshness boosting configuration
@@ -73,17 +73,17 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     lastHourBoost: 2.0,
     lastDayBoost: 1.5,
     lastWeekBoost: 1.2,
-    baseBoost: 1.1
+    baseBoost: 1.1,
   };
 
   // Temporal filtering configuration
   private readonly temporalFilter: TemporalFilterConfig = {
     defaultLookbackMs: 30 * 24 * 60 * 60 * 1000, // 30 days
     maxLookbackMs: 365 * 24 * 60 * 60 * 1000, // 1 year
-    minRangeMs: 60 * 1000 // 1 minute
+    minRangeMs: 60 * 1000, // 1 minute
   };
 
-  constructor(config: any, databaseManager: DatabaseManager, logger?: any) {
+  constructor(config: SearchStrategyConfig, databaseManager: DatabaseManager, logger?: ILogger) {
     super(config, databaseManager, logger);
   }
 
@@ -92,8 +92,8 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
    */
   canHandle(query: SearchQuery): boolean {
     // Can handle queries that benefit from time-based relevance
-    // This includes empty queries, queries with temporal filters, or queries with time-sensitive content
-    return query.text.length > 0 || this.hasTemporalFilters(query);
+    // This includes empty queries (for recent memories), queries with temporal filters, or queries with time-sensitive content
+    return query.text.length === 0 || this.hasTemporalFilters(query);
   }
 
   /**
@@ -138,10 +138,9 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
       const duration = Date.now() - startTime;
       this.logSearchOperation('temporal_search_failed', duration, 0);
 
-      throw this.handleSearchError(error, {
-        strategy: this.name,
+      throw this.handleSearchError(error, 'temporal_search', {
         query: query.text,
-        duration: `${duration}ms`
+        duration: `${duration}ms`,
       });
     }
   }
@@ -162,28 +161,28 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     // Build the main temporal query
     const sql = `
       SELECT
-        memory_id,
-        searchable_content,
+        id as memory_id,
+        searchableContent as searchable_content,
         summary,
-        metadata,
-        memory_type,
-        category_primary,
-        importance_score,
-        created_at,
+        processedData as metadata,
+        retentionType as memory_type,
+        categoryPrimary as category_primary,
+        importanceScore as importance_score,
+        createdAt as created_at,
         '${this.name}' as search_strategy,
         -- Calculate time-based relevance score
-        ${this.buildTimeRelevanceCalculation('created_at')} as time_relevance_score
+        ${this.buildTimeRelevanceCalculation('createdAt')} as time_relevance_score
       FROM (
         -- Query short_term_memory
         SELECT
-          memory_id,
-          searchable_content,
+          id,
+          searchableContent,
           summary,
-          metadata,
-          memory_type,
-          category_primary,
-          importance_score,
-          created_at
+          processedData,
+          retentionType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
         FROM short_term_memory
         WHERE 1=1
         ${whereClause}
@@ -192,14 +191,14 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
 
         -- Query long_term_memory
         SELECT
-          memory_id,
-          searchable_content,
+          id,
+          searchableContent,
           summary,
-          metadata,
-          memory_type,
-          category_primary,
-          importance_score,
-          created_at
+          processedData,
+          retentionType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
         FROM long_term_memory
         WHERE 1=1
         ${whereClause}
@@ -215,17 +214,20 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
    * Build time-based relevance calculation SQL
    */
   private buildTimeRelevanceCalculation(createdAtField: string): string {
+    // Use a simpler time-based calculation that doesn't require EXP function
     const now = new Date().toISOString();
     const halfLifeMs = this.timeDecayConfig.halfLifeMs;
 
     return `
-      -- Exponential time decay: score = exp(-ln(2) * age_ms / half_life_ms)
+      -- Simplified time decay: score decreases linearly with age
       CASE
         WHEN CAST(strftime('%s', '${now}') AS INTEGER) - CAST(strftime('%s', ${createdAtField}) AS INTEGER) < 0
         THEN ${this.timeDecayConfig.maxScore} -- Future dates (shouldn't happen)
-        ELSE EXP(-0.693147 * (
-          CAST(strftime('%s', '${now}') AS INTEGER) - CAST(strftime('%s', ${createdAtField}) AS INTEGER)
-        ) * 1000 / ${halfLifeMs})
+        ELSE MAX(${this.timeDecayConfig.minScore},
+          ${this.timeDecayConfig.maxScore} - (
+            (CAST(strftime('%s', '${now}') AS INTEGER) - CAST(strftime('%s', ${createdAtField}) AS INTEGER)) * 1000.0 / ${halfLifeMs}
+          ) * 2
+        )
       END
     `;
   }
@@ -236,9 +238,10 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
   private buildTemporalWhereClause(query: SearchQuery): string {
     const conditions: string[] = [];
 
-    // Add namespace filtering if available
-    if ((this.databaseManager as any).currentNamespace) {
-      conditions.push(`json_extract(metadata, '$.namespace') = '${(this.databaseManager as any).currentNamespace}'`);
+    // Add namespace filtering - use the database manager's namespace if available
+    const dbManager = this.databaseManager as any;
+    if (dbManager && dbManager.namespace) {
+      conditions.push(`json_extract(metadata, '$.namespace') = '${dbManager.namespace}'`);
     }
 
     // Add text search conditions if query has text
@@ -266,7 +269,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     for (const term of terms) {
       const escapedTerm = this.escapeSqlString(term);
       conditions.push(
-        `(searchable_content LIKE '%${escapedTerm}%' OR summary LIKE '%${escapedTerm}%')`
+        `(searchable_content LIKE '%${escapedTerm}%' OR summary LIKE '%${escapedTerm}%')`,
       );
     }
 
@@ -354,7 +357,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
       day: 1000 * 60 * 60 * 24,
       week: 1000 * 60 * 60 * 24 * 7,
       month: 1000 * 60 * 60 * 24 * 30, // Approximate
-      year: 1000 * 60 * 60 * 24 * 365 // Approximate
+      year: 1000 * 60 * 60 * 24 * 365, // Approximate
     };
 
     const msAgo = amount * multipliers[unit];
@@ -415,12 +418,15 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
    * Execute temporal query with error handling
    */
   private async executeTemporalQuery(sql: string, parameters: unknown[]): Promise<unknown[]> {
-    const db = (this.databaseManager as any).prisma || this.databaseManager;
+    const dbManager = this.databaseManager;
+    const db = dbManager.getPrismaClient();
 
     try {
       return await db.$queryRawUnsafe(sql, ...parameters);
     } catch (error) {
-      this.logger.error('Temporal query execution failed:', error);
+      this.logger.error('Temporal query execution failed:', {
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw new Error(`Temporal query failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -432,14 +438,14 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     const searchResults: SearchResult[] = [];
     const queryTime = new Date();
 
-    for (const row of results as any[]) {
+    for (const row of results as DatabaseQueryResult[]) {
       try {
         const createdAt = new Date(row.created_at);
         const metadata = JSON.parse(row.metadata || '{}');
 
         // Calculate time-based relevance score
         const timeRelevance = this.calculateTimeRelevance(createdAt, queryTime);
-        const rawScore = parseFloat(row.time_relevance_score) || timeRelevance;
+        const rawScore = parseFloat((row as any).time_relevance_score) || timeRelevance;
 
         // Apply freshness boost
         const freshnessBoost = this.calculateFreshnessBoost(createdAt, queryTime);
@@ -452,14 +458,14 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
           {
             summary: row.summary || '',
             category: row.category_primary,
-            importanceScore: parseFloat(row.importance_score) || 0.5,
+            importanceScore: row.importance_score || 0.5,
             memoryType: row.memory_type,
             createdAt: createdAt,
             timeRelevanceScore: timeRelevance,
             freshnessBoost: freshnessBoost,
-            ...metadata
+            ...metadata,
           },
-          boostedScore
+          boostedScore,
         );
 
         searchResults.push(searchResult);
@@ -467,7 +473,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
       } catch (error) {
         this.logger.warn('Error processing temporal result row:', {
           rowId: row.memory_id,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
         continue;
       }
@@ -489,7 +495,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     // Clamp to configured range
     return Math.max(
       this.timeDecayConfig.minScore,
-      Math.min(this.timeDecayConfig.maxScore, timeRelevance)
+      Math.min(this.timeDecayConfig.maxScore, timeRelevance),
     );
   }
 
@@ -547,7 +553,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
 
     // Validate freshness boost configuration
     if (this.freshnessBoost.lastHourBoost < 1 || this.freshnessBoost.lastDayBoost < 1 ||
-        this.freshnessBoost.lastWeekBoost < 1 || this.freshnessBoost.baseBoost < 1) {
+      this.freshnessBoost.lastWeekBoost < 1 || this.freshnessBoost.baseBoost < 1) {
       return false;
     }
 
@@ -584,8 +590,8 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
             minScore: { type: 'number', minimum: 0, maximum: 1, default: 0.1 },
             maxScore: { type: 'number', minimum: 0, maximum: 1, default: 1.0 },
             recentBoostWindowMs: { type: 'number', minimum: 1000, default: 3600000 }, // 1 hour
-            recentBoostFactor: { type: 'number', minimum: 1, default: 1.5 }
-          }
+            recentBoostFactor: { type: 'number', minimum: 1, default: 1.5 },
+          },
         },
 
         // Freshness boosting configuration
@@ -595,8 +601,8 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
             lastHourBoost: { type: 'number', minimum: 1, default: 2.0 },
             lastDayBoost: { type: 'number', minimum: 1, default: 1.5 },
             lastWeekBoost: { type: 'number', minimum: 1, default: 1.2 },
-            baseBoost: { type: 'number', minimum: 1, default: 1.1 }
-          }
+            baseBoost: { type: 'number', minimum: 1, default: 1.1 },
+          },
         },
 
         // Temporal filtering configuration
@@ -605,11 +611,11 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
           properties: {
             defaultLookbackMs: { type: 'number', minimum: 1000, default: 2592000000 }, // 30 days
             maxLookbackMs: { type: 'number', minimum: 1000, default: 31536000000 }, // 1 year
-            minRangeMs: { type: 'number', minimum: 1000, default: 60000 } // 1 minute
-          }
-        }
+            minRangeMs: { type: 'number', minimum: 1000, default: 60000 }, // 1 minute
+          },
+        },
       },
-      required: ['enabled', 'priority', 'timeout', 'maxResults', 'minScore']
+      required: ['enabled', 'priority', 'timeout', 'maxResults', 'minScore'],
     };
   }
 
@@ -620,7 +626,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     return {
       averageResponseTime: 80,
       throughput: 800,
-      memoryUsage: 8
+      memoryUsage: 8,
     };
   }
 }
