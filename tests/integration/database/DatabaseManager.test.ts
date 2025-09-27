@@ -22,6 +22,9 @@ describe('DatabaseManager', () => {
     });
 
     dbManager = new DatabaseManager(`file:${dbPath}`);
+
+    // Ensure FTS5 is properly initialized for this test
+    await dbManager.getFTSStatus();
   });
 
   afterEach(async () => {

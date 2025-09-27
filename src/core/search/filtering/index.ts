@@ -34,6 +34,16 @@ export type {
   ValidationWarning
 } from './types';
 
+// Strategy exports
+export { MetadataFilterStrategy } from './MetadataFilterStrategy';
+export { TemporalFilterStrategy } from './TemporalFilterStrategy';
+
+// Temporal processing exports
+export { DateTimeNormalizer } from './temporal/DateTimeNormalizer';
+export { TimeRangeProcessor } from './temporal/TimeRangeProcessor';
+export { TemporalPatternMatcher } from './temporal/TemporalPatternMatcher';
+export { TemporalAggregation } from './temporal/TemporalAggregation';
+
 // Convenience re-exports for common use cases
 export { FilterType as FilterNodeType } from './types';
 export { FilterOperator as FilterOp } from './types';

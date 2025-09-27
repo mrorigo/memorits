@@ -9,23 +9,60 @@ export async function initializeSearchSchema(prisma: PrismaClient): Promise<bool
     logInfo('Initializing FTS5 search schema...', { component: 'DatabaseInit' });
 
     // Check if FTS5 is available first
-    try {
+   try {
+     await prisma.$executeRaw`
+       CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
+       USING fts5(
+         content,        -- Full text content
+         metadata,       -- JSON metadata for filtering
+         tokenize = 'porter ascii'  -- Tokenization with stemming
+       );
+     `;
+     logInfo('Created FTS5 virtual table', { component: 'DatabaseInit' });
+
+     // Verify the table was actually created and is functional
+     const tableCheck = await prisma.$queryRaw`
+       SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts';
+     `;
+
+     // Test that FTS5 functionality works
+     try {
        await prisma.$executeRaw`
-         CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
-         USING fts5(
-           content,        -- Full text content
-           metadata,       -- JSON metadata for filtering
-           tokenize = 'porter ascii'  -- Tokenization with stemming
-         );
+         INSERT INTO memory_fts(rowid, content, metadata) VALUES (1, 'test content', '{}');
        `;
-       logInfo('Created FTS5 virtual table', { component: 'DatabaseInit' });
-     } catch (error) {
-       logError('FTS5 not available in this SQLite build', {
+       await prisma.$executeRaw`DELETE FROM memory_fts WHERE rowid = 1;`;
+       logInfo('FTS5 table created and tested successfully', { component: 'DatabaseInit' });
+     } catch (testError) {
+       logError('FTS5 table created but functionality test failed', {
          component: 'DatabaseInit',
-         error: error instanceof Error ? error.message : String(error),
+         error: testError instanceof Error ? testError.message : String(testError),
        });
-       return false;
+       // Don't fail completely, but log the issue
      }
+
+     if (!tableCheck) {
+       throw new Error('FTS5 table was not found after creation');
+     }
+   } catch (error) {
+     logError('FTS5 initialization failed with detailed error', {
+       component: 'DatabaseInit',
+       error: error instanceof Error ? error.message : String(error),
+       stack: error instanceof Error ? error.stack : undefined,
+     });
+
+     // Instead of just returning false, let's provide more guidance
+     if (error instanceof Error && error.message.includes('no such module: fts5')) {
+       logError('FTS5 module not available - SQLite was not compiled with FTS5 support', {
+         component: 'DatabaseInit',
+       });
+     } else if (error instanceof Error && error.message.includes('syntax error')) {
+       logError('FTS5 syntax error - check SQLite version and FTS5 support', {
+         component: 'DatabaseInit',
+       });
+     }
+
+     return false;
+   }
 
      // Create indexes for performance optimization (FTS5 virtual tables cannot be indexed)
      // We create indexes on the main tables for better query performance
@@ -152,7 +189,7 @@ export async function verifyFTSSchema(prisma: PrismaClient): Promise<{
 
   try {
     // Check if FTS table exists
-    const ftsTableResult = await prisma.$executeRaw`
+    const ftsTableResult = await prisma.$queryRaw`
       SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts';
     `;
 
@@ -173,11 +210,11 @@ export async function verifyFTSSchema(prisma: PrismaClient): Promise<{
     ];
 
     for (const trigger of triggers) {
-      const triggerResult = await prisma.$executeRaw`
+      const triggerResult = await prisma.$queryRaw`
         SELECT name FROM sqlite_master WHERE type='trigger' AND name=${trigger};
       `;
 
-      if (!triggerResult) {
+      if (!triggerResult || (Array.isArray(triggerResult) && triggerResult.length === 0)) {
         issues.push(`Trigger ${trigger} does not exist`);
       } else {
         stats.triggers++;
@@ -193,11 +230,11 @@ export async function verifyFTSSchema(prisma: PrismaClient): Promise<{
     ];
 
     for (const index of indexes) {
-      const indexResult = await prisma.$executeRaw`
+      const indexResult = await prisma.$queryRaw`
         SELECT name FROM sqlite_master WHERE type='index' AND name=${index};
       `;
 
-      if (!indexResult) {
+      if (!indexResult || (Array.isArray(indexResult) && indexResult.length === 0)) {
         issues.push(`Index ${index} does not exist`);
       } else {
         stats.indexes++;

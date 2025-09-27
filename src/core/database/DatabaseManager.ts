@@ -99,13 +99,29 @@ export class DatabaseManager {
 
     this.initializationInProgress = true;
     try {
-      await initializeSearchSchema(this.prisma);
+      // Initialize the FTS5 schema (creates virtual table)
+      const schemaInitialized = await initializeSearchSchema(this.prisma);
+
+      if (!schemaInitialized) {
+        throw new Error('Failed to initialize FTS5 schema');
+      }
 
       // Now create the triggers after the main tables exist
       await this.createFTSTriggers();
 
+      // Verify the FTS table and triggers were created successfully
+      const verification = await verifyFTSSchema(this.prisma);
+      if (!verification.isValid) {
+        throw new Error(`FTS5 verification failed: ${verification.issues.join(', ')}`);
+      }
+
       this.ftsEnabled = true;
-      logInfo('FTS5 search support initialized successfully', { component: 'DatabaseManager' });
+      logInfo('FTS5 search support initialized successfully', {
+        component: 'DatabaseManager',
+        tables: verification.stats.tables,
+        triggers: verification.stats.triggers,
+        indexes: verification.stats.indexes
+      });
     } catch (error) {
       logError('Failed to initialize FTS5 search support, falling back to basic search', {
         component: 'DatabaseManager',

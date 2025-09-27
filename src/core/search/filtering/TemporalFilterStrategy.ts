@@ -281,28 +281,28 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     // Build the main temporal query
     const sql = `
       SELECT
-        memory_id,
-        searchable_content,
+        id as memory_id,
+        searchableContent as searchable_content,
         summary,
         metadata,
-        memory_type,
-        category_primary,
-        importance_score,
-        created_at,
+        memoryType as memory_type,
+        categoryPrimary as category_primary,
+        importanceScore as importance_score,
+        createdAt as created_at,
         '${this.name}' as search_strategy,
         -- Calculate temporal relevance score
         ${this.buildTemporalRelevanceCalculation('created_at', temporalQuery)} as temporal_relevance_score
       FROM (
         -- Query short_term_memory with temporal filtering
         SELECT
-          memory_id,
-          searchable_content,
+          id,
+          searchableContent,
           summary,
           metadata,
-          memory_type,
-          category_primary,
-          importance_score,
-          created_at
+          memoryType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
         FROM short_term_memory
         WHERE ${whereClause}
 
@@ -310,14 +310,14 @@ export class TemporalFilterStrategy implements ISearchStrategy {
 
         -- Query long_term_memory with temporal filtering
         SELECT
-          memory_id,
-          searchable_content,
+          id,
+          searchableContent,
           summary,
           metadata,
-          memory_type,
-          category_primary,
-          importance_score,
-          created_at
+          memoryType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
         FROM long_term_memory
         WHERE ${whereClause}
       ) AS temporal_memories

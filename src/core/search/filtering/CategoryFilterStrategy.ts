@@ -200,39 +200,39 @@ export class CategoryFilterStrategy implements ISearchStrategy {
     // Construct the main category query with FTS support
     const sql = `
       SELECT
-        memory_id,
-        searchable_content,
+        id as memory_id,
+        searchableContent as searchable_content,
         summary,
-        metadata,
-        memory_type,
-        category_primary,
-        importance_score,
-        created_at,
+        processedData as metadata,
+        retentionType as memory_type,
+        categoryPrimary as category_primary,
+        importanceScore as importance_score,
+        createdAt as created_at,
         '${this.name}' as search_strategy
       FROM (
         SELECT
-          memory_id,
-          searchable_content,
+          id,
+          searchableContent,
           summary,
-          metadata,
-          memory_type,
-          category_primary,
-          importance_score,
-          created_at
+          processedData,
+          retentionType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
         FROM short_term_memory
         WHERE ${whereClause}
 
         UNION ALL
 
         SELECT
-          memory_id,
-          searchable_content,
+          id,
+          searchableContent,
           summary,
-          metadata,
-          memory_type,
-          category_primary,
-          importance_score,
-          created_at
+          processedData,
+          retentionType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
         FROM long_term_memory
         WHERE ${whereClause}
       ) AS combined_memories
@@ -249,7 +249,7 @@ export class CategoryFilterStrategy implements ISearchStrategy {
     // Add FTS search condition using the categoryQuery
     if (categoryQuery && categoryQuery.trim()) {
       const ftsQuery = this.buildFTSQuery(categoryQuery);
-      conditions.push(`(searchable_content MATCH '${ftsQuery}' OR summary MATCH '${ftsQuery}')`);
+      conditions.push(`(searchableContent MATCH '${ftsQuery}' OR summary MATCH '${ftsQuery}')`);
     }
 
     // Add category-specific conditions
@@ -261,7 +261,7 @@ export class CategoryFilterStrategy implements ISearchStrategy {
     // Add hierarchy-based conditions
     if (query.categoryHierarchy && query.categoryHierarchy.length > 0) {
       const hierarchyConditions = query.categoryHierarchy.map((hierarchyCat: string) => {
-        return `json_extract(metadata, '$.category_primary') LIKE '${hierarchyCat.replace(/'/g, "''")}%'`;
+        return `json_extract(processedData, '$.category_primary') LIKE '${hierarchyCat.replace(/'/g, "''")}%'`;
       });
       conditions.push(`(${hierarchyConditions.join(' OR ')})`);
     }
@@ -271,9 +271,6 @@ export class CategoryFilterStrategy implements ISearchStrategy {
 
   private buildCategoryOrderByClause(query: CategoryFilterQuery): string {
     let orderBy = 'ORDER BY ';
-
-    // Primary sort by category relevance
-    orderBy += 'category_relevance DESC, ';
 
     // Add category-specific scoring
     orderBy += `

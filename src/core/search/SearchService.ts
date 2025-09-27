@@ -36,11 +36,43 @@ class SQLiteFTSStrategy implements ISearchStrategy {
 
   constructor(dbManager: DatabaseManager) {
     this.databaseManager = dbManager;
+
+    // Ensure FTS support is initialized for SQLite FTS strategy
+    this.initializeFTSSupport();
+  }
+
+  private async initializeFTSSupport(): Promise<void> {
+    try {
+      // Check if FTS is already enabled
+      if (this.databaseManager.isFTSEnabled()) {
+        return;
+      }
+
+      // Try to get FTS status which will trigger initialization
+      const ftsStatus = await this.databaseManager.getFTSStatus();
+
+      if (!ftsStatus.enabled) {
+        console.warn('FTS5 not available in this SQLite build, FTS strategy will be disabled');
+      }
+    } catch (error) {
+      console.warn('FTS5 initialization failed, FTS strategy will not be available:', error);
+    }
   }
 
   canHandle(query: SearchQuery): boolean {
     // Can handle text-based queries with optional metadata filters
-    return Boolean(query.text && query.text.trim().length > 0);
+    // But only if FTS5 is actually available
+    if (!query.text || query.text.trim().length === 0) {
+      return false;
+    }
+
+    // Check if FTS5 is available by checking if the table exists
+    try {
+      // This is a simple check - if FTS5 initialization failed, don't use this strategy
+      return this.databaseManager.isFTSEnabled();
+    } catch {
+      return false;
+    }
   }
 
   async search(query: SearchQuery): Promise<SearchResult[]> {
@@ -644,8 +676,11 @@ export class SearchService implements ISearchService {
       return [SearchStrategy.RECENT];
     }
 
-    // Add FTS5 as primary strategy for keyword searches
-    strategies.push(SearchStrategy.FTS5);
+    // Add FTS5 as primary strategy for keyword searches (only if FTS5 is available)
+    const fts5Strategy = this.strategies.get(SearchStrategy.FTS5);
+    if (fts5Strategy && fts5Strategy.canHandle(query)) {
+      strategies.push(SearchStrategy.FTS5);
+    }
 
     // Add category filter strategy for category-based queries
     const queryFilters = query.filters || {};

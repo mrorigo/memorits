@@ -131,40 +131,48 @@ export class TemporalAggregation {
   }
 
   /**
-   * Generate time buckets for aggregation
-   */
-  private static generateTimeBuckets(
-    period: TemporalAggregationPeriod,
-    results: Array<{ timestamp: Date }>,
-    maxBuckets: number
-  ): Array<{ start: Date; end: Date; label: string }> {
-    if (results.length === 0) {
-      return [];
-    }
+    * Generate time buckets for aggregation
+    */
+   private static generateTimeBuckets(
+     period: TemporalAggregationPeriod,
+     results: Array<{ timestamp: Date }>,
+     maxBuckets: number
+   ): Array<{ start: Date; end: Date; label: string }> {
+     if (results.length === 0) {
+       return [];
+     }
 
-    const periodMs = this.PERIOD_MULTIPLIERS[period.type];
-    const earliestTime = results[0].timestamp;
-    const latestTime = results[results.length - 1].timestamp;
+     const periodMs = this.PERIOD_MULTIPLIERS[period.type];
+     const sortedResults = [...results].sort(
+       (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+     );
 
-    const totalPeriods = Math.ceil((latestTime.getTime() - earliestTime.getTime()) / periodMs);
-    const actualBuckets = Math.min(maxBuckets, Math.max(1, totalPeriods));
+     const earliestTime = sortedResults[0].timestamp;
+     const latestTime = sortedResults[sortedResults.length - 1].timestamp;
 
-    const buckets: Array<{ start: Date; end: Date; label: string }> = [];
-    const customStart = period.startFrom || earliestTime;
+     // Create buckets that ensure all results are covered
+     const buckets: Array<{ start: Date; end: Date; label: string }> = [];
+     const customStart = period.startFrom || earliestTime;
 
-    for (let i = 0; i < actualBuckets; i++) {
-      const start = new Date(customStart.getTime() + (i * periodMs));
-      const end = new Date(start.getTime() + periodMs);
+     // Calculate the total number of periods needed
+     const totalTimeSpan = latestTime.getTime() - customStart.getTime();
+     const totalPeriods = Math.ceil(totalTimeSpan / periodMs) + 1; // Add 1 to ensure coverage
+     const actualBuckets = Math.min(maxBuckets, Math.max(1, totalPeriods));
 
-      buckets.push({
-        start,
-        end,
-        label: this.formatBucketLabel(start, period.type, i)
-      });
-    }
+     // Create buckets based on the period type and custom start
+     for (let i = 0; i < actualBuckets; i++) {
+       const start = new Date(customStart.getTime() + (i * periodMs));
+       const end = new Date(start.getTime() + periodMs);
 
-    return buckets;
-  }
+       buckets.push({
+         start,
+         end,
+         label: this.formatBucketLabel(start, period.type, i)
+       });
+     }
+
+     return buckets;
+   }
 
   /**
    * Populate buckets with result data
@@ -391,24 +399,41 @@ export class TemporalAggregation {
     const timeSpan = sortedResults[sortedResults.length - 1].timestamp.getTime() -
                      sortedResults[0].timestamp.getTime();
 
-    // Determine optimal period based on time span
+    // Determine optimal period based on time span - choose largest period first
     const periods: Array<{ type: TemporalAggregationPeriod['type']; maxSpan: number }> = [
-      { type: 'second', maxSpan: 60 * 60 * 1000 }, // 1 hour
-      { type: 'minute', maxSpan: 24 * 60 * 60 * 1000 }, // 1 day
-      { type: 'hour', maxSpan: 30 * 24 * 60 * 60 * 1000 }, // 30 days
-      { type: 'day', maxSpan: 365 * 24 * 60 * 60 * 1000 }, // 1 year
-      { type: 'week', maxSpan: 5 * 365 * 24 * 60 * 60 * 1000 }, // 5 years
+      { type: 'year', maxSpan: Infinity },
       { type: 'month', maxSpan: 20 * 365 * 24 * 60 * 60 * 1000 }, // 20 years
-      { type: 'year', maxSpan: Infinity }
+      { type: 'week', maxSpan: 5 * 365 * 24 * 60 * 60 * 1000 }, // 5 years
+      { type: 'day', maxSpan: 365 * 24 * 60 * 60 * 1000 }, // 1 year
+      { type: 'hour', maxSpan: 30 * 24 * 60 * 60 * 1000 }, // 30 days
+      { type: 'minute', maxSpan: 24 * 60 * 60 * 1000 }, // 1 day
+      { type: 'second', maxSpan: 60 * 60 * 1000 } // 1 hour
     ];
 
-    let optimalPeriod = periods[0];
+    // For very long time spans, prefer larger periods even if they create more buckets
+    if (timeSpan > 365 * 24 * 60 * 60 * 1000) { // More than 1 year
+      const years = timeSpan / this.PERIOD_MULTIPLIERS.year;
+      if (years <= preferredMaxBuckets) {
+        return { type: 'year', count: Math.ceil(years) };
+      }
+    }
 
-    for (const period of periods) {
+    // Find the largest period that would create reasonable buckets
+    let optimalPeriod = periods[periods.length - 1]; // Default to smallest
+
+    for (let i = 0; i < periods.length; i++) {
+      const period = periods[i];
       const estimatedBuckets = timeSpan / this.PERIOD_MULTIPLIERS[period.type];
-      if (estimatedBuckets <= preferredMaxBuckets) {
-        optimalPeriod = period;
+
+      // If this period would create too many buckets, use the previous (larger) period
+      if (estimatedBuckets > preferredMaxBuckets) {
+        if (i > 0) {
+          optimalPeriod = periods[i - 1];
+        }
         break;
+      } else {
+        // This period works, keep checking if there's a larger one that also works
+        optimalPeriod = period;
       }
     }
 

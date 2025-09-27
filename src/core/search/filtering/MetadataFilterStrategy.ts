@@ -369,28 +369,28 @@ export class MetadataFilterStrategy implements ISearchStrategy {
     // Build the main metadata query
     const sql = `
       SELECT
-        memory_id,
-        searchable_content,
+        id,
+        searchableContent,
         summary,
-        metadata,
-        memory_type,
-        category_primary,
-        importance_score,
-        created_at,
+        processedData,
+        retentionType,
+        categoryPrimary,
+        importanceScore,
+        createdAt,
         '${this.name}' as search_strategy,
         -- Calculate metadata relevance score
         ${this.buildMetadataRelevanceCalculation(metadataQuery)} as metadata_relevance_score
       FROM (
         -- Query short_term_memory with metadata filtering
         SELECT
-          memory_id,
-          searchable_content,
+          id,
+          searchableContent,
           summary,
-          metadata,
-          memory_type,
-          category_primary,
-          importance_score,
-          created_at
+          processedData,
+          retentionType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
         FROM short_term_memory
         WHERE ${whereClause}
 
@@ -398,14 +398,14 @@ export class MetadataFilterStrategy implements ISearchStrategy {
 
         -- Query long_term_memory with metadata filtering
         SELECT
-          memory_id,
-          searchable_content,
+          id,
+          searchableContent,
           summary,
-          metadata,
-          memory_type,
-          category_primary,
-          importance_score,
-          created_at
+          processedData,
+          retentionType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
         FROM long_term_memory
         WHERE ${whereClause}
       ) AS metadata_memories
@@ -533,7 +533,7 @@ export class MetadataFilterStrategy implements ISearchStrategy {
 
         return `
           CASE
-            WHEN json_extract(metadata, '${jsonPath}') IS NOT NULL THEN 0.2
+            WHEN json_extract(processedData, '${jsonPath}') IS NOT NULL THEN 0.2
             ELSE 0.0
           END
         `;
@@ -590,8 +590,18 @@ export class MetadataFilterStrategy implements ISearchStrategy {
     try {
       return await db.$queryRawUnsafe(sql, ...parameters);
     } catch (error) {
-      this.logger.error('Metadata query execution failed:', error);
-      throw new Error(`Metadata query failed: ${error instanceof Error ? error.message : String(error)}`);
+      // Log detailed error information for debugging
+      this.logger.error('Metadata query execution failed with details:', {
+        error: error instanceof Error ? error.message : String(error),
+        sql: sql.substring(0, 500) + (sql.length > 500 ? '...' : ''), // Log first 500 chars of SQL
+        parameters: parameters,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      // Re-throw with more context
+      const dbError = error instanceof Error ? error : new Error(String(error));
+      dbError.message = `Metadata query failed: ${dbError.message}. SQL: ${sql.substring(0, 200)}... Parameters: ${JSON.stringify(parameters)}`;
+      throw dbError;
     }
   }
 
@@ -633,14 +643,14 @@ export class MetadataFilterStrategy implements ISearchStrategy {
 
         // Create enhanced search result
         const searchResult: SearchResult = {
-          id: row.memory_id,
-          content: row.searchable_content,
+          id: row.id,
+          content: row.searchableContent,
           metadata: {
             summary: row.summary || '',
-            category: row.category_primary,
-            importanceScore: parseFloat(row.importance_score) || 0.5,
-            memoryType: row.memory_type,
-            createdAt: new Date(row.created_at),
+            category: row.categoryPrimary,
+            importanceScore: parseFloat(row.importanceScore) || 0.5,
+            memoryType: row.retentionType,
+            createdAt: new Date(row.createdAt),
             metadataRelevanceScore: metadataRelevance,
             extractedFields: extractedFields,
             searchStrategy: this.name,
@@ -648,7 +658,7 @@ export class MetadataFilterStrategy implements ISearchStrategy {
           },
           score: metadataRelevance,
           strategy: this.name,
-          timestamp: new Date(row.created_at)
+          timestamp: new Date(row.createdAt)
         };
 
         searchResults.push(searchResult);
