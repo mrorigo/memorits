@@ -409,7 +409,7 @@ console.log('Memori status:', { isEnabled, sessionId });
 Now that you understand basic usage:
 
 1. **🔍 [Search Strategies](core-concepts/search-strategies.md)** - Learn advanced search techniques
-2. **🏗️ [Architecture](architecture/system-overview.md)** - Understand system design
+2. **🏗️ [Architecture](architecture/system-overview.md)** - Understand system design and data flow
 3. **🔧 [Advanced Features](advanced-features/temporal-filtering.md)** - Explore sophisticated filtering
 4. **💡 [Examples](examples/basic-usage.md)** - See practical implementations
 

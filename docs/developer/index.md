@@ -63,7 +63,7 @@ This developer documentation is organized to help you build sophisticated AI age
 - **[Search Strategies](core-concepts/search-strategies.md)** - FTS5, LIKE, recent, semantic, and advanced filtering
 
 ### 🏛️ Architecture
-- **[System Overview](architecture/system-overview.md)** - High-level system design and data flow
+- **[System Overview](architecture/system-overview.md)** - High-level system design, architecture patterns, and data flow
 - **[Database Schema](architecture/database-schema.md)** - Database design and optimization
 - **[Search Architecture](architecture/search-architecture.md)** - Multi-strategy search implementation
 
@@ -136,7 +136,7 @@ This documentation is specifically designed for:
 1. **Start with [Getting Started](getting-started.md)** for installation and basic setup
 2. **Learn [Basic Usage](basic-usage.md)** to understand core patterns
 3. **Explore [Core Concepts](core-concepts/memory-management.md)** to understand the fundamental ideas
-4. **Study [Architecture](architecture/system-overview.md)** to see how components fit together
+4. **Study [Architecture](architecture/system-overview.md)** to understand system design and data flow
 5. **Dive into [Advanced Features](advanced-features/temporal-filtering.md)** for sophisticated use cases
 6. **Check the [API Reference](api/core-api.md)** for detailed interface documentation
 

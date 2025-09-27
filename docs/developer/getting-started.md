@@ -236,7 +236,7 @@ Now that you have Memorits running:
 
 - **📖 [Core Concepts](core-concepts/memory-management.md)** - Understand memory modes
 - **🔍 [Search Strategies](core-concepts/search-strategies.md)** - Learn advanced search
-- **🏗️ [Architecture](architecture/system-overview.md)** - Deep dive into system design
+- **🏗️ [Architecture](architecture/system-overview.md)** - Deep dive into system design and data flow
 - **💡 [Examples](examples/basic-usage.md)** - See practical examples
 - **🐛 [Report Issues](https://github.com/mrorigo/memorits/issues)** - Get help from community
 
