@@ -1,813 +1,693 @@
 # Basic Usage Examples
 
-This guide provides practical examples of using Memorits in common AI agent scenarios. These examples demonstrate how to leverage Memorits' powerful memory capabilities to build more context-aware and intelligent applications.
+This document provides practical examples of using Memorits in real-world applications, from simple memory operations to advanced AI agent implementations.
 
-## 1. Simple Chat Assistant with Memory
-
-The most basic use case - a chat assistant that remembers conversations:
+## 1. Simple Memory Application
 
 ```typescript
-import { Memori, ConfigManager, createMemoriOpenAI } from 'memorits';
+import { Memori, ConfigManager } from 'memorits';
 
-class ChatAssistant {
+class SimpleMemoryApp {
   private memori: Memori;
-  private openaiClient: any;
 
   constructor() {
     // Initialize with default configuration
-    this.memori = new Memori();
-    this.openaiClient = createMemoriOpenAI(
-      this.memori,
-      process.env.OPENAI_API_KEY!
-    );
+    const config = ConfigManager.loadConfig();
+    this.memori = new Memori(config);
   }
 
   async initialize() {
     await this.memori.enable();
-    console.log('🤖 Chat assistant with memory ready!');
+    console.log('Memory system ready!');
   }
 
-  async chat(message: string): Promise<string> {
+  async rememberSomething(content: string, category: string = 'general') {
+    // Record information for later retrieval
+    const chatId = await this.memori.recordConversation(
+      `Remember: ${content}`,
+      `I'll remember that ${content}`,
+      'gpt-4o-mini'
+    );
+
+    console.log(`Recorded memory: ${chatId}`);
+    return chatId;
+  }
+
+  async recallInformation(query: string) {
+    // Search for relevant memories
+    const memories = await this.memori.searchMemories(query, {
+      limit: 5,
+      minImportance: 'medium'
+    });
+
+    return memories.map(memory => memory.content);
+  }
+
+  async showMemoryStats() {
+    // Get memory statistics
+    const stats = await this.memori.getDatabaseStats();
+    console.log('Memory Statistics:', {
+      totalMemories: stats.totalMemories,
+      shortTermMemories: stats.shortTermMemories,
+      longTermMemories: stats.longTermMemories,
+      databaseSize: stats.databaseSize
+    });
+  }
+}
+
+// Usage
+const app = new SimpleMemoryApp();
+await app.initialize();
+
+await app.rememberSomething('TypeScript is a superset of JavaScript');
+const memories = await app.recallInformation('TypeScript');
+console.log('Recalled:', memories);
+```
+
+## 2. AI Chatbot with Memory
+
+```typescript
+import { createMemoriOpenAI } from 'memorits';
+
+class MemoryEnabledChatbot {
+  private client: any;
+  private sessionId: string;
+
+  constructor(apiKey: string) {
+    // Create OpenAI client with automatic memory
+    this.client = createMemoriOpenAI(apiKey, {
+      enableChatMemory: true,
+      autoInitialize: true,
+      memoryProcessingMode: 'auto'
+    });
+
+    this.sessionId = this.generateSessionId();
+  }
+
+  async chat(userMessage: string) {
     try {
-      // Record the conversation (automatic with MemoriOpenAI)
-      const response = await this.openaiClient.chat.completions.create({
+      // Get AI response with memory context
+      const response = await this.client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: 'You are a helpful assistant with perfect memory. Use your memory to provide contextually relevant responses.'
+            content: 'You are a helpful assistant with memory capabilities. Use your memory to provide contextually relevant responses.'
           },
-          { role: 'user', content: message }
-        ],
-        max_tokens: 500
+          { role: 'user', content: userMessage }
+        ]
       });
 
-      const reply = response.choices[0].message.content;
+      // Record the conversation for future context
+      await this.client.memory.recordConversation(
+        userMessage,
+        response.choices[0].message.content,
+        'gpt-4o-mini',
+        { sessionId: this.sessionId }
+      );
 
-      // The conversation is automatically recorded by MemoriOpenAI
-      console.log(`💬 Conversation recorded with ${reply.length} characters`);
+      return response.choices[0].message.content;
 
-      return reply;
     } catch (error) {
       console.error('Chat error:', error);
-      throw error;
+      return 'Sorry, I encountered an error processing your message.';
     }
   }
 
-  async searchMemory(query: string) {
-    const memories = await this.memori.searchMemories(query, {
-      limit: 5,
+  async searchChatHistory(query: string) {
+    // Search through conversation history
+    const memories = await this.client.memory.searchMemories(query, {
+      limit: 10,
       includeMetadata: true
     });
 
     return memories.map(memory => ({
       content: memory.content,
-      relevance: memory.confidenceScore,
-      when: memory.metadata?.extractionTimestamp
+      importance: memory.metadata.importanceScore,
+      createdAt: memory.metadata.createdAt
     }));
   }
 
-  async close() {
-    await this.memori.close();
+  private generateSessionId(): string {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 }
 
-// Usage example
-const assistant = new ChatAssistant();
-await assistant.initialize();
+// Usage
+const chatbot = new MemoryEnabledChatbot(process.env.OPENAI_API_KEY!);
 
-// Have a conversation
-await assistant.chat("Remember that I prefer dark mode in all applications.");
-await assistant.chat("What are my UI preferences?");
+console.log(await chatbot.chat('My name is Alice and I love programming'));
+console.log(await chatbot.chat('What is my name?'));
 
-// Search for preferences
-const preferences = await assistant.searchMemory('preferences');
-console.log('Found preferences:', preferences);
-
-await assistant.close();
+const history = await chatbot.searchChatHistory('Alice');
+console.log('Chat history:', history);
 ```
 
-## 2. Project Management Assistant
-
-A more sophisticated example that tracks project context and decisions:
+## 3. Personal Knowledge Base
 
 ```typescript
 import { Memori, MemoryClassification, MemoryImportanceLevel } from 'memorits';
 
-class ProjectManager {
+class PersonalKnowledgeBase {
   private memori: Memori;
-  private currentProject: string;
 
-  constructor(projectName: string) {
-    this.currentProject = projectName;
-    this.memori = new Memori({
-      namespace: `project_${projectName}`,
-      autoIngest: true,
-      minImportanceLevel: 'medium'
-    });
+  constructor() {
+    const config = ConfigManager.loadConfig();
+    this.memori = new Memori(config);
   }
 
   async initialize() {
     await this.memori.enable();
-    console.log(`📋 Project manager for "${this.currentProject}" initialized`);
   }
 
-  async recordDecision(decision: string, context: string, importance: MemoryImportanceLevel = 'high') {
-    // Record important project decision
+  async addKnowledge(
+    topic: string,
+    content: string,
+    category: MemoryClassification = MemoryClassification.REFERENCE,
+    importance: MemoryImportanceLevel = MemoryImportanceLevel.MEDIUM
+  ) {
+    // Add knowledge with specific classification
     const chatId = await this.memori.recordConversation(
-      `Project Decision: ${decision}`,
-      `Context: ${context}`,
+      `Knowledge: ${topic}`,
+      content,
+      'manual-entry',
       {
         metadata: {
-          type: 'decision',
-          importance,
-          project: this.currentProject,
-          timestamp: new Date().toISOString()
+          topic: topic,
+          category: category,
+          importance: importance,
+          source: 'manual_entry'
         }
       }
     );
 
-    console.log(`✅ Decision recorded: ${chatId}`);
+    console.log(`Added knowledge: ${topic} (${chatId})`);
     return chatId;
   }
 
-  async recordTask(task: string, assignee: string, priority: string = 'medium') {
+  async searchKnowledge(
+    query: string,
+    category?: MemoryClassification,
+    minImportance: MemoryImportanceLevel = MemoryImportanceLevel.LOW
+  ) {
+    // Search knowledge base with filters
+    const searchOptions: any = {
+      limit: 20,
+      minImportance: minImportance,
+      includeMetadata: true
+    };
+
+    if (category) {
+      searchOptions.categories = [category];
+    }
+
+    const results = await this.memori.searchMemories(query, searchOptions);
+
+    return results.map(result => ({
+      content: result.content,
+      topic: result.metadata.topic,
+      category: result.metadata.category,
+      importance: result.metadata.importanceScore,
+      confidence: result.metadata.confidenceScore,
+      createdAt: result.metadata.createdAt
+    }));
+  }
+
+  async getTopicsByCategory() {
+    // Get all unique topics organized by category
+    const allMemories = await this.memori.searchMemories('', {
+      limit: 1000,
+      includeMetadata: true
+    });
+
+    const topicsByCategory = allMemories.reduce((acc, memory) => {
+      const category = memory.metadata.category;
+      const topic = memory.metadata.topic;
+
+      if (!acc[category]) {
+        acc[category] = new Set();
+      }
+      if (topic) {
+        acc[category].add(topic);
+      }
+
+      return acc;
+    }, {} as Record<string, Set<string>>);
+
+    // Convert Sets to Arrays for easier consumption
+    const result: Record<string, string[]> = {};
+    for (const [category, topics] of Object.entries(topicsByCategory)) {
+      result[category] = Array.from(topics);
+    }
+
+    return result;
+  }
+}
+
+// Usage
+const knowledgeBase = new PersonalKnowledgeBase();
+await knowledgeBase.initialize();
+
+// Add some knowledge
+await knowledgeBase.addKnowledge(
+  'TypeScript',
+  'TypeScript is a strongly typed programming language that builds on JavaScript',
+  MemoryClassification.REFERENCE,
+  MemoryImportanceLevel.HIGH
+);
+
+await knowledgeBase.addKnowledge(
+  'React Hooks',
+  'React Hooks let you use state and other React features in functional components',
+  MemoryClassification.REFERENCE,
+  MemoryImportanceLevel.HIGH
+);
+
+// Search knowledge
+const tsKnowledge = await knowledgeBase.searchKnowledge('TypeScript');
+console.log('TypeScript knowledge:', tsKnowledge);
+
+// Get organized topics
+const topics = await knowledgeBase.getTopicsByCategory();
+console.log('Topics by category:', topics);
+```
+
+## 4. Task Reminder System
+
+```typescript
+import { Memori, MemoryClassification, MemoryImportanceLevel } from 'memorits';
+
+class TaskReminderSystem {
+  private memori: Memori;
+
+  constructor() {
+    const config = ConfigManager.loadConfig();
+    this.memori = new Memori(config);
+  }
+
+  async initialize() {
+    await this.memori.enable();
+  }
+
+  async addTask(
+    task: string,
+    priority: 'low' | 'medium' | 'high' = 'medium',
+    dueDate?: Date
+  ) {
+    const importance = priority === 'high' ? MemoryImportanceLevel.HIGH :
+                      priority === 'medium' ? MemoryImportanceLevel.MEDIUM :
+                      MemoryImportanceLevel.LOW;
+
+    const taskContent = dueDate
+      ? `Task: ${task} (Due: ${dueDate.toISOString()})`
+      : `Task: ${task}`;
+
     const chatId = await this.memori.recordConversation(
-      `New Task: ${task}`,
-      `Assigned to: ${assignee}, Priority: ${priority}`,
+      taskContent,
+      `I'll remind you about: ${task}`,
+      'task-entry',
       {
         metadata: {
           type: 'task',
-          priority,
-          assignee,
-          project: this.currentProject,
+          priority: priority,
+          dueDate: dueDate?.toISOString(),
           status: 'pending'
         }
       }
     );
 
+    console.log(`Added task: ${task} (${chatId})`);
     return chatId;
   }
 
-  async getProjectContext(query?: string) {
-    const searchQuery = query || 'project decisions OR tasks OR requirements';
-
-    const memories = await this.memori.searchMemories(searchQuery, {
-      categories: ['essential', 'contextual'],
-      minImportance: 'medium',
-      limit: 20,
+  async getTasksByPriority(priority?: 'low' | 'medium' | 'high') {
+    const searchOptions: any = {
+      categories: [MemoryClassification.CONVERSATIONAL],
+      limit: 50,
       includeMetadata: true
-    });
-
-    // Group by type
-    const decisions = memories.filter(m => m.metadata?.type === 'decision');
-    const tasks = memories.filter(m => m.metadata?.type === 'task');
-
-    return {
-      decisions: decisions.map(m => ({
-        content: m.content,
-        importance: m.importance,
-        when: m.metadata?.timestamp
-      })),
-      tasks: tasks.map(m => ({
-        content: m.content,
-        assignee: m.metadata?.assignee,
-        priority: m.metadata?.priority,
-        status: m.metadata?.status
-      })),
-      totalMemories: memories.length
-    };
-  }
-
-  async getRecentActivity(hours: number = 24) {
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-
-    // Use temporal filtering for recent activity
-    const recentMemories = await this.memori.searchMemories('project activity', {
-      includeMetadata: true,
-      limit: 10
-    });
-
-    return recentMemories
-      .filter(m => new Date(m.metadata?.timestamp || 0) > since)
-      .map(m => ({
-        content: m.content,
-        type: m.metadata?.type,
-        timestamp: m.metadata?.timestamp
-      }));
-  }
-
-  async generateProjectSummary() {
-    const context = await this.getProjectContext();
-
-    const summary = `
-Project Summary: ${this.currentProject}
-========================================
-
-Decisions Made: ${context.decisions.length}
-- Recent: ${context.decisions.slice(0, 3).map(d => d.content).join(', ')}
-
-Active Tasks: ${context.tasks.filter(t => t.status === 'pending').length}
-- High Priority: ${context.tasks.filter(t => t.priority === 'high').length}
-
-Total Context Items: ${context.totalMemories}
-Recent Activity (24h): ${context.recentActivity?.length || 0} items
-    `.trim();
-
-    return summary;
-  }
-
-  async close() {
-    await this.memori.close();
-  }
-}
-
-// Usage example
-const projectManager = new ProjectManager('AI-Assistant-Platform');
-await projectManager.initialize();
-
-// Record project activities
-await projectManager.recordDecision(
-  'Use TypeScript for type safety',
-  'All team members agreed on TypeScript for better development experience',
-  'high'
-);
-
-await projectManager.recordTask(
-  'Implement user authentication',
-  'alice',
-  'high'
-);
-
-await projectManager.recordTask(
-  'Design database schema',
-  'bob',
-  'medium'
-);
-
-// Get project context
-const context = await projectManager.getProjectContext();
-console.log('Project context:', context);
-
-// Generate summary
-const summary = await projectManager.generateProjectSummary();
-console.log(summary);
-
-await projectManager.close();
-```
-
-## 3. Research Assistant
-
-An example showing how to build a research assistant that accumulates knowledge:
-
-```typescript
-import { Memori, SearchStrategy } from 'memorits';
-
-class ResearchAssistant {
-  private memori: Memori;
-  private researchTopics: Set<string> = new Set();
-
-  constructor() {
-    this.memori = new Memori({
-      namespace: 'research_assistant',
-      autoIngest: true,
-      consciousIngest: false
-    });
-  }
-
-  async initialize() {
-    await this.memori.enable();
-    console.log('🔬 Research assistant initialized');
-  }
-
-  async addResearch(topic: string, content: string, source: string) {
-    // Record research finding
-    const chatId = await this.memori.recordConversation(
-      `Research on: ${topic}`,
-      `Source: ${source}\n\n${content}`,
-      {
-        metadata: {
-          type: 'research',
-          topic,
-          source,
-          researchDate: new Date().toISOString()
-        }
-      }
-    );
-
-    this.researchTopics.add(topic);
-    console.log(`📚 Research added for topic: ${topic}`);
-    return chatId;
-  }
-
-  async queryResearch(topic: string, useAdvancedSearch: boolean = false) {
-    if (useAdvancedSearch) {
-      // Use FTS5 strategy for precise search
-      return await this.memori.searchMemoriesWithStrategy(
-        topic,
-        SearchStrategy.FTS5,
-        {
-          categories: ['essential', 'reference'],
-          minImportance: 'medium',
-          limit: 15,
-          includeMetadata: true
-        }
-      );
-    } else {
-      // Use standard search
-      return await this.memori.searchMemories(topic, {
-        categories: ['essential', 'reference'],
-        minImportance: 'medium',
-        limit: 10
-      });
-    }
-  }
-
-  async findRelatedTopics(topic: string) {
-    // Search for related concepts
-    const memories = await this.memori.searchMemories(topic, {
-      limit: 20,
-      includeMetadata: true
-    });
-
-    // Extract topics from results
-    const relatedTopics = new Set<string>();
-    memories.forEach(memory => {
-      if (memory.metadata?.topic) {
-        relatedTopics.add(memory.metadata.topic);
-      }
-    });
-
-    return Array.from(relatedTopics);
-  }
-
-  async generateResearchReport(topic: string) {
-    const researchData = await this.queryResearch(topic, true);
-    const relatedTopics = await this.findRelatedTopics(topic);
-
-    const report = {
-      topic,
-      totalFindings: researchData.length,
-      relatedTopics,
-      keyFindings: researchData.slice(0, 5).map(m => ({
-        content: m.summary,
-        relevance: m.confidenceScore,
-        source: m.metadata?.source,
-        date: m.metadata?.researchDate
-      })),
-      lastUpdated: new Date().toISOString(),
-      confidence: researchData.length > 0 ?
-        researchData.reduce((sum, m) => sum + m.confidenceScore, 0) / researchData.length : 0
     };
 
-    return report;
-  }
-
-  async getResearchStats() {
-    const allTopics = Array.from(this.researchTopics);
-    const stats = {
-      totalTopics: allTopics.length,
-      topics: await Promise.all(allTopics.map(async (topic) => {
-        const findings = await this.queryResearch(topic);
-        return {
-          topic,
-          findingCount: findings.length,
-          avgConfidence: findings.length > 0 ?
-            findings.reduce((sum, f) => sum + f.confidenceScore, 0) / findings.length : 0
-        };
-      }))
-    };
-
-    return stats;
-  }
-
-  async close() {
-    await this.memori.close();
-  }
-}
-
-// Usage example
-const researcher = new ResearchAssistant();
-await researcher.initialize();
-
-// Add research data
-await researcher.addResearch(
-  'machine learning',
-  'Neural networks are computing systems inspired by biological neural networks...',
-  'Wikipedia'
-);
-
-await researcher.addResearch(
-  'artificial intelligence',
-  'AI refers to the simulation of human intelligence in machines...',
-  'TechCrunch Article'
-);
-
-await researcher.addResearch(
-  'deep learning',
-  'Deep learning is a subset of machine learning based on artificial neural networks...',
-  'Research Paper'
-);
-
-// Query research
-const mlResearch = await researcher.queryResearch('machine learning');
-console.log(`Found ${mlResearch.length} findings about machine learning`);
-
-// Find related topics
-const related = await researcher.findRelatedTopics('machine learning');
-console.log('Related topics:', related);
-
-// Generate report
-const report = await researcher.generateResearchReport('machine learning');
-console.log('Research report:', JSON.stringify(report, null, 2));
-
-// Get statistics
-const stats = await researcher.getResearchStats();
-console.log('Research stats:', stats);
-
-await researcher.close();
-```
-
-## 4. Customer Support Agent
-
-Example showing how to maintain conversation context and user preferences:
-
-```typescript
-import { Memori, MemoryClassification, MemoryImportanceLevel } from 'memorits';
-
-class SupportAgent {
-  private memori: Memori;
-  private userProfiles: Map<string, any> = new Map();
-
-  constructor() {
-    this.memori = new Memori({
-      namespace: 'customer_support',
-      autoIngest: true
-    });
-  }
-
-  async initialize() {
-    await this.memori.enable();
-    console.log('🎧 Customer support agent ready');
-  }
-
-  async startSupportSession(userId: string) {
-    // Load or create user profile
-    let profile = this.userProfiles.get(userId);
-    if (!profile) {
-      profile = await this.loadUserProfile(userId);
-      this.userProfiles.set(userId, profile);
-    }
-
-    console.log(`👤 Support session started for user: ${userId}`);
-    return profile;
-  }
-
-  async recordIssue(userId: string, issue: string, category: string) {
-    const chatId = await this.memori.recordConversation(
-      `User ${userId} reported: ${issue}`,
-      `Category: ${category}`,
-      {
-        metadata: {
-          type: 'support_issue',
-          userId,
-          category,
-          status: 'open',
-          priority: 'medium',
-          reportedAt: new Date().toISOString()
-        }
-      }
-    );
-
-    // Update user profile
-    const profile = this.userProfiles.get(userId) || {};
-    if (!profile.issues) profile.issues = [];
-    profile.issues.push({ issue, category, chatId, date: new Date() });
-    this.userProfiles.set(userId, profile);
-
-    return chatId;
-  }
-
-  async updateUserPreference(userId: string, preference: string, value: string) {
-    await this.memori.recordConversation(
-      `User ${userId} preference: ${preference}`,
-      `Value: ${value}`,
-      {
-        metadata: {
-          type: 'user_preference',
-          userId,
-          preference,
-          value,
-          updatedAt: new Date().toISOString()
-        }
-      }
-    );
-
-    // Update local profile
-    const profile = this.userProfiles.get(userId) || {};
-    if (!profile.preferences) profile.preferences = {};
-    profile.preferences[preference] = value;
-    this.userProfiles.set(userId, profile);
-  }
-
-  async getUserContext(userId: string) {
-    const userMemories = await this.memori.searchMemories(`user:${userId}`, {
-      categories: ['personal', 'essential'],
-      limit: 20,
-      includeMetadata: true
-    });
-
-    const issues = userMemories.filter(m => m.metadata?.type === 'support_issue');
-    const preferences = userMemories.filter(m => m.metadata?.type === 'user_preference');
-
-    return {
-      userId,
-      totalInteractions: userMemories.length,
-      openIssues: issues.filter(i => i.metadata?.status === 'open').length,
-      preferences: preferences.reduce((acc, p) => {
-        acc[p.metadata?.preference] = p.metadata?.value;
-        return acc;
-      }, {} as Record<string, string>),
-      recentActivity: userMemories.slice(0, 5).map(m => ({
-        content: m.summary,
-        type: m.metadata?.type,
-        date: m.metadata?.reportedAt || m.metadata?.updatedAt
-      }))
-    };
-  }
-
-  async resolveIssue(userId: string, issueId: string, resolution: string) {
-    // Find the issue memory
-    const issues = await this.memori.searchMemories(`issue:${issueId}`, {
-      includeMetadata: true
-    });
-
-    if (issues.length > 0) {
-      // Record resolution
-      await this.memori.recordConversation(
-        `Issue ${issueId} resolved`,
-        `Resolution: ${resolution}`,
-        {
-          metadata: {
-            type: 'issue_resolution',
-            userId,
-            issueId,
-            resolution,
-            resolvedAt: new Date().toISOString()
+    if (priority) {
+      searchOptions.metadataFilters = {
+        fields: [
+          {
+            key: 'priority',
+            value: priority,
+            operator: 'eq'
           }
-        }
-      );
-
-      console.log(`✅ Issue ${issueId} resolved for user ${userId}`);
-    }
-  }
-
-  async generateSupportSummary(userId: string) {
-    const context = await this.getUserContext(userId);
-    const profile = this.userProfiles.get(userId);
-
-    return {
-      userId,
-      profile: profile || {},
-      context,
-      summary: `
-Support Summary for ${userId}
-============================
-
-Total Interactions: ${context.totalInteractions}
-Open Issues: ${context.openIssues}
-User Preferences: ${Object.keys(context.preferences).length}
-
-Recent Activity:
-${context.recentActivity.map(a => `- ${a.type}: ${a.content}`).join('\n')}
-
-Profile Data:
-${Object.entries(profile || {}).map(([k, v]) => `- ${k}: ${JSON.stringify(v)}`).join('\n')}
-      `.trim()
-    };
-  }
-
-  private async loadUserProfile(userId: string) {
-    const userMemories = await this.memori.searchMemories(`user:${userId}`, {
-      categories: ['personal'],
-      limit: 50
-    });
-
-    const profile: any = {
-      userId,
-      firstSeen: userMemories[userMemories.length - 1]?.metadata?.timestamp,
-      lastSeen: userMemories[0]?.metadata?.timestamp,
-      totalInteractions: userMemories.length
-    };
-
-    // Extract preferences and issues
-    const preferences = userMemories.filter(m => m.metadata?.type === 'user_preference');
-    const issues = userMemories.filter(m => m.metadata?.type === 'support_issue');
-
-    if (preferences.length > 0) {
-      profile.preferences = {};
-      preferences.forEach(p => {
-        if (p.metadata?.preference && p.metadata?.value) {
-          profile.preferences[p.metadata.preference] = p.metadata.value;
-        }
-      });
+        ]
+      };
     }
 
-    if (issues.length > 0) {
-      profile.issues = issues.map(i => ({
-        id: i.metadata?.issueId,
-        description: i.summary,
-        status: i.metadata?.status,
-        priority: i.metadata?.priority
+    const results = await this.memori.searchMemories('Task:', searchOptions);
+
+    return results
+      .filter(result => result.metadata.type === 'task')
+      .map(result => ({
+        id: result.id,
+        task: result.content.replace('Task: ', ''),
+        priority: result.metadata.priority,
+        dueDate: result.metadata.dueDate ? new Date(result.metadata.dueDate) : null,
+        status: result.metadata.status,
+        createdAt: result.metadata.createdAt
       }));
-    }
-
-    return profile;
   }
 
-  async close() {
-    await this.memori.close();
-  }
-}
-
-// Usage example
-const supportAgent = new SupportAgent();
-await supportAgent.initialize();
-
-// Start support session
-await supportAgent.startSupportSession('user123');
-
-// Record user preferences
-await supportAgent.updateUserPreference('user123', 'language', 'en');
-await supportAgent.updateUserPreference('user123', 'theme', 'dark');
-
-// Record support issues
-await supportAgent.recordIssue('user123', 'Login not working', 'authentication');
-await supportAgent.recordIssue('user123', 'Feature request', 'enhancement');
-
-// Get user context
-const context = await supportAgent.getUserContext('user123');
-console.log('User context:', context);
-
-// Generate support summary
-const summary = await supportAgent.generateSupportSummary('user123');
-console.log('Support summary:', summary);
-
-await supportAgent.close();
-```
-
-## 5. Advanced Search Examples
-
-Demonstrating sophisticated search capabilities:
-
-```typescript
-class AdvancedSearchExamples {
-  private memori: Memori;
-
-  constructor() {
-    this.memori = new Memori({
-      namespace: 'search_examples'
-    });
-  }
-
-  async initialize() {
-    await this.memori.enable();
-
-    // Add sample data for searching
-    await this.addSampleData();
-  }
-
-  private async addSampleData() {
-    const sampleConversations = [
-      {
-        user: "What's the deadline for the project?",
-        ai: "The project deadline is March 15th, 2024. This is a critical milestone.",
-        metadata: { priority: 'high', type: 'deadline' }
-      },
-      {
-        user: "How do I implement authentication?",
-        ai: "For authentication, I recommend using JWT tokens with secure storage...",
-        metadata: { priority: 'medium', type: 'technical' }
-      },
-      {
-        user: "Remember my coffee preference",
-        ai: "Noted: You prefer black coffee, no sugar, with meetings after 2pm.",
-        metadata: { priority: 'low', type: 'personal' }
-      }
-    ];
-
-    for (const conv of sampleConversations) {
-      await this.memori.recordConversation(conv.user, conv.ai, {
-        metadata: conv.metadata
-      });
-    }
-  }
-
-  async demonstrateBasicSearch() {
-    console.log('🔍 Basic Search Examples');
-
-    const urgentResults = await this.memori.searchMemories('urgent OR critical OR deadline', {
-      minImportance: 'high',
-      limit: 5
+  async markTaskComplete(taskId: string) {
+    // Update task status
+    await this.memori.updateMemoryMetadata(taskId, {
+      status: 'completed',
+      completedAt: new Date().toISOString()
     });
 
-    console.log('Urgent items:', urgentResults.map(r => r.summary));
+    console.log(`Marked task ${taskId} as completed`);
   }
 
-  async demonstrateAdvancedSearch() {
-    console.log('🔍 Advanced Search Examples');
+  async getOverdueTasks() {
+    const allTasks = await this.getTasksByPriority();
+    const now = new Date();
 
-    // Multi-strategy search
-    const technicalResults = await this.memori.searchMemories('authentication OR security', {
-      categories: ['essential', 'reference'],
-      includeMetadata: true
-    });
-
-    console.log('Technical results:', technicalResults.length);
-
-    // Recent memories
-    const recentMemories = await this.memori.searchRecentMemories(3, true);
-    console.log('Recent memories:', recentMemories.map(r => ({
-      content: r.summary,
-      when: r.metadata?.extractionTimestamp
-    })));
-  }
-
-  async demonstrateTemporalSearch() {
-    console.log('🔍 Temporal Search Examples');
-
-    // This would require temporal filtering strategy
-    // const todayMemories = await this.memori.searchMemories('important', {
-    //   temporalFilters: {
-    //     relativeExpressions: ['today']
-    //   }
-    // });
-
-    const allMemories = await this.memori.searchMemories('project OR technical OR personal', {
-      includeMetadata: true
-    });
-
-    console.log('All memories with metadata:', allMemories.map(m => ({
-      content: m.summary,
-      type: m.metadata?.type,
-      priority: m.metadata?.priority
-    })));
-  }
-
-  async demonstrateContextAwareSearch() {
-    console.log('🔍 Context-Aware Search');
-
-    // Search with context
-    const contextResults = await this.memori.searchMemories('preferences OR settings', {
-      categories: ['personal'],
-      limit: 10
-    });
-
-    console.log('Personal preferences:', contextResults);
-  }
-
-  async close() {
-    await this.memori.close();
+    return allTasks.filter(task =>
+      task.dueDate &&
+      task.dueDate < now &&
+      task.status !== 'completed'
+    );
   }
 }
 
 // Usage
-const searchExamples = new AdvancedSearchExamples();
-await searchExamples.initialize();
+const taskSystem = new TaskReminderSystem();
+await taskSystem.initialize();
 
-await searchExamples.demonstrateBasicSearch();
-await searchExamples.demonstrateAdvancedSearch();
-await searchExamples.demonstrateTemporalSearch();
-await searchExamples.demonstrateContextAwareSearch();
+// Add tasks
+await taskSystem.addTask('Review project proposal', 'high', new Date('2024-02-01'));
+await taskSystem.addTask('Update documentation', 'medium', new Date('2024-02-15'));
+await taskSystem.addTask('Plan team meeting', 'low');
 
-await searchExamples.close();
+// Get tasks by priority
+const highPriorityTasks = await taskSystem.getTasksByPriority('high');
+console.log('High priority tasks:', highPriorityTasks);
+
+// Check for overdue tasks
+const overdueTasks = await taskSystem.getOverdueTasks();
+console.log('Overdue tasks:', overdueTasks);
 ```
 
-## Best Practices from Examples
+## 5. Learning Progress Tracker
 
-### 1. Proper Initialization
-- Always call `await memori.enable()` before using memory features
-- Configure appropriate namespaces for different contexts
-- Set reasonable importance levels and limits
+```typescript
+import { Memori, MemoryClassification, MemoryImportanceLevel } from 'memorits';
 
-### 2. Error Handling
-- Wrap memory operations in try-catch blocks
-- Handle both memory-specific and general errors
-- Provide fallback behavior when memory operations fail
+class LearningProgressTracker {
+  private memori: Memori;
 
-### 3. Metadata Usage
-- Use metadata to add context and categorization
-- Include timestamps, user IDs, and relevant identifiers
-- Leverage metadata for advanced filtering
+  constructor() {
+    const config = ConfigManager.loadConfig();
+    this.memori = new Memori(config);
+  }
 
-### 4. Resource Management
-- Always call `await memori.close()` when done
-- Use appropriate namespaces to avoid conflicts
-- Monitor memory usage and clean up when necessary
+  async initialize() {
+    await this.memori.enable();
+  }
 
-### 5. Search Optimization
-- Use specific search terms rather than broad queries
-- Leverage categories and importance levels for filtering
-- Include metadata in results when detailed information is needed
+  async logLearningSession(
+    topic: string,
+    content: string,
+    difficulty: 'beginner' | 'intermediate' | 'advanced' = 'intermediate'
+  ) {
+    const importance = difficulty === 'advanced' ? MemoryImportanceLevel.HIGH :
+                      difficulty === 'intermediate' ? MemoryImportanceLevel.MEDIUM :
+                      MemoryImportanceLevel.LOW;
 
-These examples demonstrate how Memorits can be used to build increasingly sophisticated AI agents that maintain context, learn from interactions, and provide more relevant responses over time.
+    const sessionId = await this.memori.recordConversation(
+      `Learning: ${topic}`,
+      content,
+      'learning-session',
+      {
+        metadata: {
+          type: 'learning',
+          topic: topic,
+          difficulty: difficulty,
+          sessionDate: new Date().toISOString()
+        }
+      }
+    );
+
+    console.log(`Logged learning session: ${topic}`);
+    return sessionId;
+  }
+
+  async getLearningProgress(topic?: string) {
+    // Get learning sessions with optional topic filter
+    const searchOptions: any = {
+      categories: [MemoryClassification.CONVERSATIONAL],
+      limit: 100,
+      includeMetadata: true
+    };
+
+    if (topic) {
+      searchOptions.metadataFilters = {
+        fields: [
+          {
+            key: 'topic',
+            value: topic,
+            operator: 'eq'
+          }
+        ]
+      };
+    }
+
+    const results = await this.memori.searchMemories('Learning:', searchOptions);
+
+    return results
+      .filter(result => result.metadata.type === 'learning')
+      .map(result => ({
+        topic: result.metadata.topic,
+        difficulty: result.metadata.difficulty,
+        content: result.content,
+        sessionDate: result.metadata.sessionDate,
+        importance: result.metadata.importanceScore
+      }));
+  }
+
+  async getTopicsByDifficulty() {
+    const allLearning = await this.getLearningProgress();
+
+    return allLearning.reduce((acc, session) => {
+      const difficulty = session.difficulty;
+      const topic = session.topic;
+
+      if (!acc[difficulty]) {
+        acc[difficulty] = new Set();
+      }
+      acc[difficulty].add(topic);
+
+      return acc;
+    }, {} as Record<string, Set<string>>);
+  }
+
+  async findWeakAreas() {
+    // Find topics with low importance scores (indicating difficulty)
+    const results = await this.memori.searchMemories('Learning:', {
+      limit: 100,
+      includeMetadata: true
+    });
+
+    const learningSessions = results.filter(r => r.metadata.type === 'learning');
+
+    // Group by topic and calculate average importance
+    const topicImportance = learningSessions.reduce((acc, session) => {
+      const topic = session.metadata.topic;
+      const importance = session.metadata.importanceScore;
+
+      if (!acc[topic]) {
+        acc[topic] = { total: 0, count: 0, sessions: [] };
+      }
+
+      acc[topic].total += importance;
+      acc[topic].count += 1;
+      acc[topic].sessions.push(session);
+
+      return acc;
+    }, {} as Record<string, { total: number; count: number; sessions: any[] }>);
+
+    // Find topics with low average importance
+    const weakAreas = Object.entries(topicImportance)
+      .map(([topic, data]) => ({
+        topic,
+        averageImportance: data.total / data.count,
+        sessionCount: data.count
+      }))
+      .filter(area => area.averageImportance < 0.6)
+      .sort((a, b) => a.averageImportance - b.averageImportance);
+
+    return weakAreas;
+  }
+}
+
+// Usage
+const learningTracker = new LearningProgressTracker();
+await learningTracker.initialize();
+
+// Log learning sessions
+await learningTracker.logLearningSession(
+  'React Hooks',
+  'Learned about useState and useEffect for state management',
+  'intermediate'
+);
+
+await learningTracker.logLearningSession(
+  'Advanced TypeScript',
+  'Generic constraints and conditional types are challenging',
+  'advanced'
+);
+
+// Get learning progress
+const reactProgress = await learningTracker.getLearningProgress('React Hooks');
+console.log('React progress:', reactProgress);
+
+// Find areas needing more attention
+const weakAreas = await learningTracker.findWeakAreas();
+console.log('Areas needing attention:', weakAreas);
+```
+
+## 6. Context-Aware AI Assistant
+
+```typescript
+import { createMemoriOpenAI } from 'memorits';
+
+class ContextAwareAssistant {
+  private client: any;
+  private userProfile: any = {};
+
+  constructor(apiKey: string) {
+    this.client = createMemoriOpenAI(apiKey, {
+      enableChatMemory: true,
+      autoInitialize: true,
+      memoryProcessingMode: 'conscious'
+    });
+  }
+
+  async learnAboutUser(userInfo: string) {
+    // Learn and remember user information
+    await this.client.memory.recordConversation(
+      `User info: ${userInfo}`,
+      `I understand: ${userInfo}`,
+      'user-learning'
+    );
+
+    // Update user profile
+    this.userProfile = await this.buildUserProfile();
+  }
+
+  async buildUserProfile() {
+    // Build user profile from memories
+    const userMemories = await this.client.memory.searchMemories('user info', {
+      categories: ['personal', 'conscious-info'],
+      minImportance: 'medium',
+      limit: 20
+    });
+
+    const profile = {
+      interests: [],
+      preferences: [],
+      skills: [],
+      background: []
+    };
+
+    userMemories.forEach(memory => {
+      const content = memory.content.toLowerCase();
+
+      if (content.includes('interest') || content.includes('like')) {
+        profile.interests.push(memory.content);
+      }
+      if (content.includes('prefer') || content.includes('favorite')) {
+        profile.preferences.push(memory.content);
+      }
+      if (content.includes('skill') || content.includes('experience')) {
+        profile.skills.push(memory.content);
+      }
+      if (content.includes('background') || content.includes('work')) {
+        profile.background.push(memory.content);
+      }
+    });
+
+    return profile;
+  }
+
+  async answerQuestion(question: string) {
+    // Get relevant context
+    const context = await this.client.memory.searchMemories(question, {
+      limit: 3,
+      minImportance: 'medium'
+    });
+
+    // Build context-aware prompt
+    const contextText = context.map(c => c.content).join('\n');
+    const profileText = Object.entries(this.userProfile)
+      .map(([key, values]) => `${key}: ${values.join(', ')}`)
+      .join('\n');
+
+    const prompt = `
+User Profile:
+${profileText}
+
+Relevant Context:
+${contextText}
+
+Question: ${question}
+
+Please provide a helpful, personalized response based on the user's profile and relevant context.
+    `;
+
+    const response = await this.client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    // Record this interaction
+    await this.client.memory.recordConversation(
+      question,
+      response.choices[0].message.content,
+      'gpt-4o-mini'
+    );
+
+    return response.choices[0].message.content;
+  }
+
+  async getPersonalizedRecommendations() {
+    // Get recommendations based on user profile
+    const recommendations = await this.client.memory.searchMemories(
+      'recommendations suggestions',
+      {
+        categories: ['essential', 'contextual'],
+        limit: 10
+      }
+    );
+
+    return recommendations.map(rec => ({
+      content: rec.content,
+      relevance: rec.score,
+      category: rec.metadata.category
+    }));
+  }
+}
+
+// Usage
+const assistant = new ContextAwareAssistant(process.env.OPENAI_API_KEY!);
+
+// Learn about user
+await assistant.learnAboutUser('I am a software engineer who loves TypeScript and React');
+await assistant.learnAboutUser('I prefer dark mode and concise code examples');
+await assistant.learnAboutUser('I have 5 years of experience in web development');
+
+// Ask personalized questions
+console.log(await assistant.answerQuestion('What should I learn next for career growth?'));
+console.log(await assistant.answerQuestion('Can you show me a TypeScript example?'));
+
+// Get personalized recommendations
+const recommendations = await assistant.getPersonalizedRecommendations();
+console.log('Personalized recommendations:', recommendations);
+```
+
+These examples demonstrate how Memorits can be used to build sophisticated, memory-enabled applications ranging from simple note-taking systems to advanced AI assistants with persistent context and learning capabilities.

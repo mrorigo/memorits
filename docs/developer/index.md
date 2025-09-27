@@ -54,45 +54,47 @@ const memories = await memori.searchMemories('urgent meeting notes', {
 
 This developer documentation is organized to help you build sophisticated AI agents with Memorits:
 
-### Core Concepts
-- **[Memory Management](core-concepts/memory-management.md)** - Understanding auto-ingestion vs conscious processing modes
+### 🚀 Quick Start
+- **[Getting Started](getting-started.md)** - Installation and basic setup
+- **[Basic Usage](basic-usage.md)** - Your first memory-enabled application
+
+### 🏗️ Core Concepts
+- **[Memory Management](core-concepts/memory-management.md)** - Auto-ingestion vs conscious processing modes
 - **[Search Strategies](core-concepts/search-strategies.md)** - FTS5, LIKE, recent, semantic, and advanced filtering
 - **[Memory Classification](core-concepts/classification.md)** - Importance levels and categorization systems
 
-### Architecture Deep Dive
-- **[System Architecture](architecture/system-overview.md)** - High-level system design and data flow
-- **[Database Layer](architecture/database-layer.md)** - SQLite with FTS5, schema design, and optimization
-- **[Search Engine](architecture/search-engine.md)** - Multi-strategy search implementation
-- **[Agent System](architecture/agent-system.md)** - Memory and conscious agents explained
+### 🏛️ Architecture
+- **[System Overview](architecture/system-overview.md)** - High-level system design and data flow
+- **[Database Schema](architecture/database-schema.md)** - Database design and optimization
+- **[Search Architecture](architecture/search-architecture.md)** - Multi-strategy search implementation
 
-### Advanced Features
+### 🔧 Advanced Features
 - **[Temporal Filtering](advanced-features/temporal-filtering.md)** - Time-based search and pattern matching
 - **[Metadata Filtering](advanced-features/metadata-filtering.md)** - Advanced metadata-based queries
 - **[Duplicate Management](advanced-features/duplicate-management.md)** - Consolidation and cleanup strategies
 - **[Conscious Processing](advanced-features/conscious-processing.md)** - Background memory processing
 
-### Integration Guides
-- **[OpenAI Integration](integrations/openai-integration.md)** - Drop-in replacement patterns
-- **[Custom Integrations](integrations/custom-integrations.md)** - Building custom providers
-- **[Multi-Agent Systems](integrations/multi-agent-systems.md)** - Shared memory architectures
+### 🔗 Integration
+- **[OpenAI Integration](integration/openai-integration.md)** - Drop-in replacement patterns
+- **[Custom Providers](integration/custom-providers.md)** - Building custom LLM providers
+- **[Multi-Agent Setup](integration/multi-agent.md)** - Shared memory architectures
 
-### API Reference
-- **[Core API](api-reference/core-api.md)** - Memori class and primary interfaces
-- **[Search API](api-reference/search-api.md)** - Advanced search capabilities
-- **[Database API](api-reference/database-api.md)** - Direct database operations
-- **[Configuration API](api-reference/configuration-api.md)** - Configuration management
+### 📖 API Reference
+- **[Core API](api/core-api.md)** - Memori class and primary interfaces
+- **[Search API](api/search-api.md)** - Advanced search capabilities
+- **[Database API](api/database-api.md)** - Direct database operations
+- **[Configuration](api/configuration.md)** - Configuration management
 
-### Examples & Tutorials
+### 💡 Examples
 - **[Basic Examples](examples/basic-usage.md)** - Getting started examples
 - **[Advanced Examples](examples/advanced-usage.md)** - Complex use cases
-- **[Agent Building](examples/agent-building.md)** - Building memory-enabled agents
-- **[Search Strategies](examples/search-strategies.md)** - Advanced search techniques
+- **[Search Examples](examples/search-examples.md)** - Advanced search techniques
+- **[Integration Examples](examples/integration-examples.md)** - Real-world integration patterns
 
-### Deployment & Operations
-- **[Production Deployment](deployment/production.md)** - Production-ready deployment
+### 🚢 Deployment
+- **[Production Setup](deployment/production.md)** - Production-ready deployment
+- **[Performance](deployment/performance.md)** - Optimization strategies
 - **[Monitoring](deployment/monitoring.md)** - Health checks and observability
-- **[Performance Tuning](deployment/performance.md)** - Optimization strategies
-- **[Backup & Recovery](deployment/backup-recovery.md)** - Data management
 
 ## 🎯 Target Audience
 
