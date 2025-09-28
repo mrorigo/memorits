@@ -62,6 +62,16 @@ export interface ILogger {
   debug(message: string, meta?: Record<string, unknown>): void;
 }
 
+// Backup metadata interface for tracking backup information
+export interface BackupMetadata {
+  id: string;
+  strategyName: string;
+  createdAt: Date;
+  fileSize: number;
+  strategyCount: number;
+  checksum?: string;
+}
+
 // Database query result interface for type-safe database operations
 export interface DatabaseQueryResult {
   memory_id: string;
@@ -199,8 +209,12 @@ export interface ConfigurationPersistenceManager {
   load(strategyName: string): Promise<SearchStrategyConfiguration | null>;
   delete(strategyName: string): Promise<void>;
   list(): Promise<string[]>;
-  backup(name: string): Promise<string>;
+  backup(name: string): Promise<BackupMetadata>;
   restore(name: string, backupId: string): Promise<SearchStrategyConfiguration>;
+  restoreWithValidation(name: string, backupId: string): Promise<SearchStrategyConfiguration>;
+  listStrategyBackups(strategyName: string): Promise<BackupMetadata[]>;
+  cleanupOldBackups(strategyName: string, maxBackups: number): Promise<void>;
+  validateBackupIntegrity(backupId: string): Promise<boolean>;
   export(): Promise<Record<string, SearchStrategyConfiguration>>;
   import(configs: Record<string, SearchStrategyConfiguration>): Promise<void>;
 }

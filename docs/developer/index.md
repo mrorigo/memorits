@@ -15,6 +15,12 @@ Memorits transforms AI conversations from fleeting interactions into persistent,
 - **🧠 Dual Memory Modes**: Conscious processing vs. automated background ingestion
 - **🎨 Multiple Search Strategies**: FTS5, LIKE, recent, semantic, temporal, and metadata filtering
 - **🤖 OpenAI Drop-in Replacement**: Zero breaking changes for existing code
+- **⚙️ Advanced Configuration Management**: Real file system persistence, runtime updates, audit trails
+- **🛡️ Enterprise Error Handling**: Circuit breaker patterns, strategy-specific recovery, enhanced error context
+- **📈 Performance Monitoring**: Real-time dashboards, comprehensive analytics, system health monitoring
+- **🔗 Memory Relationship Processing**: LLM-powered relationship extraction, graph analysis, and traversal
+- **🔄 Intelligent Consolidation**: Multi-tier safety validation, quality scoring, and rollback capabilities
+- **📊 Search Index Maintenance**: Automated optimization, health monitoring, backup, and recovery
 
 ## 🚀 Quick Start
 
@@ -72,6 +78,12 @@ This developer documentation is organized to help you build sophisticated AI age
 - **[Metadata Filtering](advanced-features/metadata-filtering.md)** - Advanced metadata-based queries
 - **[Duplicate Management](advanced-features/duplicate-management.md)** - Consolidation and cleanup strategies
 - **[Conscious Processing](advanced-features/conscious-processing.md)** - Background memory processing
+- **[Relationship Processing](advanced-features/relationship-processing.md)** - LLM-powered relationship extraction and graph analysis
+- **[Memory State Management](advanced-features/memory-state-management.md)** - Enterprise-grade processing state tracking
+- **[Configuration Management](advanced-features/configuration-management.md)** - Runtime configuration with persistence and audit trails
+- **[Performance Monitoring](advanced-features/performance-monitoring.md)** - Real-time dashboards and analytics
+- **[Error Handling](advanced-features/error-handling.md)** - Circuit breaker patterns and recovery mechanisms
+- **[Search Index Maintenance](advanced-features/search-index-maintenance.md)** - Automated optimization and health monitoring
 
 ### 🔗 Integration
 - **[OpenAI Integration](integration/openai-integration.md)** - Drop-in replacement patterns
@@ -118,13 +130,14 @@ This documentation is specifically designed for:
 - **Conscious Processing**: Background processing with human-like reflection
 
 ### Search Strategies
-- **FTS5**: Full-text search with BM25 ranking
-- **LIKE**: Pattern-based text matching
-- **Recent**: Time-based recent memory retrieval
+- **FTS5**: Full-text search with BM25 ranking and configurable weights
+- **LIKE**: Pattern-based text matching with relevance boosting
+- **Recent**: Time-based recent memory retrieval with time windows
 - **Semantic**: Vector-based similarity search (planned)
-- **Category Filter**: Classification-based filtering
-- **Temporal Filter**: Time-based filtering and pattern matching
-- **Metadata Filter**: Advanced metadata-based queries
+- **Category Filter**: Classification-based filtering with hierarchy support
+- **Temporal Filter**: Time-based filtering with natural language parsing
+- **Metadata Filter**: Advanced metadata-based queries with nested access
+- **Relationship**: Graph-based relationship traversal with confidence scoring
 
 ### Memory Classification
 - **Importance Levels**: Critical, High, Medium, Low

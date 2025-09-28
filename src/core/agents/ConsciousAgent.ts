@@ -621,14 +621,227 @@ export class ConsciousAgent {
   }
 
   /**
-    * Get count of processed memories
-    */
+   * Get count of processed memories
+   */
   getProcessedMemoryCount(): number {
     return this.processedMemoryIds.size;
   }
 
   /**
-    * Perform safety checks before consolidation
+   * Get comprehensive consolidation health report
+   */
+  async getConsolidationHealthReport(namespace?: string): Promise<{
+    status: 'healthy' | 'warning' | 'critical';
+    totalMemories: number;
+    consolidatedMemories: number;
+    failedConsolidations: number;
+    averageConsolidationTime: number;
+    lastConsolidationActivity?: Date;
+    recommendations: string[];
+    recentErrors: string[];
+  }> {
+    const targetNamespace = namespace || this.namespace;
+
+    try {
+      logInfo('Generating consolidation health report', {
+        component: 'ConsciousAgent',
+        namespace: targetNamespace,
+      });
+
+      // Get consolidation statistics from database
+      const consolidationStats = await this.dbManager.getConsolidationStats(targetNamespace);
+      const processingMetrics = await this.dbManager.getProcessingMetrics();
+
+      // Get recent consolidation activity
+      const recentActivity = await this.dbManager.getPrismaClient().longTermMemory.findMany({
+        where: {
+          namespace: targetNamespace,
+          processedData: {
+            path: ['consolidationReason'],
+            not: null,
+          } as any,
+        },
+        orderBy: { extractionTimestamp: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          extractionTimestamp: true,
+          processedData: true,
+        },
+      });
+
+      // Analyze recent activity for patterns
+      const recentErrors: string[] = [];
+      const consolidationTimes: number[] = [];
+      let failedConsolidations = 0;
+
+      recentActivity.forEach(activity => {
+        const processedData = activity.processedData as any;
+        if (processedData?.consolidationFailure) {
+          recentErrors.push(`Memory ${activity.id}: ${processedData.consolidationFailure}`);
+          failedConsolidations++;
+        }
+
+        if (processedData?.consolidationStartTime && processedData?.consolidationEndTime) {
+          const startTime = new Date(processedData.consolidationStartTime).getTime();
+          const endTime = new Date(processedData.consolidationEndTime).getTime();
+          consolidationTimes.push(endTime - startTime);
+        }
+      });
+
+      // Calculate average consolidation time
+      const averageConsolidationTime = consolidationTimes.length > 0
+        ? consolidationTimes.reduce((a, b) => a + b, 0) / consolidationTimes.length
+        : 0;
+
+      // Generate recommendations based on analysis
+      const recommendations: string[] = [];
+
+      if (failedConsolidations > recentActivity.length * 0.1) {
+        recommendations.push('High failure rate detected - review consolidation parameters and memory quality');
+      }
+
+      if (averageConsolidationTime > 30000) { // 30 seconds
+        recommendations.push('Consolidation operations are taking too long - consider reducing batch sizes');
+      }
+
+      if (consolidationStats.potentialDuplicates > consolidationStats.totalMemories * 0.3) {
+        recommendations.push('High number of potential duplicates - consider running consolidation more frequently');
+      }
+
+      if (recentActivity.length === 0) {
+        recommendations.push('No recent consolidation activity - system may need initialization');
+      }
+
+      // Determine overall health status
+      let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+
+      if (failedConsolidations > 5 || recentErrors.length > 10) {
+        status = 'critical';
+      } else if (failedConsolidations > 2 || averageConsolidationTime > 20000) {
+        status = 'warning';
+      }
+
+      const report = {
+        status,
+        totalMemories: consolidationStats.totalMemories,
+        consolidatedMemories: consolidationStats.consolidatedMemories,
+        failedConsolidations,
+        averageConsolidationTime: Math.round(averageConsolidationTime),
+        lastConsolidationActivity: consolidationStats.lastConsolidation,
+        recommendations,
+        recentErrors: recentErrors.slice(0, 5), // Limit to recent 5 errors
+      };
+
+      logInfo('Generated consolidation health report', {
+        component: 'ConsciousAgent',
+        namespace: targetNamespace,
+        ...report,
+      });
+
+      return report;
+    } catch (error) {
+      logError('Error generating consolidation health report', {
+        component: 'ConsciousAgent',
+        namespace: targetNamespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      return {
+        status: 'critical',
+        totalMemories: 0,
+        consolidatedMemories: 0,
+        failedConsolidations: 0,
+        averageConsolidationTime: 0,
+        recommendations: ['Failed to generate health report - check system logs'],
+        recentErrors: [`Health report generation failed: ${error instanceof Error ? error.message : String(error)}`],
+      };
+    }
+  }
+
+  /**
+   * Validate consolidation configuration and readiness
+   */
+  async validateConsolidationReadiness(namespace?: string): Promise<{
+    ready: boolean;
+    issues: string[];
+    recommendations: string[];
+  }> {
+    const targetNamespace = namespace || this.namespace;
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+
+    try {
+      logInfo('Validating consolidation readiness', {
+        component: 'ConsciousAgent',
+        namespace: targetNamespace,
+      });
+
+      // Check database connectivity
+      try {
+        await this.dbManager.getDatabaseStats(targetNamespace);
+      } catch (error) {
+        issues.push(`Database connectivity issue: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      // Check for minimum memory threshold
+      const stats = await this.dbManager.getDatabaseStats(targetNamespace);
+      if (stats.totalMemories < 10) {
+        recommendations.push('System has fewer than 10 memories - consolidation may not be beneficial yet');
+      }
+
+      // Check for conscious memories availability
+      const consciousStats = await this.dbManager.getConsciousProcessingStats(targetNamespace);
+      if (consciousStats.total === 0) {
+        issues.push('No conscious memories found for consolidation');
+      } else if (consciousStats.unprocessed > consciousStats.total * 0.5) {
+        recommendations.push(`${consciousStats.unprocessed} unprocessed conscious memories - consider running conscious processing first`);
+      }
+
+      // Check system resources and performance
+      if (typeof process !== 'undefined' && process.memoryUsage) {
+        const memoryUsage = process.memoryUsage();
+        const memoryUsagePercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
+
+        if (memoryUsagePercent > 80) {
+          recommendations.push(`High memory usage (${memoryUsagePercent.toFixed(1)}%) - consider freeing memory before consolidation`);
+        }
+      }
+
+      // Check for recent consolidation failures
+      const healthReport = await this.getConsolidationHealthReport(targetNamespace);
+      if (healthReport.status === 'critical') {
+        issues.push('System health is critical - address existing issues before consolidation');
+      }
+
+      const ready = issues.length === 0;
+
+      logInfo('Consolidation readiness validation completed', {
+        component: 'ConsciousAgent',
+        namespace: targetNamespace,
+        ready,
+        issuesCount: issues.length,
+        recommendationsCount: recommendations.length,
+      });
+
+      return { ready, issues, recommendations };
+    } catch (error) {
+      logError('Error validating consolidation readiness', {
+        component: 'ConsciousAgent',
+        namespace: targetNamespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      return {
+        ready: false,
+        issues: [`Validation error: ${error instanceof Error ? error.message : String(error)}`],
+        recommendations: ['Manual system check required'],
+      };
+    }
+  }
+
+  /**
+    * Perform enhanced safety checks before consolidation with comprehensive validation
     */
   private async performSafetyChecks(
     primaryMemory: ConsciousMemory,
@@ -689,15 +902,230 @@ export class ConsciousAgent {
         }
       }
 
+      // Enhanced Safety Check 5: Check memory importance compatibility
+      const primaryImportance = await this.getMemoryImportance(primaryMemory.id);
+      const duplicateImportances = await Promise.all(
+        duplicateMemories.map(dup => this.getMemoryImportance(dup.id))
+      );
+
+      const importanceMismatch = duplicateImportances.some(imp =>
+        Math.abs(this.importanceScoreToNumber(primaryImportance) - this.importanceScoreToNumber(imp)) > 0.3
+      );
+
+      if (importanceMismatch) {
+        return { passed: false, reason: 'Significant importance level mismatch between memories' };
+      }
+
+      // Enhanced Safety Check 6: Check for recent consolidation activity
+      const recentConsolidationCheck = await this.checkRecentConsolidationActivity(allMemoryIds, namespace);
+      if (!recentConsolidationCheck.allowed) {
+        return { passed: false, reason: recentConsolidationCheck.reason };
+      }
+
+      // Enhanced Safety Check 7: Validate memory content integrity
+      const contentValidation = await this.validateMemoryContentIntegrity([primaryMemory, ...duplicateMemories]);
+      if (!contentValidation.isValid) {
+        return { passed: false, reason: `Content integrity issue: ${contentValidation.reason}` };
+      }
+
+      // Enhanced Safety Check 8: Check consolidation size limits
+      if (duplicateMemories.length > 25) {
+        return { passed: false, reason: `Too many duplicates (${duplicateMemories.length}) - maximum recommended is 25 for quality consolidation` };
+      }
+
+      // Enhanced Safety Check 9: Validate memory classifications compatibility
+      const classificationCheck = await this.validateClassificationCompatibility(primaryMemory, duplicateMemories);
+      if (!classificationCheck.compatible) {
+        return { passed: false, reason: `Incompatible classifications: ${classificationCheck.reason}` };
+      }
+
       return { passed: true };
     } catch (error) {
-      logError('Error performing safety checks', {
+      logError('Error performing enhanced safety checks', {
         component: 'ConsciousAgent',
         namespace,
         primaryId: primaryMemory.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      return { passed: false, reason: `Safety check error: ${error instanceof Error ? error.message : String(error)}` };
+      return { passed: false, reason: `Enhanced safety check error: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+
+  /**
+   * Get memory importance level from database
+   */
+  private async getMemoryImportance(memoryId: string): Promise<string> {
+    try {
+      const memory = await this.dbManager.getPrismaClient().longTermMemory.findUnique({
+        where: { id: memoryId },
+        select: { memoryImportance: true },
+      });
+      return memory?.memoryImportance || 'medium';
+    } catch (error) {
+      logError('Error getting memory importance', {
+        component: 'ConsciousAgent',
+        memoryId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return 'medium';
+    }
+  }
+
+  /**
+   * Convert importance level to numeric score for comparison
+   */
+  private importanceScoreToNumber(importance: string): number {
+    const scores = {
+      'critical': 0.9,
+      'high': 0.7,
+      'medium': 0.5,
+      'low': 0.3,
+    };
+    return scores[importance as keyof typeof scores] || 0.5;
+  }
+
+  /**
+   * Check for recent consolidation activity that might indicate issues
+   */
+  private async checkRecentConsolidationActivity(
+    memoryIds: string[],
+    namespace: string,
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    try {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+      // Check for recent consolidation failures
+      const recentFailures = await this.dbManager.getPrismaClient().longTermMemory.findMany({
+        where: {
+          id: { in: memoryIds },
+          namespace,
+          processedData: {
+            path: ['consolidationFailure'],
+            not: null,
+          } as any,
+          extractionTimestamp: {
+            gte: oneHourAgo,
+          },
+        },
+        select: { id: true, processedData: true },
+      });
+
+      if (recentFailures.length > 0) {
+        return {
+          allowed: false,
+          reason: `Recent consolidation failures detected for ${recentFailures.length} memories in the last hour`,
+        };
+      }
+
+      // Check for excessive consolidation attempts (more than 3 in last hour)
+      const recentConsolidations = await this.dbManager.getPrismaClient().longTermMemory.findMany({
+        where: {
+          id: { in: memoryIds },
+          namespace,
+          processedData: {
+            path: ['consolidatedAt'],
+            gte: oneHourAgo,
+          } as any,
+        },
+        select: { id: true },
+      });
+
+      if (recentConsolidations.length >= 3) {
+        return {
+          allowed: false,
+          reason: `Excessive consolidation activity: ${recentConsolidations.length} consolidations in the last hour`,
+        };
+      }
+
+      return { allowed: true };
+    } catch (error) {
+      logError('Error checking recent consolidation activity', {
+        component: 'ConsciousAgent',
+        memoryIds,
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { allowed: false, reason: 'Failed to check consolidation activity' };
+    }
+  }
+
+  /**
+   * Validate memory content integrity
+   */
+  private async validateMemoryContentIntegrity(
+    memories: ConsciousMemory[],
+  ): Promise<{ isValid: boolean; reason?: string }> {
+    try {
+      for (const memory of memories) {
+        // Check for empty or very short content
+        if (!memory.content || memory.content.trim().length < 10) {
+          return { isValid: false, reason: `Memory ${memory.id} has insufficient content` };
+        }
+
+        // Check for suspicious content patterns
+        const suspiciousPatterns = [
+          /test.*test.*test/,
+          /lorem.*ipsum/,
+          /placeholder.*content/,
+        ];
+
+        const lowerContent = memory.content.toLowerCase();
+        if (suspiciousPatterns.some(pattern => pattern.test(lowerContent))) {
+          return { isValid: false, reason: `Memory ${memory.id} contains suspicious test/placeholder content` };
+        }
+
+        // Check for reasonable content length
+        if (memory.content.length > 50000) {
+          return { isValid: false, reason: `Memory ${memory.id} content is too large (${memory.content.length} characters)` };
+        }
+      }
+
+      return { isValid: true };
+    } catch (error) {
+      return {
+        isValid: false,
+        reason: `Content integrity validation error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  /**
+   * Validate classification compatibility between memories
+   */
+  private async validateClassificationCompatibility(
+    primaryMemory: ConsciousMemory,
+    duplicateMemories: ConsciousMemory[],
+  ): Promise<{ compatible: boolean; reason?: string }> {
+    try {
+      // Check if all memories have the same base classification
+      const allClassifications = [primaryMemory.classification, ...duplicateMemories.map(d => d.classification)];
+
+      // For conscious memories, they should all be 'conscious-info' or related
+      const nonConsciousClassifications = allClassifications.filter(cls => !cls.includes('conscious'));
+      if (nonConsciousClassifications.length > 0) {
+        return {
+          compatible: false,
+          reason: `Non-conscious classifications found: ${nonConsciousClassifications.join(', ')}`,
+        };
+      }
+
+      // Check for contradictory classifications within conscious memories
+      const consciousTypes = allClassifications.filter(cls => cls.includes('conscious'));
+      const uniqueConsciousTypes = [...new Set(consciousTypes)];
+
+      if (uniqueConsciousTypes.length > 2) {
+        return {
+          compatible: false,
+          reason: `Too many different conscious memory types: ${uniqueConsciousTypes.join(', ')}`,
+        };
+      }
+
+      return { compatible: true };
+    } catch (error) {
+      return {
+        compatible: false,
+        reason: `Classification compatibility check error: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
   }
 

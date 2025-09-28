@@ -31,6 +31,10 @@ Memorits gives your AI applications perfect recall - automatically capturing, cl
 - **🔄 Intelligent Consolidation**: Detect and merge duplicate memories with transaction safety and intelligent data merging
 - **🎛️ Advanced Search & Filtering**: Powerful filter expressions, template system, and multi-strategy search orchestration
 - **📊 Index Management**: Automated search index optimization, health monitoring, backup, and corruption recovery
+- **⚙️ Advanced Configuration Management**: Real file system persistence, runtime configuration updates, comprehensive audit trails
+- **🛡️ Enterprise Error Handling**: Circuit breaker patterns, strategy-specific recovery, enhanced error context and reporting
+- **📈 Performance Monitoring**: Real-time dashboards, comprehensive analytics, system health monitoring and alerting
+- **🔗 Advanced Memory Relationships**: LLM-powered relationship extraction, graph analysis, and relationship-based retrieval
 
 ### 🎯 Perfect For
 
@@ -621,6 +625,172 @@ console.log(`Optimization saved ${optimizationResult.spaceSaved} bytes`);
 
 ## Advanced Features
 
+### ⚙️ Advanced Configuration Management
+
+Memorits now features enterprise-grade configuration management with:
+
+#### **FileConfigurationPersistenceManager**
+- **Real File System Operations**: Persistent configuration storage with automatic directory management
+- **Enhanced Backup System**: Metadata-rich backups with integrity verification using SHA-256 checksums
+- **Automatic Directory Management**: Creates and manages configuration directories with proper permissions
+- **Backup Rotation**: Configurable retention policies with automatic cleanup of old backups
+
+```typescript
+import { SearchStrategyConfigManager, FileConfigurationPersistenceManager } from 'memorits';
+
+// Create persistence manager with custom config directory
+const persistenceManager = new FileConfigurationPersistenceManager('./config/search');
+
+// Create configuration manager
+const configManager = new SearchStrategyConfigManager(persistenceManager);
+
+// Save configuration with automatic backup
+await configManager.saveConfiguration('FTS5', {
+  strategyName: 'FTS5',
+  enabled: true,
+  priority: 10,
+  performance: {
+    enableCaching: true,
+    cacheSize: 1000,
+    enableParallelExecution: false,
+  },
+  strategySpecific: {
+    bm25Weights: { title: 2.0, content: 1.0, category: 1.5 }
+  }
+});
+
+// Create backup with metadata
+const backup = await persistenceManager.backup('FTS5');
+console.log(`Backup created: ${backup.id}, Size: ${backup.fileSize}, Checksum: ${backup.checksum}`);
+
+// Restore from backup with integrity validation
+const restoredConfig = await persistenceManager.restoreWithValidation('FTS5', backup.id);
+```
+
+#### **Runtime Configuration Management**
+- **Dynamic Updates**: Modify search strategies without service restart
+- **Configuration Notifications**: Real-time change notifications for strategy updates
+- **Comprehensive Audit Trails**: Complete history tracking of all configuration changes
+- **Strategy Reconfiguration**: Hot-swapping of search strategy parameters
+
+```typescript
+// Get current configuration
+const currentConfig = await configManager.loadConfiguration('FTS5');
+
+// Update configuration dynamically
+const updatedConfig = configManager.mergeConfigurations(currentConfig!, {
+  priority: 15,
+  performance: {
+    cacheSize: 2000,
+    enableCaching: true
+  }
+});
+
+// Save with audit trail
+await configManager.saveConfiguration('FTS5', updatedConfig);
+
+// Get audit history
+const history = await configManager.getAuditHistory('FTS5', 10);
+console.log('Configuration changes:', history);
+
+// Get performance analytics
+const analytics = configManager.getPerformanceAnalytics();
+console.log(`Cache hit rate: ${analytics.cacheEfficiency * 100}%`);
+console.log(`Average operation latency: ${analytics.averageLatency}ms`);
+```
+
+#### **Configuration Performance Monitoring**
+- **Real-time Metrics**: Operation latency, throughput, and error rate tracking
+- **Performance Analytics**: Detailed performance reports with recommendations
+- **Trend Analysis**: Historical performance analysis with predictions
+- **Alert Integration**: Performance threshold monitoring and alerting
+
+```typescript
+// Get performance metrics
+const metrics = configManager.getPerformanceMetrics();
+console.log(`Total operations: ${metrics.totalOperations}`);
+console.log(`Average latency: ${metrics.averageOperationTime}ms`);
+console.log(`Cache hit rate: ${metrics.cacheHitRate}`);
+
+// Get detailed performance report
+const report = configManager.getConfigurationPerformanceReport();
+console.log('Performance summary:', report.summary);
+console.log('Recommendations:', report.recommendations);
+
+// Get recent operation metrics
+const recentOps = configManager.getRecentOperationMetrics(50);
+console.log(`Recent operations: ${recentOps.length}`);
+```
+
+### 🛡️ Enterprise Error Handling
+
+#### **Circuit Breaker Pattern**
+- **Fault Tolerance**: Automatic failure detection and recovery
+- **Strategy-specific Recovery**: Individual error handling per search strategy
+- **Enhanced Error Context**: Detailed error information with stack traces and context
+- **Graceful Degradation**: Fallback mechanisms when strategies fail
+
+```typescript
+// Circuit breaker automatically handles strategy failures
+const searchService = new SearchService(dbManager, configManager);
+
+// Search continues even if one strategy fails
+const results = await searchService.searchWithStrategy(query, SearchStrategy.FTS5);
+
+// Get error context for debugging
+const errorContext = searchService.getLastError();
+if (errorContext) {
+  console.log(`Strategy: ${errorContext.strategy}`);
+  console.log(`Error: ${errorContext.message}`);
+  console.log(`Recovery action: ${errorContext.recoveryAction}`);
+}
+```
+
+#### **Error Recovery Mechanisms**
+- **Automatic Retry**: Configurable retry policies with exponential backoff
+- **Fallback Strategies**: Alternative search approaches when primary fails
+- **Error Classification**: Categorization of errors by severity and type
+- **Recovery Tracking**: Monitoring and reporting of recovery success rates
+
+### 📊 Performance Monitoring & Analytics
+
+#### **Real-time Performance Dashboard**
+- **Live Metrics**: Real-time collection of performance data
+- **Visual Widgets**: Configurable dashboard with charts and indicators
+- **Alert System**: Proactive monitoring with customizable thresholds
+- **Trend Analysis**: Historical analysis with predictive capabilities
+
+```typescript
+import { PerformanceDashboardService } from 'memorits';
+
+const dashboard = new PerformanceDashboardService();
+dashboard.initializeDashboard();
+
+// Get system status overview
+const status = dashboard.getSystemStatusOverview();
+console.log(`Overall health: ${status.overallHealth}`);
+console.log(`Active alerts: ${status.activeAlerts}`);
+
+// Get real-time metrics
+const metrics = dashboard.getRealTimeMetrics('search', 'latency', 100);
+console.log(`Recent search latency: ${metrics.map(m => m.value).join(', ')}`);
+
+// Set up alert callbacks
+dashboard.addAlertCallback((alert) => {
+  console.log(`Alert: ${alert.title} - ${alert.description}`);
+  if (alert.severity === 'critical') {
+    // Trigger incident response
+    notifyOnCall(alert);
+  }
+});
+```
+
+#### **Comprehensive Analytics**
+- **Performance Reports**: Automated report generation with insights
+- **Cross-component Analysis**: Correlation analysis across system components
+- **Resource Utilization**: Memory, CPU, and I/O efficiency tracking
+- **Predictive Analytics**: Trend-based performance predictions
+
 ### Enhanced Search API
 
 The search API now supports advanced filtering options including filter expressions and relationship search:
@@ -665,25 +835,146 @@ const templateSearch = await memori.searchMemories('', {
   limit: 10
 });
 
-// Memory consolidation with state tracking
-const memories = await memori.searchMemories('similar topic', { limit: 100 });
-const duplicates = await memori.findDuplicateMemories(memories);
+### 🔗 Advanced Memory Relationship Processing
 
-if (duplicates.length > 0) {
+#### **LLM-Powered Relationship Extraction**
+- **OpenAI Integration**: Advanced relationship analysis using GPT models
+- **Relationship Type Detection**: Automatic identification of continuation, reference, related, superseding, and contradictory relationships
+- **Confidence Scoring**: Semantic similarity and temporal proximity analysis
+- **Graph Traversal**: Multi-hop relationship navigation with depth control
+
+```typescript
+// Configure OpenAI for relationship processing
+const config = ConfigManager.loadConfig();
+config.openaiApiKey = process.env.OPENAI_API_KEY;
+config.relationshipProcessing = {
+  enabled: true,
+  model: 'gpt-4o-mini',
+  confidenceThreshold: 0.7,
+  enableSemanticAnalysis: true
+};
+
+const memori = new Memori(config);
+await memori.enable();
+
+// Memories are automatically analyzed for relationships during processing
+const chatId = await memori.recordConversation(
+  "I'm working on a React authentication system",
+  "I'll help you implement JWT-based authentication with refresh tokens"
+);
+
+// Search with relationship context
+const relatedMemories = await memori.searchMemories('authentication patterns', {
+  includeRelatedMemories: true,
+  maxRelationshipDepth: 2,
+  minRelationshipConfidence: 0.6
+});
+
+// Get relationship graph for memory
+const relationships = await memori.getMemoryRelationships(chatId);
+console.log(`Found ${relationships.length} related memories`);
+```
+
+#### **Memory Relationship Types**
+- **Continuation**: Sequential conversation flow
+- **Reference**: Related topics or concepts
+- **Related**: Associated ideas or projects
+- **Superseding**: Updated or improved information
+- **Contradictory**: Conflicting information requiring resolution
+
+#### **Relationship Graph Analysis**
+- **Traversal Algorithms**: Breadth-first and depth-first relationship exploration
+- **Strength Weighting**: Relationship confidence and recency scoring
+- **Path Discovery**: Finding connection paths between distant memories
+- **Cluster Detection**: Grouping related memories into knowledge clusters
+
+### 🔄 Intelligent Duplicate Consolidation
+
+#### **Multi-tier Safety Validation**
+- **Quality Scoring**: Content similarity and importance analysis
+- **Entity Merging**: Intelligent combination of extracted entities and metadata
+- **History Preservation**: Complete audit trail of consolidation operations
+- **Rollback Capabilities**: Transaction-safe consolidation with undo support
+
+```typescript
+// Find duplicate memories using advanced similarity detection
+const candidateMemories = await memori.searchMemories('authentication implementation', {
+  limit: 200,
+  includeMetadata: true
+});
+
+const duplicates = await memori.findDuplicateMemories(candidateMemories, {
+  similarityThreshold: 0.8,
+  includeSemanticSimilarity: true,
+  minConfidenceScore: 0.7
+});
+
+console.log(`Found ${duplicates.length} potential duplicate groups`);
+
+// Consolidate with safety validation
+for (const duplicateGroup of duplicates) {
   const consolidationResult = await memori.consolidateDuplicateMemories(
-    duplicates[0].id,
-    duplicates.slice(1).map(d => d.id)
+    duplicateGroup.primaryId,
+    duplicateGroup.duplicateIds,
+    {
+      enableQualityScoring: true,
+      preserveMetadata: true,
+      createBackup: true,
+      notifyOnConflicts: true
+    }
   );
 
   console.log(`Consolidated ${consolidationResult.consolidated} memories`);
+  console.log(`Quality score: ${consolidationResult.qualityScore}`);
 }
 
-// Relationship-based search
-const relatedMemories = await memori.searchMemories('related to project setup', {
-  includeRelatedMemories: true,
-  maxRelationshipDepth: 3
+// Get consolidation history
+const history = await memori.getConsolidationHistory({
+  limit: 50,
+  includeRollbackInfo: true
 });
 ```
+
+#### **Consolidation State Management**
+- **Processing Workflows**: Comprehensive state tracking through consolidation pipeline
+- **Validation Gates**: Multi-stage validation with rollback on failure
+- **Progress Monitoring**: Real-time tracking of consolidation operations
+- **Error Recovery**: Automatic retry with exponential backoff
+
+### 📊 Search Index Maintenance
+
+#### **Automated Index Optimization**
+- **Health Monitoring**: Continuous monitoring of index corruption and performance
+- **Automatic Optimization**: Scheduled merge, compact, and rebuild operations
+- **Performance Metrics**: Query time, throughput, and resource usage tracking
+- **Backup & Recovery**: Automated index backups with integrity verification
+
+```typescript
+// Get index health report
+const healthReport = await memori.getIndexHealthReport();
+console.log(`Index health: ${healthReport.health}`);
+console.log(`Issues found: ${healthReport.issues.length}`);
+console.log(`Fragmentation: ${healthReport.fragmentation * 100}%`);
+
+// Optimize index with specific strategy
+const optimizationResult = await memori.optimizeIndex('merge');
+console.log(`Space saved: ${optimizationResult.spaceSaved} bytes`);
+console.log(`Operations performed: ${optimizationResult.operationsPerformed}`);
+
+// Schedule automatic maintenance
+await memori.scheduleIndexMaintenance({
+  optimizationInterval: 24 * 60 * 60 * 1000, // 24 hours
+  backupInterval: 7 * 24 * 60 * 60 * 1000,   // 7 days
+  healthCheckInterval: 60 * 60 * 1000,       // 1 hour
+  enableAutoRecovery: true
+});
+```
+
+#### **Index Performance Analytics**
+- **Query Performance**: Response time distribution and slow query analysis
+- **Resource Utilization**: Memory usage, disk I/O, and CPU consumption
+- **Maintenance Impact**: Performance before and after optimization
+- **Predictive Monitoring**: Trend analysis and capacity planning
 
 ### Clean Interface System
 

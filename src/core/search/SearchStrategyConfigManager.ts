@@ -8,6 +8,41 @@ import {
   SearchStrategy,
 } from './types';
 import { ILogger } from './types';
+import { promises as fs } from 'fs';
+import { join, dirname } from 'path';
+import { createHash } from 'crypto';
+import { BackupMetadata } from './types';
+
+// ===== PERFORMANCE MONITORING INTERFACES FOR CONFIG MANAGER =====
+
+/**
+ * Configuration performance metrics
+ */
+interface ConfigurationPerformanceMetrics {
+  totalOperations: number;
+  averageOperationTime: number;
+  operationsByType: Map<string, number>;
+  errorCounts: Map<string, number>;
+  cacheHitRate: number;
+  persistenceLatency: number;
+  validationLatency: number;
+  lastOperationTime: number;
+}
+
+/**
+ * Configuration operation performance data
+ */
+interface ConfigurationOperationMetrics {
+  operationType: string;
+  strategyName: string;
+  startTime: number;
+  endTime?: number;
+  duration?: number;
+  success: boolean;
+  error?: string;
+  cacheUsed: boolean;
+  persistenceRequired: boolean;
+}
 
 /**
  * Default configuration templates for each search strategy
@@ -467,38 +502,90 @@ class ConfigurationValidator {
  */
 class FileConfigurationPersistenceManager implements ConfigurationPersistenceManager {
   private readonly configDir: string;
-  private readonly fs: any; // File system abstraction
+  private readonly backupDir: string;
+  private logger?: ILogger;
 
-  constructor(configDir: string = './config/search') {
+  constructor(configDir: string = './config/search', logger?: ILogger) {
     this.configDir = configDir;
-    // In a real implementation, this would use the actual file system
-    this.fs = {
-      readFile: async (_path: string) => {
-        // Placeholder - would implement actual file reading
-        throw new Error('File system not implemented');
-      },
-      writeFile: async (_path: string, _data: string) => {
-        // Placeholder - would implement actual file writing
-        throw new Error('File system not implemented');
-      },
-      exists: async (_path: string) => {
-        // Placeholder - would implement actual file existence check
-        return false;
-      },
-      listDir: async (_path: string) => {
-        // Placeholder - would implement actual directory listing
+    this.backupDir = join(configDir, 'backups');
+    this.logger = logger;
+    this.initializeConfigDirectory();
+  }
+
+  /**
+   * Initialize configuration and backup directories
+   */
+  private async initializeConfigDirectory(): Promise<void> {
+    try {
+      // Create config directory recursively
+      await fs.mkdir(this.configDir, { recursive: true });
+      // Create backup directory recursively
+      await fs.mkdir(this.backupDir, { recursive: true });
+    } catch (error) {
+      throw new Error(`Failed to initialize configuration directories: ${error}`);
+    }
+  }
+
+  /**
+   * Read file content as string
+   */
+  private async readFile(path: string): Promise<string> {
+    try {
+      return await fs.readFile(path, 'utf-8');
+    } catch (error) {
+      if ((error as any).code === 'ENOENT') {
+        throw new Error(`File not found: ${path}`);
+      }
+      throw new Error(`Failed to read file ${path}: ${error}`);
+    }
+  }
+
+  /**
+   * Write content to file
+   */
+  private async writeFile(path: string, data: string): Promise<void> {
+    try {
+      // Ensure directory exists before writing
+      await fs.mkdir(dirname(path), { recursive: true });
+      await fs.writeFile(path, data, 'utf-8');
+    } catch (error) {
+      throw new Error(`Failed to write file ${path}: ${error}`);
+    }
+  }
+
+  /**
+   * Check if file exists
+   */
+  private async exists(path: string): Promise<boolean> {
+    try {
+      await fs.access(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * List files in directory
+   */
+  private async listDir(path: string): Promise<string[]> {
+    try {
+      return await fs.readdir(path);
+    } catch (error) {
+      if ((error as any).code === 'ENOENT') {
         return [];
-      },
-    };
+      }
+      throw new Error(`Failed to list directory ${path}: ${error}`);
+    }
   }
 
   async save(config: SearchStrategyConfiguration): Promise<void> {
     const filename = `${config.strategyName}.json`;
-    const filepath = `${this.configDir}/${filename}`;
+    const filepath = join(this.configDir, filename);
     const data = JSON.stringify(config, null, 2);
 
     try {
-      await this.fs.writeFile(filepath, data);
+      await this.writeFile(filepath, data);
     } catch (error) {
       throw new Error(`Failed to save configuration for ${config.strategyName}: ${error}`);
     }
@@ -506,15 +593,15 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
 
   async load(strategyName: string): Promise<SearchStrategyConfiguration | null> {
     const filename = `${strategyName}.json`;
-    const filepath = `${this.configDir}/${filename}`;
+    const filepath = join(this.configDir, filename);
 
     try {
-      const exists = await this.fs.exists(filepath);
+      const exists = await this.exists(filepath);
       if (!exists) {
         return null;
       }
 
-      const data = await this.fs.readFile(filepath);
+      const data = await this.readFile(filepath);
       return JSON.parse(data);
     } catch (error) {
       throw new Error(`Failed to load configuration for ${strategyName}: ${error}`);
@@ -523,16 +610,15 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
 
   async delete(strategyName: string): Promise<void> {
     const filename = `${strategyName}.json`;
-    const filepath = `${this.configDir}/${filename}`;
+    const filepath = join(this.configDir, filename);
 
     try {
-      const exists = await this.fs.exists(filepath);
+      const exists = await this.exists(filepath);
       if (!exists) {
         return;
       }
 
-      // In a real implementation, would delete the file
-      console.log(`Would delete configuration file: ${filepath}`);
+      await fs.unlink(filepath);
     } catch (error) {
       throw new Error(`Failed to delete configuration for ${strategyName}: ${error}`);
     }
@@ -540,7 +626,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
 
   async list(): Promise<string[]> {
     try {
-      const files = await this.fs.listDir(this.configDir);
+      const files = await this.listDir(this.configDir);
       return files
         .filter((file: string) => file.endsWith('.json'))
         .map((file: string) => file.replace('.json', ''));
@@ -549,7 +635,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
     }
   }
 
-  async backup(name: string): Promise<string> {
+  async backup(name: string): Promise<BackupMetadata> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupId = `${name}-${timestamp}`;
 
@@ -560,11 +646,42 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
       }
 
       const backupFilename = `${backupId}.json`;
-      const backupFilepath = `${this.configDir}/backups/${backupFilename}`;
+      const backupFilepath = join(this.backupDir, backupFilename);
       const data = JSON.stringify(config, null, 2);
+      const fileSize = Buffer.byteLength(data, 'utf8');
 
-      await this.fs.writeFile(backupFilepath, data);
-      return backupId;
+      // Calculate checksum for integrity verification
+      const checksum = this.calculateChecksum(data);
+
+      // Get current backup count for this strategy
+      const existingBackups = await this.listStrategyBackups(name);
+      const strategyCount = existingBackups.length + 1;
+
+      // Check if we need to cleanup old backups before creating new one
+      const maxBackups = 10; // Configurable limit
+      if (strategyCount > maxBackups) {
+        await this.cleanupOldBackups(name, maxBackups - 1);
+      }
+
+      // Create backup file
+      await this.writeFile(backupFilepath, data);
+
+      // Create metadata
+      const metadata: BackupMetadata = {
+        id: backupId,
+        strategyName: name,
+        createdAt: new Date(),
+        fileSize,
+        strategyCount,
+        checksum,
+      };
+
+      // Save metadata file alongside backup
+      const metadataFilename = `${backupId}.metadata.json`;
+      const metadataFilepath = join(this.backupDir, metadataFilename);
+      await this.writeFile(metadataFilepath, JSON.stringify(metadata, null, 2));
+
+      return metadata;
     } catch (error) {
       throw new Error(`Failed to backup configuration ${name}: ${error}`);
     }
@@ -572,10 +689,16 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
 
   async restore(name: string, backupId: string): Promise<SearchStrategyConfiguration> {
     const backupFilename = `${backupId}.json`;
-    const backupFilepath = `${this.configDir}/backups/${backupFilename}`;
+    const backupFilepath = join(this.backupDir, backupFilename);
 
     try {
-      const data = await this.fs.readFile(backupFilepath);
+      // Check if backup file exists
+      const exists = await this.exists(backupFilepath);
+      if (!exists) {
+        throw new Error(`Backup file not found: ${backupFilename}`);
+      }
+
+      const data = await this.readFile(backupFilepath);
       const config = JSON.parse(data);
 
       // Validate the restored configuration
@@ -584,8 +707,16 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
         throw new Error(`Invalid backup configuration: ${validation.errors.join(', ')}`);
       }
 
+      // Additional validation: ensure the backup is for the correct strategy
+      if (config.strategyName !== name) {
+        throw new Error(`Backup strategy name mismatch: expected ${name}, got ${config.strategyName}`);
+      }
+
       return config;
     } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error(`Failed to restore configuration ${name} from backup ${backupId}: Invalid JSON format`);
+      }
       throw new Error(`Failed to restore configuration ${name} from backup ${backupId}: ${error}`);
     }
   }
@@ -621,6 +752,144 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
     } catch (error) {
       throw new Error(`Failed to import configurations: ${error}`);
     }
+  }
+
+  /**
+   * Enhanced restore with integrity validation
+   */
+  async restoreWithValidation(name: string, backupId: string): Promise<SearchStrategyConfiguration> {
+    try {
+      // First validate backup integrity
+      const isValid = await this.validateBackupIntegrity(backupId);
+      if (!isValid) {
+        throw new Error(`Backup integrity validation failed for ${backupId}`);
+      }
+
+      // Proceed with normal restore
+      return await this.restore(name, backupId);
+    } catch (error) {
+      throw new Error(`Failed to restore configuration ${name} from backup ${backupId}: ${error}`);
+    }
+  }
+
+  /**
+   * List all backups for a specific strategy
+   */
+  async listStrategyBackups(strategyName: string): Promise<BackupMetadata[]> {
+    try {
+      const files = await this.listDir(this.backupDir);
+      const metadataFiles = files.filter(file =>
+        file.endsWith('.metadata.json') && file.startsWith(`${strategyName}-`),
+      );
+
+      const backups: BackupMetadata[] = [];
+      for (const metadataFile of metadataFiles) {
+        try {
+          const metadataPath = join(this.backupDir, metadataFile);
+          const metadataContent = await this.readFile(metadataPath);
+          const metadata: BackupMetadata = JSON.parse(metadataContent);
+          backups.push(metadata);
+        } catch (error) {
+          // Skip corrupted metadata files
+          this.logger?.warn(`Skipping corrupted metadata file: ${metadataFile}`, { error });
+        }
+      }
+
+      // Sort by creation date, newest first
+      return backups.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    } catch (error) {
+      throw new Error(`Failed to list backups for strategy ${strategyName}: ${error}`);
+    }
+  }
+
+  /**
+   * Clean up old backups, keeping only the specified maximum
+   */
+  async cleanupOldBackups(strategyName: string, maxBackups: number): Promise<void> {
+    try {
+      const backups = await this.listStrategyBackups(strategyName);
+
+      if (backups.length <= maxBackups) {
+        return; // No cleanup needed
+      }
+
+      // Get backups to delete (oldest ones beyond the limit)
+      const backupsToDelete = backups.slice(maxBackups);
+
+      for (const backup of backupsToDelete) {
+        try {
+          // Delete backup file
+          const backupFilename = `${backup.id}.json`;
+          const backupFilepath = join(this.backupDir, backupFilename);
+          if (await this.exists(backupFilepath)) {
+            await fs.unlink(backupFilepath);
+          }
+
+          // Delete metadata file
+          const metadataFilename = `${backup.id}.metadata.json`;
+          const metadataFilepath = join(this.backupDir, metadataFilename);
+          if (await this.exists(metadataFilepath)) {
+            await fs.unlink(metadataFilepath);
+          }
+        } catch (error) {
+          this.logger?.warn(`Failed to delete old backup ${backup.id}`, { error });
+        }
+      }
+    } catch (error) {
+      throw new Error(`Failed to cleanup old backups for strategy ${strategyName}: ${error}`);
+    }
+  }
+
+  /**
+   * Validate backup integrity using checksum and file size
+   */
+  async validateBackupIntegrity(backupId: string): Promise<boolean> {
+    try {
+      // Read metadata to get expected checksum and file size
+      const metadataFilename = `${backupId}.metadata.json`;
+      const metadataFilepath = join(this.backupDir, metadataFilename);
+
+      if (!(await this.exists(metadataFilepath))) {
+        return false;
+      }
+
+      const metadataContent = await this.readFile(metadataFilepath);
+      const metadata: BackupMetadata = JSON.parse(metadataContent);
+
+      // Read backup file
+      const backupFilename = `${backupId}.json`;
+      const backupFilepath = join(this.backupDir, backupFilename);
+
+      if (!(await this.exists(backupFilepath))) {
+        return false;
+      }
+
+      const backupContent = await this.readFile(backupFilepath);
+      const actualSize = Buffer.byteLength(backupContent, 'utf8');
+
+      // Check file size
+      if (actualSize !== metadata.fileSize) {
+        return false;
+      }
+
+      // Check checksum if available
+      if (metadata.checksum) {
+        const actualChecksum = this.calculateChecksum(backupContent);
+        return actualChecksum === metadata.checksum;
+      }
+
+      return true;
+    } catch (error) {
+      this.logger?.error(`Backup integrity validation failed for ${backupId}`, { error });
+      return false;
+    }
+  }
+
+  /**
+   * Calculate SHA-256 checksum for data integrity
+   */
+  private calculateChecksum(data: string): string {
+    return createHash('sha256').update(data, 'utf8').digest('hex');
   }
 }
 
@@ -671,17 +940,44 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
   private logger: ILogger;
   private configurations: Map<string, SearchStrategyConfiguration> = new Map();
 
+  // Performance monitoring
+  private performanceMetrics: ConfigurationPerformanceMetrics = {
+    totalOperations: 0,
+    averageOperationTime: 0,
+    operationsByType: new Map<string, number>(),
+    errorCounts: new Map<string, number>(),
+    cacheHitRate: 0,
+    persistenceLatency: 0,
+    validationLatency: 0,
+    lastOperationTime: 0,
+  };
+
+  private operationMetrics: ConfigurationOperationMetrics[] = [];
+  private maxOperationHistory = 1000;
+
   constructor(
     persistenceManager?: ConfigurationPersistenceManager,
     auditManager?: ConfigurationAuditManager,
     logger?: ILogger,
   ) {
-    this.persistenceManager = persistenceManager || new FileConfigurationPersistenceManager();
+    this.persistenceManager = persistenceManager || new FileConfigurationPersistenceManager('./config/search', logger);
     this.auditManager = auditManager || new MemoryConfigurationAuditManager();
     this.logger = logger || console;
   }
 
   async loadConfiguration(name: string): Promise<SearchStrategyConfiguration | null> {
+    const startTime = Date.now();
+    const cacheUsed = this.configurations.has(name);
+
+    const metrics: ConfigurationOperationMetrics = {
+      operationType: 'load',
+      strategyName: name,
+      startTime,
+      success: false,
+      cacheUsed,
+      persistenceRequired: !cacheUsed,
+    };
+
     try {
       // Check memory cache first
       if (this.configurations.has(name)) {
@@ -692,6 +988,8 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
           success: true,
           metadata: { source: 'memory' },
         });
+        metrics.success = true;
+        this.recordOperationMetrics(metrics);
         return this.configurations.get(name)!;
       }
 
@@ -709,6 +1007,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
           success: true,
           metadata: { source: 'disk' },
         });
+        metrics.success = true;
       } else {
         await this.auditManager.log({
           timestamp: new Date(),
@@ -719,8 +1018,12 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
         });
       }
 
+      this.recordOperationMetrics(metrics);
       return config;
     } catch (error) {
+      metrics.success = false;
+      metrics.error = error instanceof Error ? error.message : String(error);
+
       await this.auditManager.log({
         timestamp: new Date(),
         action: 'load',
@@ -730,6 +1033,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
       });
 
       this.logger.error(`Failed to load configuration for ${name}:`, { error: error instanceof Error ? error.message : String(error) });
+      this.recordOperationMetrics(metrics);
       return null;
     }
   }
@@ -997,5 +1301,327 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
       this.logger.error('Failed to get audit history:', { error: error instanceof Error ? error.message : String(error) });
       return [];
     }
+  }
+
+  /**
+   * Get backup metadata for a specific strategy
+   */
+  async getStrategyBackups(strategyName: string): Promise<BackupMetadata[]> {
+    try {
+      return await this.persistenceManager.listStrategyBackups(strategyName);
+    } catch (error) {
+      this.logger.error(`Failed to get backups for strategy ${strategyName}:`, { error: error instanceof Error ? error.message : String(error) });
+      return [];
+    }
+  }
+
+  /**
+   * Validate backup integrity for a specific backup
+   */
+  async validateBackup(backupId: string): Promise<boolean> {
+    try {
+      return await this.persistenceManager.validateBackupIntegrity(backupId);
+    } catch (error) {
+      this.logger.error(`Failed to validate backup ${backupId}:`, { error: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+  }
+
+  /**
+   * Clean up old backups for a strategy
+   */
+  async cleanupBackups(strategyName: string, maxBackups: number = 10): Promise<void> {
+    try {
+      await this.persistenceManager.cleanupOldBackups(strategyName, maxBackups);
+      this.logger.info(`Cleaned up old backups for strategy ${strategyName}, keeping last ${maxBackups}`);
+    } catch (error) {
+      this.logger.error(`Failed to cleanup backups for strategy ${strategyName}:`, { error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Enhanced backup with automatic cleanup
+   */
+  async backupWithCleanup(name: string, maxBackups: number = 10): Promise<BackupMetadata> {
+    try {
+      const metadata = await this.persistenceManager.backup(name);
+      await this.persistenceManager.cleanupOldBackups(name, maxBackups);
+      this.logger.info(`Backup created for ${name} with automatic cleanup (keeping last ${maxBackups})`);
+      return metadata;
+    } catch (error) {
+      this.logger.error(`Failed to create backup with cleanup for ${name}:`, { error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  // ===== PERFORMANCE MONITORING METHODS =====
+
+  /**
+   * Record operation performance metrics
+   */
+  private recordOperationMetrics(metrics: ConfigurationOperationMetrics): void {
+    const endTime = Date.now();
+    metrics.endTime = endTime;
+    metrics.duration = endTime - metrics.startTime;
+
+    // Update aggregate metrics
+    this.performanceMetrics.totalOperations++;
+    this.performanceMetrics.lastOperationTime = endTime;
+
+    // Update operation type counts
+    const currentCount = this.performanceMetrics.operationsByType.get(metrics.operationType) || 0;
+    this.performanceMetrics.operationsByType.set(metrics.operationType, currentCount + 1);
+
+    // Update average operation time
+    this.performanceMetrics.averageOperationTime =
+      (this.performanceMetrics.averageOperationTime * (this.performanceMetrics.totalOperations - 1) + metrics.duration!) /
+      this.performanceMetrics.totalOperations;
+
+    // Update cache hit rate
+    if (metrics.cacheUsed) {
+      this.updateCacheHitRate(true);
+    }
+
+    // Update latency metrics based on operation type
+    if (metrics.persistenceRequired) {
+      this.performanceMetrics.persistenceLatency =
+        (this.performanceMetrics.persistenceLatency * 0.9) + (metrics.duration! * 0.1);
+    }
+
+    if (metrics.operationType === 'validate') {
+      this.performanceMetrics.validationLatency =
+        (this.performanceMetrics.validationLatency * 0.9) + (metrics.duration! * 0.1);
+    }
+
+    // Track errors
+    if (!metrics.success && metrics.error) {
+      const currentErrorCount = this.performanceMetrics.errorCounts.get(metrics.error) || 0;
+      this.performanceMetrics.errorCounts.set(metrics.error, currentErrorCount + 1);
+    }
+
+    // Store operation history
+    this.operationMetrics.unshift(metrics);
+    if (this.operationMetrics.length > this.maxOperationHistory) {
+      this.operationMetrics = this.operationMetrics.slice(0, this.maxOperationHistory);
+    }
+  }
+
+  /**
+   * Update cache hit rate calculation
+   */
+  private updateCacheHitRate(hit: boolean): void {
+    // Simple moving average for cache hit rate
+    const currentRate = this.performanceMetrics.cacheHitRate;
+    const alpha = 0.1; // Learning rate
+    this.performanceMetrics.cacheHitRate = currentRate * (1 - alpha) + (hit ? 1 : 0) * alpha;
+  }
+
+  /**
+   * Get configuration performance metrics
+   */
+  public getPerformanceMetrics(): ConfigurationPerformanceMetrics {
+    return { ...this.performanceMetrics };
+  }
+
+  /**
+   * Get recent operation metrics
+   */
+  public getRecentOperationMetrics(limit: number = 100): ConfigurationOperationMetrics[] {
+    return this.operationMetrics.slice(0, limit);
+  }
+
+  /**
+   * Get performance analytics for configuration operations
+   */
+  public getPerformanceAnalytics(): {
+    averageLatency: number;
+    errorRate: number;
+    cacheEfficiency: number;
+    operationBreakdown: Record<string, number>;
+    topErrors: Array<{ error: string; count: number }>;
+    performanceTrends: Array<{ timestamp: number; latency: number; operations: number }>;
+  } {
+    const totalOps = this.performanceMetrics.totalOperations;
+    const errorRate = totalOps > 0 ?
+      Array.from(this.performanceMetrics.errorCounts.values()).reduce((sum, count) => sum + count, 0) / totalOps : 0;
+
+    // Generate operation breakdown
+    const operationBreakdown: Record<string, number> = {};
+    for (const [opType, count] of this.performanceMetrics.operationsByType) {
+      operationBreakdown[opType] = (count / totalOps) * 100;
+    }
+
+    // Get top errors
+    const topErrors = Array.from(this.performanceMetrics.errorCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([error, count]) => ({ error, count }));
+
+    // Generate performance trends from recent operations
+    const recentOps = this.operationMetrics.slice(0, 50);
+    const trendsByMinute: Map<number, { latency: number; operations: number; count: number }> = new Map();
+
+    for (const op of recentOps) {
+      const minute = Math.floor(op.startTime / 60000) * 60000; // Round to minute
+      const current = trendsByMinute.get(minute) || { latency: 0, operations: 0, count: 0 };
+      current.latency += op.duration || 0;
+      current.count++;
+      current.operations += 1;
+      trendsByMinute.set(minute, current);
+    }
+
+    const performanceTrends = Array.from(trendsByMinute.entries())
+      .sort((a, b) => b[0] - a[0])
+      .slice(0, 60) // Last 60 minutes
+      .map(([timestamp, data]) => ({
+        timestamp,
+        latency: data.latency / data.count,
+        operations: data.operations,
+      }));
+
+    return {
+      averageLatency: this.performanceMetrics.averageOperationTime,
+      errorRate,
+      cacheEfficiency: this.performanceMetrics.cacheHitRate,
+      operationBreakdown,
+      topErrors,
+      performanceTrends,
+    };
+  }
+
+  /**
+   * Get configuration performance report
+   */
+  public getConfigurationPerformanceReport(): {
+    summary: {
+      totalOperations: number;
+      averageLatency: number;
+      errorRate: number;
+      cacheHitRate: number;
+    };
+    performanceByOperation: Record<string, { count: number; averageLatency: number; errorRate: number }>;
+    recommendations: string[];
+    timestamp: Date;
+  } {
+    const analytics = this.getPerformanceAnalytics();
+    const performanceByOperation: Record<string, { count: number; averageLatency: number; errorRate: number }> = {};
+
+    // Calculate performance by operation type
+    for (const [opType, count] of this.performanceMetrics.operationsByType) {
+      const opMetrics = this.operationMetrics.filter(m => m.operationType === opType);
+      const errorCount = opMetrics.filter(m => !m.success).length;
+      const avgLatency = opMetrics.length > 0 ?
+        opMetrics.reduce((sum, m) => sum + (m.duration || 0), 0) / opMetrics.length : 0;
+
+      performanceByOperation[opType] = {
+        count,
+        averageLatency: avgLatency,
+        errorRate: count > 0 ? errorCount / count : 0,
+      };
+    }
+
+    // Generate recommendations
+    const recommendations = this.generatePerformanceRecommendations(analytics);
+
+    return {
+      summary: {
+        totalOperations: this.performanceMetrics.totalOperations,
+        averageLatency: analytics.averageLatency,
+        errorRate: analytics.errorRate,
+        cacheHitRate: analytics.cacheEfficiency,
+      },
+      performanceByOperation,
+      recommendations,
+      timestamp: new Date(),
+    };
+  }
+
+  /**
+   * Generate performance recommendations
+   */
+  private generatePerformanceRecommendations(analytics: ReturnType<typeof this.getPerformanceAnalytics>): string[] {
+    const recommendations: string[] = [];
+
+    // High latency recommendations
+    if (analytics.averageLatency > 100) {
+      recommendations.push('Configuration operations are slow - consider optimizing persistence layer');
+      recommendations.push('Check disk I/O performance for configuration files');
+    }
+
+    // High error rate recommendations
+    if (analytics.errorRate > 0.05) {
+      recommendations.push('High error rate detected - review configuration validation logic');
+      const topError = analytics.topErrors[0];
+      if (topError) {
+        recommendations.push(`Most common error: ${topError.error} - investigate root cause`);
+      }
+    }
+
+    // Low cache efficiency recommendations
+    if (analytics.cacheEfficiency < 0.5) {
+      recommendations.push('Low cache hit rate - consider increasing cache size or improving cache strategy');
+    }
+
+    // Operation-specific recommendations
+    const performanceByOperation: Record<string, { count: number; averageLatency: number; errorRate: number }> = {};
+    for (const [opType, count] of this.performanceMetrics.operationsByType) {
+      const opMetrics = this.operationMetrics.filter(m => m.operationType === opType);
+      const errorCount = opMetrics.filter(m => !m.success).length;
+      const avgLatency = opMetrics.length > 0 ?
+        opMetrics.reduce((sum, m) => sum + (m.duration || 0), 0) / opMetrics.length : 0;
+
+      performanceByOperation[opType] = {
+        count,
+        averageLatency: avgLatency,
+        errorRate: count > 0 ? errorCount / count : 0,
+      };
+    }
+
+    for (const [opType, perf] of Object.entries(analytics.operationBreakdown)) {
+      if (perf > 30 && performanceByOperation[opType]?.averageLatency > 200) {
+        recommendations.push(`${opType} operations are frequent and slow - consider optimization`);
+      }
+    }
+
+    return recommendations;
+  }
+
+
+  /**
+   * Clear performance metrics and history
+   */
+  public clearPerformanceMetrics(): void {
+    this.performanceMetrics = {
+      totalOperations: 0,
+      averageOperationTime: 0,
+      operationsByType: new Map<string, number>(),
+      errorCounts: new Map<string, number>(),
+      cacheHitRate: 0,
+      persistenceLatency: 0,
+      validationLatency: 0,
+      lastOperationTime: 0,
+    };
+    this.operationMetrics = [];
+  }
+
+  /**
+   * Get performance monitoring status
+   */
+  public getPerformanceMonitoringStatus(): {
+    enabled: boolean;
+    totalOperations: number;
+    averageLatency: number;
+    errorRate: number;
+    lastOperationTime: number;
+  } {
+    return {
+      enabled: true, // Performance monitoring is always enabled
+      totalOperations: this.performanceMetrics.totalOperations,
+      averageLatency: this.performanceMetrics.averageOperationTime,
+      errorRate: this.performanceMetrics.totalOperations > 0 ?
+        Array.from(this.performanceMetrics.errorCounts.values()).reduce((sum, count) => sum + count, 0) / this.performanceMetrics.totalOperations : 0,
+      lastOperationTime: this.performanceMetrics.lastOperationTime,
+    };
   }
 }

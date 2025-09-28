@@ -11,6 +11,53 @@ import {
   MemoryProcessingState,
 } from '../memory/MemoryProcessingStateManager';
 import { MemoryRelationship, MemoryRelationshipType } from '../types/schemas';
+import { createHash } from 'crypto';
+
+// ===== DATABASE PERFORMANCE MONITORING INTERFACES =====
+
+/**
+ * Database operation performance metrics
+ */
+interface DatabasePerformanceMetrics {
+  totalOperations: number;
+  averageOperationTime: number;
+  operationsByType: Map<string, number>;
+  errorCounts: Map<string, number>;
+  connectionCount: number;
+  queryLatency: number;
+  memoryUsage: number;
+  cacheHitRate: number;
+  lastOperationTime: number;
+  slowQueries: Array<{ query: string; duration: number; timestamp: number }>;
+}
+
+/**
+ * Database operation performance data
+ */
+interface DatabaseOperationMetrics {
+  operationType: string;
+  tableName?: string;
+  recordCount?: number;
+  startTime: number;
+  endTime?: number;
+  duration?: number;
+  success: boolean;
+  error?: string;
+  querySize?: number;
+  indexUsed?: boolean;
+}
+
+/**
+ * Database performance monitoring configuration
+ */
+interface DatabasePerformanceConfig {
+  enabled: boolean;
+  slowQueryThreshold: number; // milliseconds
+  trackSlowQueries: boolean;
+  maxSlowQueryHistory: number;
+  enableQueryAnalysis: boolean;
+  collectionInterval: number; // milliseconds
+}
 
 // Type definitions for database operations
 export interface ChatHistoryData {
@@ -95,6 +142,32 @@ export class DatabaseManager {
   private searchService?: SearchService;
   private searchIndexManager?: SearchIndexManager;
   private stateManager: ProcessingStateManager;
+
+  // Database performance monitoring
+  private performanceMetrics: DatabasePerformanceMetrics = {
+    totalOperations: 0,
+    averageOperationTime: 0,
+    operationsByType: new Map<string, number>(),
+    errorCounts: new Map<string, number>(),
+    connectionCount: 0,
+    queryLatency: 0,
+    memoryUsage: 0,
+    cacheHitRate: 0,
+    lastOperationTime: 0,
+    slowQueries: [],
+  };
+
+  private operationMetrics: DatabaseOperationMetrics[] = [];
+  private maxOperationHistory = 1000;
+
+  private performanceConfig: DatabasePerformanceConfig = {
+    enabled: true,
+    slowQueryThreshold: 1000, // 1 second
+    trackSlowQueries: true,
+    maxSlowQueryHistory: 100,
+    enableQueryAnalysis: true,
+    collectionInterval: 60000, // 1 minute
+  };
 
   constructor(databaseUrl: string) {
     // Configure Prisma to use system SQLite with FTS5 support
@@ -265,6 +338,16 @@ export class DatabaseManager {
   }
 
   async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
+    const startTime = Date.now();
+    const operationType = query.trim() ? 'search_with_query' : 'search_empty';
+
+    const metrics: DatabaseOperationMetrics = {
+      operationType,
+      startTime,
+      success: false,
+      querySize: query.length,
+    };
+
     try {
       // Use the new SearchService for enhanced search capabilities
       const searchService = this.getSearchService();
@@ -281,7 +364,7 @@ export class DatabaseManager {
       const searchResults = await searchService.search(searchQuery);
 
       // Transform SearchResult[] to MemorySearchResult[]
-      return searchResults.map(result => ({
+      const results = searchResults.map(result => ({
         id: result.id,
         content: result.content,
         summary: result.metadata.summary as string || '',
@@ -301,11 +384,21 @@ export class DatabaseManager {
         } : undefined,
       }));
 
+      metrics.success = true;
+      metrics.recordCount = results.length;
+      this.recordOperationMetrics(metrics);
+
+      return results;
     } catch (error) {
+      metrics.success = false;
+      metrics.error = error instanceof Error ? error.message : String(error);
+
       logError('Enhanced search failed, falling back to legacy search', {
         component: 'DatabaseManager',
         error: error instanceof Error ? error.message : String(error),
       });
+
+      this.recordOperationMetrics(metrics);
 
       // Fallback to legacy search methods
       return this.searchMemoriesLegacy(query, options);
@@ -2425,7 +2518,7 @@ export class DatabaseManager {
   }
 
   /**
-   * Consolidate duplicate memories by merging them into the primary memory
+   * Consolidate duplicate memories by merging them into the primary memory with enhanced validation and rollback
    */
   async consolidateDuplicateMemories(
     primaryMemoryId: string,
@@ -2435,7 +2528,7 @@ export class DatabaseManager {
     const errors: string[] = [];
     let consolidatedCount = 0;
 
-    // Validate inputs
+    // Enhanced input validation
     if (!primaryMemoryId || duplicateIds.length === 0) {
       errors.push('Primary memory ID and at least one duplicate ID are required');
       return { consolidated: 0, errors };
@@ -2446,12 +2539,23 @@ export class DatabaseManager {
       return { consolidated: 0, errors };
     }
 
+    // Pre-consolidation validation
+    const validationResult = await this.performPreConsolidationValidation(primaryMemoryId, duplicateIds, namespace);
+    if (!validationResult.isValid) {
+      errors.push(...validationResult.errors);
+      return { consolidated: 0, errors };
+    }
+
+    // Store original data for potential rollback
+    const originalData = await this.backupMemoryData([primaryMemoryId, ...duplicateIds], namespace);
+
     try {
-      logInfo(`Starting consolidation of ${duplicateIds.length} duplicates into primary memory ${primaryMemoryId}`, {
+      logInfo(`Starting enhanced consolidation of ${duplicateIds.length} duplicates into primary memory ${primaryMemoryId}`, {
         component: 'DatabaseManager',
         primaryMemoryId,
         duplicateCount: duplicateIds.length,
         namespace,
+        validationPassed: true,
       });
 
       // Execute consolidation within a transaction for data integrity
@@ -2479,10 +2583,11 @@ export class DatabaseManager {
           throw new Error(`Some duplicate memories not found: ${missingIds.join(', ')}`);
         }
 
-        // Merge duplicate data into primary memory
-        const mergedData = await this.mergeDuplicateData(primaryMemory, duplicateMemories);
+        // Enhanced data merging with conflict resolution
+        const mergedData = await this.mergeDuplicateDataEnhanced(primaryMemory, duplicateMemories);
 
         // Update the primary memory with consolidated data
+        const consolidationTimestamp = new Date();
         await tx.longTermMemory.update({
           where: { id: primaryMemoryId },
           data: {
@@ -2493,21 +2598,35 @@ export class DatabaseManager {
             topic: mergedData.topic,
             confidenceScore: mergedData.confidenceScore,
             classificationReason: mergedData.classificationReason,
+            extractionTimestamp: consolidationTimestamp,
             processedData: {
               ...(primaryMemory.processedData as any),
-              consolidatedAt: new Date(),
+              consolidatedAt: consolidationTimestamp,
               consolidatedFrom: duplicateIds,
               consolidationReason: 'duplicate_consolidation',
+              consolidationHistory: [
+                ...(primaryMemory.processedData as any)?.consolidationHistory || [],
+                {
+                  timestamp: consolidationTimestamp,
+                  consolidatedFrom: duplicateIds,
+                  consolidationReason: 'duplicate_consolidation',
+                  originalImportance: primaryMemory.memoryImportance,
+                  originalClassification: primaryMemory.classification,
+                  duplicateCount: duplicateIds.length,
+                  dataIntegrityHash: this.generateDataIntegrityHash(mergedData),
+                },
+              ],
               originalImportance: primaryMemory.memoryImportance,
               originalClassification: primaryMemory.classification,
               duplicateCount: duplicateIds.length,
+              lastConsolidationActivity: consolidationTimestamp,
             } as any,
           },
         });
 
-        // Mark all duplicates as consolidated
-        const consolidationTimestamp = new Date();
+        // Mark all duplicates as consolidated with enhanced tracking
         for (const duplicateId of duplicateIds) {
+          const duplicateMemory = duplicateMemories.find(m => m.id === duplicateId);
           await tx.longTermMemory.update({
             where: { id: duplicateId },
             data: {
@@ -2516,32 +2635,64 @@ export class DatabaseManager {
                 consolidatedInto: primaryMemoryId,
                 consolidatedAt: consolidationTimestamp,
                 consolidationReason: 'duplicate_consolidation',
+                originalDataHash: this.generateDataIntegrityHash(duplicateMemory),
+                consolidationMetadata: {
+                  consolidationMethod: 'enhanced_duplicate_merge',
+                  primaryMemoryClassification: primaryMemory.classification,
+                  primaryMemoryImportance: primaryMemory.memoryImportance,
+                  dataMerged: true,
+                },
               } as any,
               // Mark in searchable content for easy identification
-              searchableContent: `[CONSOLIDATED] ${duplicateMemories.find(m => m.id === duplicateId)?.searchableContent}`,
+              searchableContent: `[CONSOLIDATED:${consolidationTimestamp.toISOString()}] ${duplicateMemory?.searchableContent}`,
             },
+          });
+        }
+
+        // Update state tracking for successful consolidation
+        try {
+          await this.stateManager.transitionToState(
+            primaryMemoryId,
+            MemoryProcessingState.PROCESSED,
+            {
+              reason: 'Memory consolidation completed successfully',
+              agentId: 'DatabaseManager',
+              metadata: {
+                consolidationSuccess: true,
+                consolidatedCount: duplicateIds.length,
+                consolidationTimestamp,
+                namespace,
+              },
+            },
+          );
+        } catch (stateError) {
+          logError('Failed to update state tracking for consolidated memory', {
+            component: 'DatabaseManager',
+            memoryId: primaryMemoryId,
+            error: stateError instanceof Error ? stateError.message : String(stateError),
           });
         }
 
         return { consolidated: duplicateIds.length, duplicateMemories };
       }, {
-        timeout: 30000, // 30 second timeout for large consolidations
+        timeout: 60000, // 60 second timeout for large consolidations
       });
 
       consolidatedCount = result.consolidated;
 
-      logInfo(`Successfully consolidated ${consolidatedCount} duplicates into primary memory ${primaryMemoryId}`, {
+      logInfo(`Successfully completed enhanced consolidation of ${consolidatedCount} duplicates into primary memory ${primaryMemoryId}`, {
         component: 'DatabaseManager',
         primaryMemoryId,
         consolidatedCount,
         namespace,
         consolidationTimestamp: new Date().toISOString(),
+        backupAvailable: true,
       });
 
       return { consolidated: consolidatedCount, errors };
 
     } catch (error) {
-      const errorMsg = `Consolidation failed for primary memory ${primaryMemoryId}: ${error instanceof Error ? error.message : String(error)}`;
+      const errorMsg = `Enhanced consolidation failed for primary memory ${primaryMemoryId}: ${error instanceof Error ? error.message : String(error)}`;
       errors.push(errorMsg);
 
       logError(errorMsg, {
@@ -2551,6 +2702,25 @@ export class DatabaseManager {
         namespace,
         error: error instanceof Error ? error.stack : String(error),
       });
+
+      // Attempt rollback if backup data is available
+      if (originalData.size > 0) {
+        try {
+          await this.rollbackConsolidation(primaryMemoryId, duplicateIds, originalData, namespace);
+          logInfo(`Successfully rolled back consolidation for memory ${primaryMemoryId}`, {
+            component: 'DatabaseManager',
+            primaryMemoryId,
+            namespace,
+          });
+        } catch (rollbackError) {
+          logError(`Rollback failed for memory ${primaryMemoryId}`, {
+            component: 'DatabaseManager',
+            primaryMemoryId,
+            namespace,
+            rollbackError: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          });
+        }
+      }
 
       return { consolidated: consolidatedCount, errors };
     }
@@ -2593,9 +2763,230 @@ export class DatabaseManager {
   }
 
   /**
-   * Merge data from duplicate memories into consolidated data for the primary memory
+   * Perform pre-consolidation validation to ensure data integrity
    */
-  private async mergeDuplicateData(
+  private async performPreConsolidationValidation(
+    primaryMemoryId: string,
+    duplicateIds: string[],
+    namespace: string,
+  ): Promise<{ isValid: boolean; errors: string[] }> {
+    const errors: string[] = [];
+
+    try {
+      // Validate primary memory exists and is in correct namespace
+      const primaryMemory = await this.prisma.longTermMemory.findUnique({
+        where: { id: primaryMemoryId },
+        select: { id: true, namespace: true, processedData: true },
+      });
+
+      if (!primaryMemory) {
+        errors.push(`Primary memory ${primaryMemoryId} not found`);
+        return { isValid: false, errors };
+      }
+
+      if (primaryMemory.namespace !== namespace) {
+        errors.push(`Primary memory ${primaryMemoryId} is not in namespace ${namespace}`);
+        return { isValid: false, errors };
+      }
+
+      // Check if primary memory is already consolidated
+      const processedData = primaryMemory.processedData as any;
+      if (processedData?.consolidatedAt) {
+        const lastConsolidation = new Date(processedData.consolidatedAt);
+        const hoursSinceLastConsolidation = (Date.now() - lastConsolidation.getTime()) / (1000 * 60 * 60);
+
+        if (hoursSinceLastConsolidation < 1) {
+          errors.push(`Primary memory ${primaryMemoryId} was consolidated recently (${hoursSinceLastConsolidation.toFixed(1)} hours ago)`);
+        }
+      }
+
+      // Validate all duplicate memories exist and are in correct namespace
+      const duplicateMemories = await this.prisma.longTermMemory.findMany({
+        where: {
+          id: { in: duplicateIds },
+          namespace,
+        },
+        select: { id: true, namespace: true, processedData: true },
+      });
+
+      if (duplicateMemories.length !== duplicateIds.length) {
+        const foundIds = duplicateMemories.map(m => m.id);
+        const missingIds = duplicateIds.filter(id => !foundIds.includes(id));
+        errors.push(`Some duplicate memories not found in namespace ${namespace}: ${missingIds.join(', ')}`);
+      }
+
+      // Check for circular consolidation references
+      for (const duplicate of duplicateMemories) {
+        const duplicateData = duplicate.processedData as any;
+        if (duplicateData?.consolidatedInto === primaryMemoryId) {
+          errors.push(`Circular consolidation detected: duplicate ${duplicate.id} is already consolidated into primary ${primaryMemoryId}`);
+        }
+      }
+
+      // Check for over-consolidation (too many duplicates)
+      if (duplicateIds.length > 50) {
+        errors.push(`Too many duplicates (${duplicateIds.length}) - maximum recommended is 50`);
+      }
+
+      const isValid = errors.length === 0;
+      logInfo(`Pre-consolidation validation ${isValid ? 'passed' : 'failed'}`, {
+        component: 'DatabaseManager',
+        primaryMemoryId,
+        duplicateCount: duplicateIds.length,
+        namespace,
+        errors: errors.length,
+        isValid,
+      });
+
+      return { isValid, errors };
+    } catch (error) {
+      const errorMsg = `Pre-consolidation validation error: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errorMsg);
+      return { isValid: false, errors };
+    }
+  }
+
+  /**
+   * Backup memory data for potential rollback
+   */
+  private async backupMemoryData(memoryIds: string[], namespace: string): Promise<Map<string, any>> {
+    const backupData = new Map<string, any>();
+
+    try {
+      const memories = await this.prisma.longTermMemory.findMany({
+        where: {
+          id: { in: memoryIds },
+          namespace,
+        },
+      });
+
+      for (const memory of memories) {
+        backupData.set(memory.id, {
+          id: memory.id,
+          searchableContent: memory.searchableContent,
+          summary: memory.summary,
+          entitiesJson: memory.entitiesJson,
+          keywordsJson: memory.keywordsJson,
+          topic: memory.topic,
+          confidenceScore: memory.confidenceScore,
+          classificationReason: memory.classificationReason,
+          processedData: memory.processedData,
+          extractionTimestamp: memory.extractionTimestamp,
+        });
+      }
+
+      logInfo(`Backed up data for ${backupData.size} memories`, {
+        component: 'DatabaseManager',
+        memoryIds: memoryIds,
+        namespace,
+        backupSize: backupData.size,
+      });
+
+      return backupData;
+    } catch (error) {
+      logError('Failed to backup memory data', {
+        component: 'DatabaseManager',
+        memoryIds,
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return backupData;
+    }
+  }
+
+  /**
+   * Rollback consolidation if something goes wrong
+   */
+  private async rollbackConsolidation(
+    primaryMemoryId: string,
+    duplicateIds: string[],
+    originalData: Map<string, any>,
+    namespace: string,
+  ): Promise<void> {
+    try {
+      logInfo(`Attempting rollback for failed consolidation of memory ${primaryMemoryId}`, {
+        component: 'DatabaseManager',
+        primaryMemoryId,
+        duplicateCount: duplicateIds.length,
+        namespace,
+      });
+
+      // Rollback primary memory
+      const primaryBackup = originalData.get(primaryMemoryId);
+      if (primaryBackup) {
+        await this.prisma.longTermMemory.update({
+          where: { id: primaryMemoryId },
+          data: {
+            searchableContent: primaryBackup.searchableContent,
+            summary: primaryBackup.summary,
+            entitiesJson: primaryBackup.entitiesJson,
+            keywordsJson: primaryBackup.keywordsJson,
+            topic: primaryBackup.topic,
+            confidenceScore: primaryBackup.confidenceScore,
+            classificationReason: primaryBackup.classificationReason,
+            processedData: {
+              ...primaryBackup.processedData,
+              rollbackTimestamp: new Date(),
+              rollbackReason: 'consolidation_failure',
+            } as any,
+          },
+        });
+      }
+
+      // Rollback duplicate memories
+      for (const duplicateId of duplicateIds) {
+        const duplicateBackup = originalData.get(duplicateId);
+        if (duplicateBackup) {
+          await this.prisma.longTermMemory.update({
+            where: { id: duplicateId },
+            data: {
+              searchableContent: duplicateBackup.searchableContent,
+              summary: duplicateBackup.summary,
+              entitiesJson: duplicateBackup.entitiesJson,
+              keywordsJson: duplicateBackup.keywordsJson,
+              topic: duplicateBackup.topic,
+              confidenceScore: duplicateBackup.confidenceScore,
+              classificationReason: duplicateBackup.classificationReason,
+              processedData: {
+                ...duplicateBackup.processedData,
+                rollbackTimestamp: new Date(),
+                rollbackReason: 'consolidation_failure',
+              } as any,
+            },
+          });
+        }
+      }
+
+      logInfo(`Successfully rolled back consolidation for memory ${primaryMemoryId}`, {
+        component: 'DatabaseManager',
+        primaryMemoryId,
+        duplicateCount: duplicateIds.length,
+        namespace,
+      });
+    } catch (error) {
+      logError(`Rollback failed for memory ${primaryMemoryId}`, {
+        component: 'DatabaseManager',
+        primaryMemoryId,
+        duplicateIds,
+        namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Rollback failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Generate data integrity hash for validation
+   */
+  private generateDataIntegrityHash(data: any): string {
+    const content = JSON.stringify(data, Object.keys(data).sort());
+    return createHash('sha256').update(content).digest('hex').substring(0, 16);
+  }
+
+  /**
+   * Enhanced data merging with conflict resolution and quality scoring
+   */
+  private async mergeDuplicateDataEnhanced(
     primaryMemory: any,
     duplicateMemories: any[],
   ): Promise<{
@@ -3426,6 +3817,290 @@ export class DatabaseManager {
         error: error instanceof Error ? error.message : String(error),
       });
       throw new Error(`Failed to retrieve database statistics: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ===== DATABASE PERFORMANCE MONITORING METHODS =====
+
+  /**
+   * Record database operation performance metrics
+   */
+  private recordOperationMetrics(metrics: DatabaseOperationMetrics): void {
+    const endTime = Date.now();
+    metrics.endTime = endTime;
+    metrics.duration = endTime - metrics.startTime;
+
+    // Update aggregate metrics
+    this.performanceMetrics.totalOperations++;
+    this.performanceMetrics.lastOperationTime = endTime;
+
+    // Update operation type counts
+    const currentCount = this.performanceMetrics.operationsByType.get(metrics.operationType) || 0;
+    this.performanceMetrics.operationsByType.set(metrics.operationType, currentCount + 1);
+
+    // Update average operation time
+    this.performanceMetrics.averageOperationTime =
+      (this.performanceMetrics.averageOperationTime * (this.performanceMetrics.totalOperations - 1) + metrics.duration!) /
+      this.performanceMetrics.totalOperations;
+
+    // Track slow queries
+    if (this.performanceConfig.trackSlowQueries && metrics.duration! > this.performanceConfig.slowQueryThreshold) {
+      this.trackSlowQuery({
+        query: `${metrics.operationType}${metrics.tableName ? `_${metrics.tableName}` : ''}`,
+        duration: metrics.duration!,
+        timestamp: endTime,
+      });
+    }
+
+    // Update query latency (exponential moving average)
+    this.performanceMetrics.queryLatency =
+      (this.performanceMetrics.queryLatency * 0.9) + (metrics.duration! * 0.1);
+
+    // Update memory usage
+    const currentMemory = process.memoryUsage();
+    this.performanceMetrics.memoryUsage = currentMemory.heapUsed;
+
+    // Track errors
+    if (!metrics.success && metrics.error) {
+      const currentErrorCount = this.performanceMetrics.errorCounts.get(metrics.error) || 0;
+      this.performanceMetrics.errorCounts.set(metrics.error, currentErrorCount + 1);
+    }
+
+    // Store operation history
+    this.operationMetrics.unshift(metrics);
+    if (this.operationMetrics.length > this.maxOperationHistory) {
+      this.operationMetrics = this.operationMetrics.slice(0, this.maxOperationHistory);
+    }
+  }
+
+  /**
+   * Track slow queries for performance analysis
+   */
+  private trackSlowQuery(slowQuery: { query: string; duration: number; timestamp: number }): void {
+    this.performanceMetrics.slowQueries.unshift(slowQuery);
+    if (this.performanceMetrics.slowQueries.length > this.performanceConfig.maxSlowQueryHistory) {
+      this.performanceMetrics.slowQueries = this.performanceMetrics.slowQueries.slice(0, this.performanceConfig.maxSlowQueryHistory);
+    }
+  }
+
+  /**
+   * Get database performance metrics
+   */
+  public getPerformanceMetrics(): DatabasePerformanceMetrics {
+    return { ...this.performanceMetrics };
+  }
+
+  /**
+   * Get recent database operation metrics
+   */
+  public getRecentOperationMetrics(limit: number = 100): DatabaseOperationMetrics[] {
+    return this.operationMetrics.slice(0, limit);
+  }
+
+  /**
+   * Get database performance analytics
+   */
+  public getPerformanceAnalytics(): {
+    averageLatency: number;
+    errorRate: number;
+    slowQueryCount: number;
+    operationBreakdown: Record<string, number>;
+    topErrors: Array<{ error: string; count: number }>;
+    slowQueries: Array<{ query: string; duration: number; timestamp: number }>;
+    memoryUsage: number;
+    connectionStatus: string;
+  } {
+    const totalOps = this.performanceMetrics.totalOperations;
+    const errorRate = totalOps > 0 ?
+      Array.from(this.performanceMetrics.errorCounts.values()).reduce((sum, count) => sum + count, 0) / totalOps : 0;
+
+    // Generate operation breakdown
+    const operationBreakdown: Record<string, number> = {};
+    for (const [opType, count] of this.performanceMetrics.operationsByType) {
+      operationBreakdown[opType] = (count / totalOps) * 100;
+    }
+
+    // Get top errors
+    const topErrors = Array.from(this.performanceMetrics.errorCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([error, count]) => ({ error, count }));
+
+    return {
+      averageLatency: this.performanceMetrics.averageOperationTime,
+      errorRate,
+      slowQueryCount: this.performanceMetrics.slowQueries.length,
+      operationBreakdown,
+      topErrors,
+      slowQueries: [...this.performanceMetrics.slowQueries],
+      memoryUsage: this.performanceMetrics.memoryUsage,
+      connectionStatus: this.isConnected() ? 'connected' : 'disconnected',
+    };
+  }
+
+  /**
+   * Get database performance report
+   */
+  public getDatabasePerformanceReport(): {
+    summary: {
+      totalOperations: number;
+      averageLatency: number;
+      errorRate: number;
+      memoryUsage: number;
+      connectionCount: number;
+    };
+    performanceByOperation: Record<string, { count: number; averageLatency: number; errorRate: number }>;
+    slowQueries: Array<{ query: string; duration: number; timestamp: number }>;
+    recommendations: string[];
+    timestamp: Date;
+  } {
+    const analytics = this.getPerformanceAnalytics();
+    const performanceByOperation: Record<string, { count: number; averageLatency: number; errorRate: number }> = {};
+
+    // Calculate performance by operation type
+    for (const [opType, count] of this.performanceMetrics.operationsByType) {
+      const opMetrics = this.operationMetrics.filter(m => m.operationType === opType);
+      const errorCount = opMetrics.filter(m => !m.success).length;
+      const avgLatency = opMetrics.length > 0 ?
+        opMetrics.reduce((sum, m) => sum + (m.duration || 0), 0) / opMetrics.length : 0;
+
+      performanceByOperation[opType] = {
+        count,
+        averageLatency: avgLatency,
+        errorRate: count > 0 ? errorCount / count : 0,
+      };
+    }
+
+    // Generate recommendations
+    const recommendations = this.generateDatabasePerformanceRecommendations(analytics);
+
+    return {
+      summary: {
+        totalOperations: this.performanceMetrics.totalOperations,
+        averageLatency: analytics.averageLatency,
+        errorRate: analytics.errorRate,
+        memoryUsage: analytics.memoryUsage,
+        connectionCount: this.performanceMetrics.connectionCount,
+      },
+      performanceByOperation,
+      slowQueries: analytics.slowQueries,
+      recommendations,
+      timestamp: new Date(),
+    };
+  }
+
+  /**
+   * Generate database performance recommendations
+   */
+  private generateDatabasePerformanceRecommendations(analytics: ReturnType<typeof this.getPerformanceAnalytics>): string[] {
+    const recommendations: string[] = [];
+
+    // High latency recommendations
+    if (analytics.averageLatency > 1000) {
+      recommendations.push('Database operations are slow - consider query optimization');
+      recommendations.push('Check database indexes and table fragmentation');
+      recommendations.push('Monitor system resource usage (CPU, disk I/O)');
+    }
+
+    // High error rate recommendations
+    if (analytics.errorRate > 0.05) {
+      recommendations.push('High error rate detected - check database connectivity');
+      const topError = analytics.topErrors[0];
+      if (topError) {
+        recommendations.push(`Most common error: ${topError.error} - investigate database logs`);
+      }
+    }
+
+    // Slow queries recommendations
+    if (analytics.slowQueryCount > 10) {
+      recommendations.push('Multiple slow queries detected - review query patterns');
+      recommendations.push('Consider adding database indexes for frequently queried fields');
+      recommendations.push('Check for missing indexes on search and filter operations');
+    }
+
+    // Memory usage recommendations
+    const memoryUsageMB = analytics.memoryUsage / 1024 / 1024;
+    if (memoryUsageMB > 200) {
+      recommendations.push('High memory usage detected - monitor for memory leaks');
+      recommendations.push('Consider optimizing large result set handling');
+    }
+
+    // Connection issues
+    if (analytics.connectionStatus !== 'connected') {
+      recommendations.push('Database connection issues detected - check connection configuration');
+      recommendations.push('Verify database server availability and credentials');
+    }
+
+    return recommendations;
+  }
+
+
+  /**
+   * Get database performance monitoring status
+   */
+  public getPerformanceMonitoringStatus(): {
+    enabled: boolean;
+    totalOperations: number;
+    averageLatency: number;
+    errorRate: number;
+    slowQueryCount: number;
+    memoryUsage: number;
+    lastOperationTime: number;
+  } {
+    return {
+      enabled: this.performanceConfig.enabled,
+      totalOperations: this.performanceMetrics.totalOperations,
+      averageLatency: this.performanceMetrics.averageOperationTime,
+      errorRate: this.performanceMetrics.totalOperations > 0 ?
+        Array.from(this.performanceMetrics.errorCounts.values()).reduce((sum, count) => sum + count, 0) / this.performanceMetrics.totalOperations : 0,
+      slowQueryCount: this.performanceMetrics.slowQueries.length,
+      memoryUsage: this.performanceMetrics.memoryUsage,
+      lastOperationTime: this.performanceMetrics.lastOperationTime,
+    };
+  }
+
+  /**
+   * Update database performance monitoring configuration
+   */
+  public updatePerformanceMonitoringConfig(config: Partial<DatabasePerformanceConfig>): void {
+    this.performanceConfig = { ...this.performanceConfig, ...config };
+  }
+
+  /**
+   * Get database performance monitoring configuration
+   */
+  public getPerformanceMonitoringConfig(): DatabasePerformanceConfig {
+    return { ...this.performanceConfig };
+  }
+
+  /**
+   * Clear database performance metrics
+   */
+  public clearPerformanceMetrics(): void {
+    this.performanceMetrics = {
+      totalOperations: 0,
+      averageOperationTime: 0,
+      operationsByType: new Map<string, number>(),
+      errorCounts: new Map<string, number>(),
+      connectionCount: 0,
+      queryLatency: 0,
+      memoryUsage: 0,
+      cacheHitRate: 0,
+      lastOperationTime: 0,
+      slowQueries: [],
+    };
+    this.operationMetrics = [];
+  }
+
+  /**
+   * Check if database is connected (for performance monitoring)
+   */
+  private isConnected(): boolean {
+    try {
+      // Simple check - try to execute a simple query
+      return true; // Placeholder - would need actual connection check
+    } catch {
+      return false;
     }
   }
 }

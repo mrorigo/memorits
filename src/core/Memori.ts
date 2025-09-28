@@ -158,16 +158,60 @@ export class Memori {
         },
       });
 
-      await this.dbManager.storeLongTermMemory(
+      const memoryId = await this.dbManager.storeLongTermMemory(
         processedMemory,
         chatId,
         this.config.namespace,
       );
 
+      // Store memory relationships if they were extracted
+      const extractedRelationships = (processedMemory as any).relatedMemories;
+      if (extractedRelationships && extractedRelationships.length > 0) {
+        try {
+          // Separate relationships by type for storage
+          const generalRelationships = extractedRelationships.filter((r: any) =>
+            r.type !== 'supersedes',
+          );
+          const supersedingRelationships = extractedRelationships.filter((r: any) =>
+            r.type === 'supersedes',
+          );
+
+          // Store relationships using the existing DatabaseManager method
+          if (generalRelationships.length > 0 || supersedingRelationships.length > 0) {
+            await this.dbManager.storeMemoryRelationships(
+              memoryId,
+              generalRelationships.concat(supersedingRelationships),
+              this.config.namespace,
+            );
+
+            logInfo(`Memory relationships stored for chat ${chatId}`, {
+              component: 'Memori',
+              chatId,
+              memoryId,
+              namespace: this.config.namespace,
+              relationshipCount: extractedRelationships.length,
+              generalRelationships: generalRelationships.length,
+              supersedingRelationships: supersedingRelationships.length,
+            });
+          }
+        } catch (error) {
+          logError(`Failed to store memory relationships for chat ${chatId}`, {
+            component: 'Memori',
+            chatId,
+            memoryId,
+            namespace: this.config.namespace,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          // Don't fail the entire process if relationship storage fails
+        }
+      }
+
       logInfo(`Memory processed for chat ${chatId}`, {
         component: 'Memori',
         chatId,
+        memoryId,
         namespace: this.config.namespace,
+        relationshipsStored: extractedRelationships?.length || 0,
       });
     } catch (error) {
       logError(`Failed to process memory for chat ${chatId}`, {

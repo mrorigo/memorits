@@ -324,7 +324,7 @@ describe('ConsciousAgent', () => {
       });
 
 
-      // Mock the safety check database calls
+      // Mock the enhanced safety check database calls
       const mockPrismaClient = mockDbManager.getPrismaClient();
       mockPrismaClient.longTermMemory.findUnique
         .mockResolvedValueOnce({ namespace: 'test-namespace' }) // memory-1
@@ -332,12 +332,27 @@ describe('ConsciousAgent', () => {
         .mockResolvedValueOnce({
           processedData: null,
           searchableContent: 'test content'
-        }); // duplicate data check
+        }) // duplicate data check
+        .mockResolvedValueOnce({ memoryImportance: 'high' }) // memory-1 importance
+        .mockResolvedValueOnce({ memoryImportance: 'high' }) // memory-2 importance
+        .mockResolvedValueOnce({
+          processedData: null,
+          extractionTimestamp: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        }) // memory-1 for content validation
+        .mockResolvedValueOnce({
+          processedData: null,
+          extractionTimestamp: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        }); // memory-2 for content validation
+
       mockPrismaClient.longTermMemory.findMany
         .mockResolvedValueOnce([
           { id: 'memory-1' },
           { id: 'memory-2' }
-        ]); // existing memories check
+        ]) // existing memories check
+        .mockResolvedValueOnce([]) // recent consolidation failures check
+        .mockResolvedValueOnce([]); // recent consolidation activity check
 
       const result = await consciousAgent.consolidateDuplicates({ dryRun: true });
 

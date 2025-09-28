@@ -92,25 +92,34 @@ export interface EnhancedErrorContext {
 }
 
 /**
- * Standardized error context interface for consistent debugging (legacy alias)
+ * Standardized error context interface for consistent debugging
  */
 export interface SearchErrorContext {
-  strategy: string;
-  operation: string;
-  query?: string;
-  parameters?: Record<string, unknown>;
-  duration?: number;
-  timestamp: Date;
-  databaseState?: {
-    connectionStatus: 'connected' | 'disconnected' | 'error';
-    lastError?: string;
-    queryCount?: number;
-  };
-  systemContext?: {
-    memoryUsage?: number;
-    availableMemory?: number;
-    cpuUsage?: number;
-  };
+   strategy: string;
+   operation: string;
+   query?: string;
+   parameters?: Record<string, unknown>;
+   duration?: number;
+   timestamp: Date;
+   executionTime?: number;
+   databaseState?: {
+     connectionStatus: 'connected' | 'disconnected' | 'error';
+     lastError?: string;
+     queryCount?: number;
+   };
+   systemContext?: {
+     memoryUsage?: number;
+     availableMemory?: number;
+     cpuUsage?: number;
+   };
+   systemState?: {
+     memoryUsage: number;
+     activeConnections: number;
+     databaseStatus: string;
+   };
+   errorCategory?: 'low' | 'medium' | 'high' | 'critical';
+   recoveryAttempts?: number;
+   circuitBreakerState?: 'closed' | 'open' | 'half-open';
 }
 
 /**

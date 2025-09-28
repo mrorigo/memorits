@@ -40,6 +40,7 @@ import {
 import { MemoryProcessingParams } from '../types/models';
 import { DatabaseManager } from '../database/DatabaseManager';
 import { MemoryProcessingState } from '../memory/MemoryProcessingStateManager';
+import { RelationshipProcessor } from '../search/relationship/RelationshipProcessor';
 
 // Memory processing schema definition for prompt generation
 const MEMORY_SCHEMA = {
@@ -87,10 +88,16 @@ IMPORTANCE CRITERIA:
 export class MemoryAgent {
   private openaiProvider: OpenAIProvider;
   private dbManager?: DatabaseManager;
+  private relationshipProcessor?: RelationshipProcessor;
 
   constructor(openaiProvider: OpenAIProvider, dbManager?: DatabaseManager) {
     this.openaiProvider = openaiProvider;
     this.dbManager = dbManager;
+
+    // Initialize relationship processor if database manager is available
+    if (dbManager && openaiProvider) {
+      this.relationshipProcessor = new RelationshipProcessor(dbManager, openaiProvider);
+    }
   }
 
   /**
@@ -677,6 +684,9 @@ Extract and classify this memory, including relationship analysis:`;
       const processedMemory = MemoryAgent.processLLMResponse(content, params.chatId);
 
       // Extract memory relationships if database manager is available
+      let extractedRelationships: any[] = [];
+      let relationshipMetadata: any = null;
+
       if (this.dbManager) {
         try {
           const existingMemories = await this.dbManager.searchMemories('', {
@@ -684,17 +694,67 @@ Extract and classify this memory, including relationship analysis:`;
             limit: 50, // Get recent memories for relationship analysis
           });
 
-          const relationships = await this.extractMemoryRelationships(
-            processedMemory.content,
-            processedMemory,
-            existingMemories,
-          );
+          // Extract memory relationships using the new RelationshipProcessor
+          if (this.relationshipProcessor) {
+            // Use LLM-based relationship extraction
+            const relationshipExtractionResult = await this.relationshipProcessor.extractRelationships(
+              processedMemory.content,
+              {
+                sessionId: params.context.sessionId,
+                userPreferences: params.context.userPreferences,
+                currentProjects: params.context.currentProjects,
+                analysisDepth: 3,
+                namespace: params.context.sessionId || 'default',
+              },
+              existingMemories,
+            );
 
-          // Validate relationships for quality
-          const validatedRelationships = this.validateRelationships(relationships);
+            // Use LLM-extracted relationships if available and high quality
+            if (relationshipExtractionResult.relationships.length > 0 &&
+                relationshipExtractionResult.confidence > 0.5) {
+              extractedRelationships = relationshipExtractionResult.relationships;
+              relationshipMetadata = {
+                extractionMethod: relationshipExtractionResult.extractionMethod,
+                confidence: relationshipExtractionResult.confidence,
+                extractedAt: relationshipExtractionResult.extractedAt,
+                processingMetadata: relationshipExtractionResult.processingMetadata,
+              };
+            } else {
+              // Fall back to rule-based extraction
+              const fallbackRelationships = await this.extractMemoryRelationships(
+                processedMemory.content,
+                processedMemory,
+                existingMemories,
+              );
+              const validatedRelationships = this.validateRelationships(fallbackRelationships);
+              extractedRelationships = validatedRelationships;
+              relationshipMetadata = {
+                extractionMethod: 'rule_based_fallback',
+                confidence: 0.5,
+                extractedAt: new Date(),
+              };
+            }
+          } else {
+            // Fall back to original rule-based extraction if RelationshipProcessor not available
+            const relationships = await this.extractMemoryRelationships(
+              processedMemory.content,
+              processedMemory,
+              existingMemories,
+            );
+            const validatedRelationships = this.validateRelationships(relationships);
+            extractedRelationships = validatedRelationships;
+            relationshipMetadata = {
+              extractionMethod: 'rule_based',
+              confidence: 0.5,
+              extractedAt: new Date(),
+            };
+          }
 
           // Add relationships to the processed memory
-          (processedMemory as any).relatedMemories = validatedRelationships;
+          (processedMemory as any).relatedMemories = extractedRelationships;
+          if (relationshipMetadata) {
+            (processedMemory as any).relationshipMetadata = relationshipMetadata;
+          }
         } catch (error) {
           console.warn('Failed to extract memory relationships:', error);
           // Continue without relationships - don't fail the entire process
