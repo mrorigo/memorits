@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } from '../types/schemas';
 import { MemorySearchResult, SearchOptions, DatabaseStats } from '../types/models';
+import { PerformanceMetrics } from '../types/base';
 import { logInfo, logError } from '../utils/Logger';
 import { initializeSearchSchema, verifyFTSSchema } from './init-search-schema';
 import { SearchService } from '../search/SearchService';
@@ -16,23 +17,8 @@ import { createHash } from 'crypto';
 // ===== DATABASE PERFORMANCE MONITORING INTERFACES =====
 
 /**
- * Database operation performance metrics
- */
-interface DatabasePerformanceMetrics {
-  totalOperations: number;
-  averageOperationTime: number;
-  operationsByType: Map<string, number>;
-  errorCounts: Map<string, number>;
-  connectionCount: number;
-  queryLatency: number;
-  memoryUsage: number;
-  cacheHitRate: number;
-  lastOperationTime: number;
-  slowQueries: Array<{ query: string; duration: number; timestamp: number }>;
-}
-
-/**
  * Database operation performance data
+ * Extends the unified performance metrics structure with database-specific fields
  */
 interface DatabaseOperationMetrics {
   operationType: string;
@@ -144,17 +130,25 @@ export class DatabaseManager {
   private stateManager: ProcessingStateManager;
 
   // Database performance monitoring
-  private performanceMetrics: DatabasePerformanceMetrics = {
+  private performanceMetrics: PerformanceMetrics = {
     totalOperations: 0,
+    successfulOperations: 0,
+    failedOperations: 0,
     averageOperationTime: 0,
-    operationsByType: new Map<string, number>(),
-    errorCounts: new Map<string, number>(),
-    connectionCount: 0,
-    queryLatency: 0,
+    lastOperationTime: new Date(),
+    errorRate: 0,
     memoryUsage: 0,
-    cacheHitRate: 0,
-    lastOperationTime: 0,
-    slowQueries: [],
+    peakMemoryUsage: 0,
+    operationBreakdown: new Map<string, number>(),
+    errorBreakdown: new Map<string, number>(),
+    trends: [],
+    metadata: {
+      component: 'DatabaseManager',
+      databaseType: 'sqlite',
+      connectionCount: 0,
+      queryLatency: 0,
+      slowQueries: [],
+    },
   };
 
   private operationMetrics: DatabaseOperationMetrics[] = [];
@@ -3832,11 +3826,16 @@ export class DatabaseManager {
 
     // Update aggregate metrics
     this.performanceMetrics.totalOperations++;
-    this.performanceMetrics.lastOperationTime = endTime;
+    if (metrics.success) {
+      this.performanceMetrics.successfulOperations++;
+    } else {
+      this.performanceMetrics.failedOperations++;
+    }
+    this.performanceMetrics.lastOperationTime = new Date(endTime);
 
     // Update operation type counts
-    const currentCount = this.performanceMetrics.operationsByType.get(metrics.operationType) || 0;
-    this.performanceMetrics.operationsByType.set(metrics.operationType, currentCount + 1);
+    const currentCount = this.performanceMetrics.operationBreakdown.get(metrics.operationType) || 0;
+    this.performanceMetrics.operationBreakdown.set(metrics.operationType, currentCount + 1);
 
     // Update average operation time
     this.performanceMetrics.averageOperationTime =
@@ -3853,8 +3852,12 @@ export class DatabaseManager {
     }
 
     // Update query latency (exponential moving average)
-    this.performanceMetrics.queryLatency =
-      (this.performanceMetrics.queryLatency * 0.9) + (metrics.duration! * 0.1);
+    const currentLatency = this.performanceMetrics.metadata?.queryLatency as number || 0;
+    const newLatency = (currentLatency * 0.9) + (metrics.duration! * 0.1);
+    this.performanceMetrics.metadata = {
+      ...this.performanceMetrics.metadata,
+      queryLatency: newLatency,
+    };
 
     // Update memory usage
     const currentMemory = process.memoryUsage();
@@ -3862,8 +3865,8 @@ export class DatabaseManager {
 
     // Track errors
     if (!metrics.success && metrics.error) {
-      const currentErrorCount = this.performanceMetrics.errorCounts.get(metrics.error) || 0;
-      this.performanceMetrics.errorCounts.set(metrics.error, currentErrorCount + 1);
+      const currentErrorCount = this.performanceMetrics.errorBreakdown.get(metrics.error) || 0;
+      this.performanceMetrics.errorBreakdown.set(metrics.error, currentErrorCount + 1);
     }
 
     // Store operation history
@@ -3877,16 +3880,21 @@ export class DatabaseManager {
    * Track slow queries for performance analysis
    */
   private trackSlowQuery(slowQuery: { query: string; duration: number; timestamp: number }): void {
-    this.performanceMetrics.slowQueries.unshift(slowQuery);
-    if (this.performanceMetrics.slowQueries.length > this.performanceConfig.maxSlowQueryHistory) {
-      this.performanceMetrics.slowQueries = this.performanceMetrics.slowQueries.slice(0, this.performanceConfig.maxSlowQueryHistory);
+    const slowQueries = this.performanceMetrics.metadata?.slowQueries as Array<{ query: string; duration: number; timestamp: number }> || [];
+    slowQueries.unshift(slowQuery);
+    if (slowQueries.length > this.performanceConfig.maxSlowQueryHistory) {
+      slowQueries.splice(this.performanceConfig.maxSlowQueryHistory);
     }
+    this.performanceMetrics.metadata = {
+      ...this.performanceMetrics.metadata,
+      slowQueries,
+    };
   }
 
   /**
    * Get database performance metrics
    */
-  public getPerformanceMetrics(): DatabasePerformanceMetrics {
+  public getPerformanceMetrics(): PerformanceMetrics {
     return { ...this.performanceMetrics };
   }
 
@@ -3912,27 +3920,29 @@ export class DatabaseManager {
   } {
     const totalOps = this.performanceMetrics.totalOperations;
     const errorRate = totalOps > 0 ?
-      Array.from(this.performanceMetrics.errorCounts.values()).reduce((sum, count) => sum + count, 0) / totalOps : 0;
+      Array.from(this.performanceMetrics.errorBreakdown.values()).reduce((sum: number, count: number) => sum + count, 0) / totalOps : 0;
 
     // Generate operation breakdown
     const operationBreakdown: Record<string, number> = {};
-    for (const [opType, count] of this.performanceMetrics.operationsByType) {
+    for (const [opType, count] of this.performanceMetrics.operationBreakdown) {
       operationBreakdown[opType] = (count / totalOps) * 100;
     }
 
     // Get top errors
-    const topErrors = Array.from(this.performanceMetrics.errorCounts.entries())
+    const topErrors = Array.from(this.performanceMetrics.errorBreakdown.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([error, count]) => ({ error, count }));
 
+    const slowQueries = this.performanceMetrics.metadata?.slowQueries as Array<{ query: string; duration: number; timestamp: number }> || [];
+
     return {
       averageLatency: this.performanceMetrics.averageOperationTime,
       errorRate,
-      slowQueryCount: this.performanceMetrics.slowQueries.length,
+      slowQueryCount: slowQueries.length,
       operationBreakdown,
       topErrors,
-      slowQueries: [...this.performanceMetrics.slowQueries],
+      slowQueries: [...slowQueries],
       memoryUsage: this.performanceMetrics.memoryUsage,
       connectionStatus: this.isConnected() ? 'connected' : 'disconnected',
     };
@@ -3958,7 +3968,7 @@ export class DatabaseManager {
     const performanceByOperation: Record<string, { count: number; averageLatency: number; errorRate: number }> = {};
 
     // Calculate performance by operation type
-    for (const [opType, count] of this.performanceMetrics.operationsByType) {
+    for (const [opType, count] of this.performanceMetrics.operationBreakdown) {
       const opMetrics = this.operationMetrics.filter(m => m.operationType === opType);
       const errorCount = opMetrics.filter(m => !m.success).length;
       const avgLatency = opMetrics.length > 0 ?
@@ -3974,13 +3984,15 @@ export class DatabaseManager {
     // Generate recommendations
     const recommendations = this.generateDatabasePerformanceRecommendations(analytics);
 
+    const connectionCount = this.performanceMetrics.metadata?.connectionCount as number || 0;
+
     return {
       summary: {
         totalOperations: this.performanceMetrics.totalOperations,
         averageLatency: analytics.averageLatency,
         errorRate: analytics.errorRate,
         memoryUsage: analytics.memoryUsage,
-        connectionCount: this.performanceMetrics.connectionCount,
+        connectionCount,
       },
       performanceByOperation,
       slowQueries: analytics.slowQueries,
@@ -4052,10 +4064,10 @@ export class DatabaseManager {
       totalOperations: this.performanceMetrics.totalOperations,
       averageLatency: this.performanceMetrics.averageOperationTime,
       errorRate: this.performanceMetrics.totalOperations > 0 ?
-        Array.from(this.performanceMetrics.errorCounts.values()).reduce((sum, count) => sum + count, 0) / this.performanceMetrics.totalOperations : 0,
-      slowQueryCount: this.performanceMetrics.slowQueries.length,
+        Array.from(this.performanceMetrics.errorBreakdown.values()).reduce((sum: number, count: number) => sum + count, 0) / this.performanceMetrics.totalOperations : 0,
+      slowQueryCount: (this.performanceMetrics.metadata?.slowQueries as Array<any> || []).length,
       memoryUsage: this.performanceMetrics.memoryUsage,
-      lastOperationTime: this.performanceMetrics.lastOperationTime,
+      lastOperationTime: this.performanceMetrics.lastOperationTime.getTime(),
     };
   }
 
@@ -4079,15 +4091,23 @@ export class DatabaseManager {
   public clearPerformanceMetrics(): void {
     this.performanceMetrics = {
       totalOperations: 0,
+      successfulOperations: 0,
+      failedOperations: 0,
       averageOperationTime: 0,
-      operationsByType: new Map<string, number>(),
-      errorCounts: new Map<string, number>(),
-      connectionCount: 0,
-      queryLatency: 0,
+      lastOperationTime: new Date(),
+      errorRate: 0,
       memoryUsage: 0,
-      cacheHitRate: 0,
-      lastOperationTime: 0,
-      slowQueries: [],
+      peakMemoryUsage: 0,
+      operationBreakdown: new Map<string, number>(),
+      errorBreakdown: new Map<string, number>(),
+      trends: [],
+      metadata: {
+        component: 'DatabaseManager',
+        databaseType: 'sqlite',
+        connectionCount: 0,
+        queryLatency: 0,
+        slowQueries: [],
+      },
     };
     this.operationMetrics = [];
   }

@@ -1,5 +1,6 @@
 // src/core/types/models.ts
 import { MemoryClassification, MemoryImportanceLevel, ProcessedLongTermMemory, ConversationContext as ZodConversationContext } from './schemas';
+import { BaseConfig, ProviderConfig, LoggerConfig as BaseLoggerConfig, LogLevel as BaseLogLevel } from './base';
 
 // Re-export Zod types for convenience
 export { MemoryClassification, MemoryImportanceLevel, ProcessedLongTermMemory };
@@ -97,21 +98,22 @@ export interface UserContext {
   relevantSkills?: string[];
 }
 
-export interface MemoriConfig {
+export interface MemoriConfig extends BaseConfig, ProviderConfig {
+  /** Database connection URL */
   databaseUrl: string;
+  /** Default namespace for operations */
   namespace: string;
+  /** Enable conscious memory ingestion mode */
   consciousIngest: boolean;
+  /** Enable automatic memory ingestion mode */
   autoIngest: boolean;
-  model: string;
-  apiKey: string;
-  baseUrl?: string;
+  /** User context information for enhanced processing */
   userContext?: UserContext;
+  /** Background update interval for conscious mode (milliseconds) */
   backgroundUpdateInterval?: number;
 }
 
-// Logger Interfaces
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
-
+// Logger Interfaces - Now extends BaseLoggerConfig for consistency
 export interface LogContext {
   component?: string;
   userId?: string;
@@ -121,12 +123,11 @@ export interface LogContext {
   [key: string]: any;
 }
 
-export interface LoggerConfig {
-  level: LogLevel;
-  enableFileLogging: boolean;
-  enableConsoleLogging: boolean;
-  logDir?: string;
+export interface LoggerConfig extends BaseLoggerConfig {
+  /** Environment context for logging configuration */
   environment: 'development' | 'production' | 'test';
+  /** Directory for log files (if file logging enabled) */
+  logDir?: string;
 }
 
 // Utility Types

@@ -55,6 +55,7 @@ const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfigurati
     timeout: 10000,
     maxResults: 100,
     performance: {
+      enableMetrics: true,
       enableCaching: true,
       cacheSize: 1000,
       enableParallelExecution: false,
@@ -82,6 +83,7 @@ const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfigurati
     timeout: 5000,
     maxResults: 100,
     performance: {
+      enableMetrics: true,
       enableCaching: true,
       cacheSize: 500,
       enableParallelExecution: false,
@@ -112,6 +114,7 @@ const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfigurati
     timeout: 3000,
     maxResults: 50,
     performance: {
+      enableMetrics: true,
       enableCaching: true,
       cacheSize: 200,
       enableParallelExecution: false,
@@ -139,6 +142,7 @@ const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfigurati
     timeout: 15000,
     maxResults: 50,
     performance: {
+      enableMetrics: true,
       enableCaching: true,
       cacheSize: 200,
       enableParallelExecution: false,
@@ -163,6 +167,7 @@ const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfigurati
     timeout: 5000,
     maxResults: 200,
     performance: {
+      enableMetrics: true,
       enableCaching: true,
       cacheSize: 300,
       enableParallelExecution: true,
@@ -193,6 +198,7 @@ const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfigurati
     timeout: 5000,
     maxResults: 200,
     performance: {
+      enableMetrics: true,
       enableCaching: true,
       cacheSize: 300,
       enableParallelExecution: true,
@@ -224,6 +230,7 @@ const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfigurati
     timeout: 5000,
     maxResults: 200,
     performance: {
+      enableMetrics: true,
       enableCaching: true,
       cacheSize: 300,
       enableParallelExecution: true,
@@ -262,6 +269,7 @@ const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfigurati
     timeout: 8000,
     maxResults: 100,
     performance: {
+      enableMetrics: true,
       enableCaching: true,
       cacheSize: 400,
       enableParallelExecution: false,

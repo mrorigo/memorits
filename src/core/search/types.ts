@@ -13,6 +13,7 @@ export enum SearchStrategy {
 // Import relationship types from schemas
 import { MemoryRelationshipType } from '../types/schemas';
 import type { MemoryRelationship } from '../types/schemas';
+import { SearchStrategyConfig as BaseSearchStrategyConfig } from '../types/base';
 
 // Import and re-export interfaces from SearchStrategy
 import type {
@@ -86,15 +87,7 @@ export interface DatabaseQueryResult {
   search_strategy?: string;
 }
 
-// Strategy configuration interface for type-safe configuration
-export interface StrategyConfiguration {
-  enabled: boolean;
-  priority: number;
-  timeout: number;
-  maxResults: number;
-  minScore: number;
-  options?: Record<string, unknown>;
-}
+// Note: StrategyConfiguration removed - use SearchStrategyConfiguration instead
 
 // Query parameters interface for type-safe query building
 export interface QueryParameters {
@@ -167,6 +160,7 @@ export interface SearchStrategyConfiguration {
   timeout: number;
   maxResults: number;
   performance: {
+    enableMetrics: boolean;
     enableCaching: boolean;
     cacheSize: number;
     enableParallelExecution: boolean;
