@@ -10,34 +10,142 @@ import { z } from 'zod';
 // ===== BASE CONFIGURATION INTERFACES =====
 
 /**
- * Base configuration interface for all system components
- * Provides common configuration options that all components should support
+ * Unified base configuration interface for all memori-ts system components
+ *
+ * This interface provides a comprehensive set of configuration options that all
+ * components in the memori-ts ecosystem should support. It consolidates common
+ * settings for performance, security, processing modes, and component-specific
+ * options into a single, well-structured configuration object.
+ *
+ * The BaseConfig interface follows the principle of progressive disclosure,
+ * allowing components to specify only the configuration they need while
+ * maintaining type safety and discoverability.
+ *
+ * @example
+ * ```typescript
+ * const config: BaseConfig = {
+ *   enabled: true,
+ *   namespace: 'search-service',
+ *   timeout: 30000,
+ *   debugMode: false,
+ *   priority: 50,
+ *   autoIngest: true,
+ *   performance: {
+ *     enableMetrics: true,
+ *     enableCaching: true,
+ *     cacheSize: 1000,
+ *     collectionInterval: 5000,
+ *     maxResults: 100
+ *   },
+ *   security: {
+ *     enableAuditLogging: true,
+ *     dataRetentionDays: 365,
+ *     encryptionEnabled: false
+ *   },
+ *   options: {
+ *     customSetting: 'value'
+ *   }
+ * };
+ * ```
  */
 export interface BaseConfig {
-  /** Whether this component is enabled */
+  // ===== UNIVERSAL PROPERTIES =====
+
+  /** Whether this component is enabled and active */
   enabled: boolean;
-  /** Debug mode for additional logging and validation */
+
+  /**
+   * Optional namespace identifier for component isolation
+   * Useful for multi-tenant deployments or component grouping
+   */
+  namespace?: string;
+
+  /**
+   * Default timeout for operations in milliseconds
+   * Individual operations may override this value
+   */
+  timeout: number;
+
+  /**
+   * Enable debug mode for additional logging and validation
+   * Should only be used in development environments
+   */
   debugMode?: boolean;
-  /** Performance monitoring and optimization settings */
+
+  /**
+   * Priority level for component execution (0-100)
+   * Higher values indicate higher priority
+   */
+  priority?: number;
+
+  // ===== PROCESSING MODES =====
+
+  /**
+   * Enable automatic ingestion of new data
+   * When true, the component will automatically process new inputs
+   */
+  autoIngest?: boolean;
+
+  /**
+   * Enable conscious processing mode
+   * When true, enables advanced AI-driven processing capabilities
+   */
+  consciousIngest?: boolean;
+
+  /**
+   * Background update interval in milliseconds
+   * Controls how often the component performs background maintenance
+   */
+  backgroundUpdateInterval?: number;
+
+  // ===== PERFORMANCE SETTINGS =====
+
+  /**
+   * Performance monitoring and optimization settings
+   * Configures how the component handles performance-related features
+   */
   performance?: {
-    /** Enable performance metrics collection */
-    enableMetrics: boolean;
-    /** Enable result caching */
-    enableCaching: boolean;
-    /** Maximum cache size (number of entries) */
-    cacheSize: number;
-    /** Enable parallel execution where possible */
-    enableParallelExecution: boolean;
+    /** Enable collection of performance metrics */
+    enableMetrics?: boolean;
+
+    /** Enable result caching for improved performance */
+    enableCaching?: boolean;
+
+    /** Maximum number of entries to cache */
+    cacheSize?: number;
+
+    /** Interval for collecting performance data (milliseconds) */
+    collectionInterval?: number;
+
+    /** Maximum number of results to return in operations */
+    maxResults?: number;
   };
-  /** Security and audit settings */
+
+  // ===== SECURITY SETTINGS =====
+
+  /**
+   * Security and audit configuration
+   * Controls security-related features and compliance settings
+   */
   security?: {
-    /** Enable security audit logging */
-    enableAuditLogging: boolean;
-    /** Data retention period in days */
-    dataRetentionDays: number;
-    /** Enable data encryption at rest */
-    encryptionEnabled: boolean;
+    /** Enable security audit logging for compliance */
+    enableAuditLogging?: boolean;
+
+    /** Data retention period in days for audit purposes */
+    dataRetentionDays?: number;
+
+    /** Enable encryption for sensitive data */
+    encryptionEnabled?: boolean;
   };
+
+  // ===== COMPONENT OPTIONS =====
+
+  /**
+   * Component-specific configuration options
+   * Allows components to accept custom configuration without
+   * extending the base interface
+   */
+  options?: Record<string, unknown>;
 }
 
 /**
@@ -105,33 +213,156 @@ export interface DatabaseConfig extends BaseConfig {
 // ===== PERFORMANCE METRICS INTERFACES =====
 
 /**
- * Unified performance metrics interface for all components
- * Consolidates the various performance metrics structures found across modules
+ * Unified PerformanceMetrics interface for comprehensive performance tracking across memori-ts
+ *
+ * This interface consolidates common performance tracking properties used across all major
+ * system components including DatabaseManager, SearchStrategyConfigManager, SearchService,
+ * and OpenAI integration. It provides a standardized way to monitor system performance,
+ * identify bottlenecks, and track operational health.
+ *
+ * The interface follows cognitive load optimization principles by maintaining a simple,
+ * predictable structure while providing comprehensive tracking capabilities. All properties
+ * are designed to be easily serializable and suitable for both real-time monitoring
+ * and historical analysis.
+ *
+ * @example
+ * ```typescript
+ * // Database operation tracking
+ * const dbMetrics: PerformanceMetrics = {
+ *   totalOperations: 1500,
+ *   successfulOperations: 1485,
+ *   failedOperations: 15,
+ *   averageOperationTime: 45.2,
+ *   lastOperationTime: new Date(),
+ *   errorRate: 1.0,
+ *   memoryUsage: 256000000,
+ *   operationBreakdown: new Map([
+ *     ['SELECT', 1200],
+ *     ['INSERT', 200],
+ *     ['UPDATE', 100]
+ *   ]),
+ *   errorBreakdown: new Map([
+ *     ['connection_timeout', 10],
+ *     ['syntax_error', 5]
+ *   ]),
+ *   metadata: { component: 'DatabaseManager' }
+ * };
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Search service tracking
+ * const searchMetrics: PerformanceMetrics = {
+ *   totalOperations: 3200,
+ *   successfulOperations: 3180,
+ *   failedOperations: 20,
+ *   averageOperationTime: 125.5,
+ *   lastOperationTime: new Date(),
+ *   errorRate: 0.62,
+ *   memoryUsage: 128000000,
+ *   operationBreakdown: new Map([
+ *     ['fts_search', 2000],
+ *     ['like_search', 800],
+ *     ['recent_search', 400]
+ *   ]),
+ *   errorBreakdown: new Map([
+ *     ['timeout', 12],
+ *     ['invalid_query', 8]
+ *   ]),
+ *   metadata: { component: 'SearchService', strategies: ['FTS5', 'LIKE'] }
+ * };
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Configuration manager tracking
+ * const configMetrics: PerformanceMetrics = {
+ *   totalOperations: 450,
+ *   successfulOperations: 445,
+ *   failedOperations: 5,
+ *   averageOperationTime: 12.3,
+ *   lastOperationTime: new Date(),
+ *   errorRate: 1.11,
+ *   memoryUsage: 32000000,
+ *   operationBreakdown: new Map([
+ *     ['load', 300],
+ *     ['save', 100],
+ *     ['validate', 50]
+ *   ]),
+ *   errorBreakdown: new Map([
+ *     ['file_not_found', 3],
+ *     ['validation_error', 2]
+ *   ]),
+ *   metadata: { component: 'SearchStrategyConfigManager' }
+ * };
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // OpenAI integration tracking
+ * const openaiMetrics: PerformanceMetrics = {
+ *   totalOperations: 800,
+ *   successfulOperations: 790,
+ *   failedOperations: 10,
+ *   averageOperationTime: 850.0,
+ *   lastOperationTime: new Date(),
+ *   errorRate: 1.25,
+ *   memoryUsage: 64000000,
+ *   operationBreakdown: new Map([
+ *     ['chat_completion', 600],
+ *     ['embedding', 200]
+ *   ]),
+ *   errorBreakdown: new Map([
+ *     ['rate_limit', 6],
+ *     ['api_error', 4]
+ *   ]),
+ *   metadata: { component: 'OpenAIProvider', model: 'gpt-4o-mini' }
+ * };
+ * ```
+ *
+ * @usagePatterns
+ * - **Real-time Monitoring**: Use for live dashboards and alerting systems
+ * - **Historical Analysis**: Track performance trends over time
+ * - **Component Comparison**: Compare performance across different system components
+ * - **Capacity Planning**: Identify resource usage patterns and scaling needs
+ * - **Error Analysis**: Break down error types and frequencies for debugging
+ * - **Performance Optimization**: Identify bottlenecks and optimization opportunities
  */
 export interface PerformanceMetrics {
-  /** Total number of operations performed */
+  /** Total number of operations performed across all components */
   totalOperations: number;
-  /** Number of successful operations */
+
+  /** Number of operations that completed successfully */
   successfulOperations: number;
-  /** Number of failed operations */
+
+  /** Number of operations that failed */
   failedOperations: number;
-  /** Average operation time in milliseconds */
+
+  /** Average time taken for operations in milliseconds */
   averageOperationTime: number;
-  /** Timestamp of the last operation */
+
+  /** Timestamp when the most recent operation occurred */
   lastOperationTime: Date;
-  /** Error rate as a percentage (0-100) */
+
+  /** Error rate expressed as a percentage (0-100) */
   errorRate: number;
+
   /** Current memory usage in bytes */
   memoryUsage: number;
+
   /** Peak memory usage in bytes */
   peakMemoryUsage: number;
-  /** Breakdown of operations by type */
+
+  /** Detailed breakdown of operations categorized by type or component */
   operationBreakdown: Map<string, number>;
-  /** Breakdown of errors by type */
+
+  /** Detailed breakdown of errors categorized by error type or component */
   errorBreakdown: Map<string, number>;
-  /** Performance trends over time */
+
+  /** Historical performance data for trend analysis */
   trends: PerformanceTrend[];
-  /** Additional metadata */
+
+  /** Additional component-specific metadata for enhanced tracking and debugging */
   metadata?: Record<string, unknown>;
 }
 
@@ -290,21 +521,39 @@ export class SecurityError extends MemoriError {
 
 /**
  * Zod schema for BaseConfig validation
+ * Provides comprehensive validation for the unified BaseConfig interface
  */
 export const BaseConfigSchema = z.object({
+  // ===== UNIVERSAL PROPERTIES =====
   enabled: z.boolean().default(true),
+  namespace: z.string().optional(),
+  timeout: z.number().min(1000).max(300000).default(30000),
   debugMode: z.boolean().default(false),
+  priority: z.number().min(0).max(100).default(50),
+
+  // ===== PROCESSING MODES =====
+  autoIngest: z.boolean().default(true),
+  consciousIngest: z.boolean().default(false),
+  backgroundUpdateInterval: z.number().min(1000).max(3600000).default(300000),
+
+  // ===== PERFORMANCE SETTINGS =====
   performance: z.object({
     enableMetrics: z.boolean().default(true),
     enableCaching: z.boolean().default(true),
     cacheSize: z.number().min(0).max(10000).default(1000),
-    enableParallelExecution: z.boolean().default(false),
+    collectionInterval: z.number().min(1000).max(60000).default(5000),
+    maxResults: z.number().min(1).max(10000).default(100),
   }).optional(),
+
+  // ===== SECURITY SETTINGS =====
   security: z.object({
     enableAuditLogging: z.boolean().default(true),
     dataRetentionDays: z.number().min(1).max(3650).default(365),
     encryptionEnabled: z.boolean().default(false),
   }).optional(),
+
+  // ===== COMPONENT OPTIONS =====
+  options: z.record(z.unknown()).optional(),
 });
 
 /**
@@ -395,7 +644,9 @@ export function isBaseConfig(config: unknown): config is BaseConfig {
   return typeof config === 'object' &&
          config !== null &&
          'enabled' in config &&
-         typeof (config as any).enabled === 'boolean';
+         'timeout' in config &&
+         typeof (config as any).enabled === 'boolean' &&
+         typeof (config as any).timeout === 'number';
 }
 
 /**

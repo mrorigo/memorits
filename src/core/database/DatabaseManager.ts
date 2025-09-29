@@ -13,6 +13,16 @@ import {
 } from '../memory/MemoryProcessingStateManager';
 import { MemoryRelationship, MemoryRelationshipType } from '../types/schemas';
 import { createHash } from 'crypto';
+import {
+  sanitizeString,
+  sanitizeSearchQuery,
+  sanitizeNamespace,
+  sanitizeFilePath,
+  sanitizeJsonInput,
+  SanitizationError,
+  ValidationError,
+  containsDangerousPatterns
+} from '../utils/SanitizationUtils';
 
 // ===== DATABASE PERFORMANCE MONITORING INTERFACES =====
 
@@ -246,15 +256,51 @@ export class DatabaseManager {
 
 
   async storeChatHistory(data: ChatHistoryData): Promise<string> {
+    // Sanitize all user inputs
+    const sanitizedData = {
+      chatId: sanitizeString(data.chatId, {
+        fieldName: 'chatId',
+        maxLength: 100,
+        allowNewlines: false
+      }),
+      userInput: sanitizeString(data.userInput, {
+        fieldName: 'userInput',
+        maxLength: 10000,
+        allowHtml: false
+      }),
+      aiOutput: sanitizeString(data.aiOutput, {
+        fieldName: 'aiOutput',
+        maxLength: 10000,
+        allowHtml: false
+      }),
+      model: sanitizeString(data.model, {
+        fieldName: 'model',
+        maxLength: 100,
+        allowNewlines: false
+      }),
+      sessionId: sanitizeString(data.sessionId, {
+        fieldName: 'sessionId',
+        maxLength: 100,
+        allowNewlines: false
+      }),
+      namespace: sanitizeNamespace(data.namespace, {
+        fieldName: 'namespace'
+      }),
+      metadata: data.metadata ? sanitizeJsonInput(
+        JSON.stringify(data.metadata),
+        { fieldName: 'metadata', maxSize: 50000 }
+      ) : undefined,
+    };
+
     const result = await this.prisma.chatHistory.create({
       data: {
-        id: data.chatId,
-        userInput: data.userInput,
-        aiOutput: data.aiOutput,
-        model: data.model,
-        sessionId: data.sessionId,
-        namespace: data.namespace,
-        metadata: data.metadata as any,
+        id: sanitizedData.chatId,
+        userInput: sanitizedData.userInput,
+        aiOutput: sanitizedData.aiOutput,
+        model: sanitizedData.model,
+        sessionId: sanitizedData.sessionId,
+        namespace: sanitizedData.namespace,
+        metadata: sanitizedData.metadata as any,
       },
     });
     return result.id;
@@ -420,34 +466,84 @@ export class DatabaseManager {
   }
 
   /**
-   * Advanced FTS5 search with BM25 ranking
-   */
+    * Advanced FTS5 search with BM25 ranking
+    */
   private async searchMemoriesFTS(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
     try {
       // Ensure FTS support is initialized before using it
       await this.ensureFTSSupport();
-      const limit = options.limit || 10;
-      const namespace = options.namespace || 'default';
+      const limit = Math.min(options.limit || 10, 1000); // Cap limit for security
+
+      // Enhanced sanitization for query and options
+      const sanitizedQuery = sanitizeSearchQuery(query, {
+        fieldName: 'searchQuery',
+        allowWildcards: true,
+        allowBoolean: false
+      });
+
+      const sanitizedNamespace = sanitizeNamespace(
+        options.namespace || 'default',
+        { fieldName: 'namespace' }
+      );
+
+      // Additional security check for dangerous patterns
+      const queryDangers = containsDangerousPatterns(sanitizedQuery);
+      if (queryDangers.hasSQLInjection || queryDangers.hasXSS || queryDangers.hasCommandInjection) {
+        throw new SanitizationError(
+          'Query contains dangerous patterns',
+          'searchQuery',
+          sanitizedQuery,
+          'security_validation'
+        );
+      }
+
+      // Validate and sanitize input using enhanced validation
+      const validation = this.validateAndSanitizeFTSInput(sanitizedQuery, options);
+      if (!validation.isValid) {
+        throw new ValidationError(
+          `Invalid FTS query: ${validation.errors.join(', ')}`,
+          'searchQuery',
+          sanitizedQuery,
+          'enhanced_validation'
+        );
+      }
 
       // Build FTS query with proper escaping and phrase handling
-      const ftsQuery = this.buildFTSQuery(query);
+      const ftsQuery = this.buildFTSQuery(sanitizedQuery);
 
-      // Build metadata filters
-      const metadataFilters: string[] = [`namespace = '${namespace}'`];
+      // Build metadata filters with parameterized values
+      const metadataFilters: string[] = ['namespace = $1'];
+      const queryParams: any[] = [sanitizedNamespace];
+      let paramIndex = 2;
 
       if (options.minImportance) {
         const minScore = this.calculateImportanceScore(options.minImportance);
-        metadataFilters.push(`json_extract(metadata, '$.importance_score') >= ${minScore}`);
+        metadataFilters.push(`json_extract(metadata, '$.importance_score') >= $${paramIndex}`);
+        queryParams.push(minScore);
+        paramIndex++;
       }
 
       if (options.categories && options.categories.length > 0) {
-        const categories = options.categories.map(cat => `'${cat}'`).join(',');
-        metadataFilters.push(`json_extract(metadata, '$.category_primary') IN (${categories})`);
+        // Validate categories
+        const validCategories = options.categories.filter(cat =>
+          cat && typeof cat === 'string' && cat.trim().length > 0
+        );
+
+        if (validCategories.length > 0) {
+          const placeholders = validCategories.map((_, index) => `$${paramIndex + index}`).join(',');
+          metadataFilters.push(`json_extract(metadata, '$.category_primary') IN (${placeholders})`);
+          queryParams.push(...validCategories);
+          paramIndex += validCategories.length;
+        }
       }
 
-      const whereClause = metadataFilters.length > 0 ? `WHERE ${metadataFilters.join(' AND ')}` : '';
+      // Add the FTS query parameter
+      queryParams.push(ftsQuery);
 
-      const rawResults = await this.prisma.$queryRaw`
+      const whereClause = metadataFilters.length > 1 ? `WHERE ${metadataFilters.join(' AND ')}` : '';
+
+      // Use parameterized query to prevent SQL injection
+      const queryString = `
         SELECT
           fts.rowid as memory_id,
           fts.content as searchable_content,
@@ -456,10 +552,12 @@ export class DatabaseManager {
           'fts5' as search_strategy
         FROM memory_fts fts
         ${whereClause}
-          AND memory_fts MATCH ${ftsQuery}
+          AND memory_fts MATCH $${paramIndex}
         ORDER BY bm25(memory_fts, 1.0, 1.0, 1.0) DESC
-        LIMIT ${limit}
+        LIMIT $${paramIndex + 1}
       `;
+
+      const rawResults = await this.prisma.$queryRawUnsafe(queryString, ...queryParams, limit);
 
       // Transform results to MemorySearchResult format
       const results: MemorySearchResult[] = [];
@@ -509,12 +607,24 @@ export class DatabaseManager {
    * Basic search implementation (fallback)
    */
   private async searchMemoriesBasic(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
+    // Sanitize inputs
+    const sanitizedQuery = sanitizeSearchQuery(query, {
+      fieldName: 'searchQuery',
+      allowWildcards: true,
+      allowBoolean: false
+    });
+
+    const sanitizedNamespace = sanitizeNamespace(
+      options.namespace || 'default',
+      { fieldName: 'namespace' }
+    );
+
     const whereClause: DatabaseWhereClause = {
-      namespace: options.namespace || 'default',
+      namespace: sanitizedNamespace,
       OR: [
-        { searchableContent: { contains: query } },
-        { summary: { contains: query } },
-        { topic: { contains: query } },
+        { searchableContent: { contains: sanitizedQuery } },
+        { summary: { contains: sanitizedQuery } },
+        { topic: { contains: sanitizedQuery } },
       ],
     };
 
@@ -560,8 +670,67 @@ export class DatabaseManager {
   }
 
   /**
-   * Build FTS5 query with proper escaping and phrase handling
-   */
+    * Validate and sanitize FTS input parameters
+    */
+  private validateAndSanitizeFTSInput(query: string, options: SearchOptions): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Validate query
+    if (query && typeof query !== 'string') {
+      errors.push('Query must be a string');
+    }
+
+    if (query && query.length > 1000) {
+      errors.push('Query is too long (max 1000 characters)');
+    }
+
+    // Validate limit
+    const limit = options.limit || 10;
+    if (limit < 1) {
+      errors.push('Limit must be positive');
+    }
+
+    if (limit > 1000) {
+      errors.push('Limit is too large (max 1000)');
+    }
+
+    // Validate namespace
+    if (options.namespace && typeof options.namespace !== 'string') {
+      errors.push('Namespace must be a string');
+    }
+
+    if (options.namespace && options.namespace.length > 100) {
+      errors.push('Namespace is too long (max 100 characters)');
+    }
+
+    // Validate categories
+    if (options.categories) {
+      if (!Array.isArray(options.categories)) {
+        errors.push('Categories must be an array');
+      } else {
+        const invalidCategories = options.categories.filter(cat =>
+          !cat || typeof cat !== 'string' || cat.length > 50
+        );
+        if (invalidCategories.length > 0) {
+          errors.push('Invalid categories found');
+        }
+      }
+    }
+
+    // Validate min importance
+    if (options.minImportance && !Object.values(MemoryImportanceLevel).includes(options.minImportance)) {
+      errors.push('Invalid minimum importance level');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+    * Build FTS5 query with proper escaping and phrase handling
+    */
   private buildFTSQuery(query: string): string {
     // Clean and escape the query for FTS5
     const cleanQuery = query.replace(/"/g, '""').replace(/\*/g, '').trim();

@@ -11,6 +11,15 @@ import { AdvancedFilterEngine } from './filtering/AdvancedFilterEngine';
 import { DatabaseManager } from '../database/DatabaseManager';
 import { SearchStrategyConfigManager } from './SearchStrategyConfigManager';
 import { logError } from '../utils/Logger';
+import {
+  sanitizeString,
+  sanitizeSearchQuery,
+  sanitizeNamespace,
+  sanitizeJsonInput,
+  SanitizationError,
+  ValidationError,
+  containsDangerousPatterns
+} from '../utils/SanitizationUtils';
 
 // ===== PERFORMANCE MONITORING AND ANALYTICS INTERFACES =====
 
@@ -1609,12 +1618,29 @@ export class SearchService implements ISearchService {
    }
 
   /**
-   * Main search method that orchestrates multiple strategies
-   */
+    * Main search method that orchestrates multiple strategies
+    */
   async search(query: SearchQuery): Promise<SearchResult[]> {
     this.operationStartTime = Date.now();
 
     try {
+      // Validate and sanitize input
+      const validation = this.validateSearchInput(query);
+      if (!validation.isValid) {
+        throw new SearchValidationError(
+          `Invalid search query: ${validation.errors.join(', ')}`,
+          'searchQuery',
+          query.text || '',
+          'search_service',
+          {
+            strategy: 'search_service',
+            operation: 'search_validation',
+            query: query.text,
+            parameters: { limit: query.limit, offset: query.offset },
+            timestamp: new Date(),
+          }
+        );
+      }
       const results: SearchResult[] = [];
       const seenIds = new Set<string>();
 
@@ -1787,8 +1813,170 @@ export class SearchService implements ISearchService {
   }
 
   /**
-   * Determine the order of strategy execution based on query characteristics
-   */
+    * Validate and sanitize search input parameters
+    */
+  private validateSearchInput(query: SearchQuery): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    try {
+      // Validate and sanitize query text
+      if (query.text) {
+        if (typeof query.text !== 'string') {
+          errors.push('Query text must be a string');
+        } else {
+          // Sanitize the query text
+          const sanitizedQuery = sanitizeSearchQuery(query.text, {
+            fieldName: 'query.text',
+            allowWildcards: true,
+            allowBoolean: false
+          });
+
+          // Additional security check for dangerous patterns
+          const queryDangers = containsDangerousPatterns(sanitizedQuery);
+          if (queryDangers.hasSQLInjection || queryDangers.hasXSS || queryDangers.hasCommandInjection) {
+            errors.push('Query contains dangerous patterns');
+          }
+
+          // Update query with sanitized text
+          query.text = sanitizedQuery;
+        }
+      }
+
+      if (query.text && query.text.length > 1000) {
+        errors.push('Query text is too long (max 1000 characters)');
+      }
+
+      // Validate limit
+      if (query.limit !== undefined) {
+        if (typeof query.limit !== 'number' || query.limit < 1) {
+          errors.push('Limit must be a positive number');
+        }
+
+        if (query.limit > 1000) {
+          errors.push('Limit is too large (max 1000)');
+        }
+      }
+
+      // Validate offset
+      if (query.offset !== undefined) {
+        if (typeof query.offset !== 'number' || query.offset < 0) {
+          errors.push('Offset must be a non-negative number');
+        }
+
+        if (query.offset > 10000) {
+          errors.push('Offset is too large (max 10000)');
+        }
+      }
+
+      // Validate and sanitize filter expression if present
+      if (query.filterExpression) {
+        if (typeof query.filterExpression !== 'string') {
+          errors.push('Filter expression must be a string');
+        } else {
+          // Sanitize filter expression
+          const sanitizedFilter = sanitizeString(query.filterExpression, {
+            fieldName: 'query.filterExpression',
+            maxLength: 2000,
+            allowHtml: false,
+            allowNewlines: true
+          });
+
+          // Additional security check
+          const filterDangers = containsDangerousPatterns(sanitizedFilter);
+          if (filterDangers.hasSQLInjection || filterDangers.hasXSS || filterDangers.hasCommandInjection) {
+            errors.push('Filter expression contains dangerous patterns');
+          }
+
+          // Update query with sanitized filter
+          query.filterExpression = sanitizedFilter;
+        }
+      }
+
+      if (query.filterExpression && query.filterExpression.length > 2000) {
+        errors.push('Filter expression is too long (max 2000 characters)');
+      }
+
+      // Validate and sanitize filters object if present
+      if (query.filters) {
+        if (typeof query.filters !== 'object') {
+          errors.push('Filters must be an object');
+        } else {
+          // Validate specific filter fields
+          if (query.filters.minImportance && !['low', 'medium', 'high', 'critical'].includes(query.filters.minImportance as string)) {
+            errors.push('Invalid minimum importance level');
+          }
+
+          if (query.filters.categories && !Array.isArray(query.filters.categories)) {
+            errors.push('Categories filter must be an array');
+          } else if (query.filters.categories && Array.isArray(query.filters.categories)) {
+            // Sanitize categories
+            query.filters.categories = query.filters.categories.map((cat: string) =>
+              sanitizeString(cat, {
+                fieldName: 'query.filters.categories',
+                maxLength: 100,
+                allowNewlines: false
+              })
+            );
+          }
+
+          if (query.filters.metadataFilters && typeof query.filters.metadataFilters !== 'object') {
+            errors.push('Metadata filters must be an object');
+          } else if (query.filters.metadataFilters) {
+            // Sanitize metadata filters
+            try {
+              query.filters.metadataFilters = sanitizeJsonInput(
+                JSON.stringify(query.filters.metadataFilters),
+                { fieldName: 'query.filters.metadataFilters', maxSize: 10000 }
+              );
+            } catch (error) {
+              errors.push('Invalid metadata filters format');
+            }
+          }
+        }
+      }
+
+      // Validate and sanitize sortBy if present
+      if (query.sortBy) {
+        if (typeof query.sortBy !== 'object' || !query.sortBy.field || !query.sortBy.direction) {
+          errors.push('SortBy must have field and direction properties');
+        } else {
+          // Sanitize sort field
+          query.sortBy.field = sanitizeString(query.sortBy.field, {
+            fieldName: 'query.sortBy.field',
+            maxLength: 100,
+            allowNewlines: false
+          });
+
+          // Validate sort direction
+          if (!['asc', 'desc', 'ASC', 'DESC'].includes(query.sortBy.direction)) {
+            errors.push('Sort direction must be asc or desc');
+          }
+        }
+      }
+
+      return {
+        isValid: errors.length === 0,
+        errors
+      };
+
+    } catch (error) {
+      if (error instanceof SanitizationError || error instanceof ValidationError) {
+        return {
+          isValid: false,
+          errors: [error.message]
+        };
+      }
+
+      return {
+        isValid: false,
+        errors: [`Validation error: ${error instanceof Error ? error.message : String(error)}`]
+      };
+    }
+  }
+
+  /**
+    * Determine the order of strategy execution based on query characteristics
+    */
   private determineStrategyOrder(query: SearchQuery): SearchStrategy[] {
     const strategies: SearchStrategy[] = [];
 
