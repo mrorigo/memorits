@@ -88,24 +88,6 @@ async function basicUsageExample(): Promise<void> {
       });
     }
 
-    // Search for specific concepts
-    logInfo('🔍 Searching memories for "interfaces"...', { component: 'basic-usage-example' });
-    const interfaceMemories = await memori.searchMemories('interfaces', { limit: 3 });
-
-    if (interfaceMemories.length > 0) {
-      logInfo(`✅ Found ${interfaceMemories.length} memories about interfaces:`, {
-        component: 'basic-usage-example',
-        memoryCount: interfaceMemories.length,
-      });
-      interfaceMemories.forEach((memory, index) => {
-        logInfo(`${index + 1}. ${memory.content || memory.summary || 'Memory content'}`, {
-          component: 'basic-usage-example',
-          memoryIndex: index + 1,
-          memoryId: memory.id,
-        });
-      });
-    }
-
     logInfo('🎉 Basic usage example completed successfully!', { component: 'basic-usage-example' });
 
   } catch (error) {

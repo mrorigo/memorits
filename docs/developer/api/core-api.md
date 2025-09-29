@@ -65,7 +65,6 @@ Record a conversation for memory processing.
 async recordConversation(
   userInput: string,
   aiOutput: string,
-  model?: string,
   options?: RecordConversationOptions
 ): Promise<string>
 ```
@@ -73,8 +72,7 @@ async recordConversation(
 **Parameters:**
 - `userInput`: The user's message content
 - `aiOutput`: The AI's response content
-- `model` (optional): The LLM model used
-- `options` (optional): Additional recording options
+- `options` (optional): Recording options including model and metadata
 
 **Returns:** The chat ID of the recorded conversation
 
@@ -83,10 +81,10 @@ async recordConversation(
 const chatId = await memori.recordConversation(
   'What is TypeScript?',
   'TypeScript is a programming language that builds on JavaScript...',
-  'gpt-4o-mini',
   {
-    sessionId: 'user-session-123',
+    model: 'gpt-4o-mini',
     metadata: {
+      sessionId: 'user-session-123',
       topic: 'programming',
       difficulty: 'beginner'
     }
@@ -118,8 +116,8 @@ const results = await memori.searchMemories('TypeScript interfaces');
 
 // Advanced search with filtering
 const filteredResults = await memori.searchMemories('programming concepts', {
-  minImportance: 'high',
-  categories: ['essential', 'reference'],
+  minImportance: 'high' as any,
+  categories: ['essential' as any, 'reference' as any],
   limit: 10,
   includeMetadata: true
 });
@@ -526,7 +524,7 @@ class MemoryEnabledApplication {
       // Search for relevant context
       const context = await this.memori.searchMemories(userMessage, {
         limit: 5,
-        minImportance: 'medium'
+        minImportance: 'medium' as any
       });
 
       // Include context in AI prompt
@@ -548,8 +546,10 @@ class MemoryEnabledApplication {
       await this.memori.recordConversation(
         userMessage,
         response.choices[0].message.content,
-        'gpt-4o-mini',
-        { sessionId }
+        {
+          model: 'gpt-4o-mini',
+          metadata: { sessionId }
+        }
       );
 
       return response.choices[0].message.content;

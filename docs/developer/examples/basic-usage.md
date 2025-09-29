@@ -26,7 +26,10 @@ class SimpleMemoryApp {
     const chatId = await this.memori.recordConversation(
       `Remember: ${content}`,
       `I'll remember that ${content}`,
-      'gpt-4o-mini'
+      {
+        model: 'gpt-4o-mini',
+        metadata: { category }
+      }
     );
 
     console.log(`Recorded memory: ${chatId}`);
@@ -37,7 +40,7 @@ class SimpleMemoryApp {
     // Search for relevant memories
     const memories = await this.memori.searchMemories(query, {
       limit: 5,
-      minImportance: 'medium'
+      minImportance: 'medium' as any
     });
 
     return memories.map(memory => memory.content);
@@ -67,21 +70,27 @@ console.log('Recalled:', memories);
 ## 2. AI Chatbot with Memory
 
 ```typescript
-import { createMemoriOpenAI } from 'memorits';
+import { createMemoriOpenAI, Memori, ConfigManager } from 'memorits';
 
 class MemoryEnabledChatbot {
   private client: any;
+  private memori: Memori;
   private sessionId: string;
 
   constructor(apiKey: string) {
-    // Create OpenAI client with automatic memory
-    this.client = createMemoriOpenAI(apiKey, {
-      enableChatMemory: true,
-      autoInitialize: true,
-      memoryProcessingMode: 'auto'
-    });
+    // Create Memori instance first
+    const config = ConfigManager.loadConfig();
+    config.apiKey = apiKey;
+    this.memori = new Memori(config);
+
+    // Create OpenAI client with the Memori instance
+    this.client = createMemoriOpenAI(this.memori, apiKey);
 
     this.sessionId = this.generateSessionId();
+  }
+
+  async initialize() {
+    await this.memori.enable();
   }
 
   async chat(userMessage: string) {
@@ -99,11 +108,13 @@ class MemoryEnabledChatbot {
       });
 
       // Record the conversation for future context
-      await this.client.memory.recordConversation(
+      await this.memori.recordConversation(
         userMessage,
         response.choices[0].message.content,
-        'gpt-4o-mini',
-        { sessionId: this.sessionId }
+        {
+          model: 'gpt-4o-mini',
+          metadata: { sessionId: this.sessionId }
+        }
       );
 
       return response.choices[0].message.content;
@@ -116,15 +127,15 @@ class MemoryEnabledChatbot {
 
   async searchChatHistory(query: string) {
     // Search through conversation history
-    const memories = await this.client.memory.searchMemories(query, {
+    const memories = await this.memori.searchMemories(query, {
       limit: 10,
       includeMetadata: true
     });
 
     return memories.map(memory => ({
       content: memory.content,
-      importance: memory.metadata.importanceScore,
-      createdAt: memory.metadata.createdAt
+      importance: memory.metadata?.importanceScore,
+      createdAt: memory.metadata?.createdAt
     }));
   }
 
@@ -135,6 +146,7 @@ class MemoryEnabledChatbot {
 
 // Usage
 const chatbot = new MemoryEnabledChatbot(process.env.OPENAI_API_KEY!);
+await chatbot.initialize();
 
 console.log(await chatbot.chat('My name is Alice and I love programming'));
 console.log(await chatbot.chat('What is my name?'));
@@ -554,26 +566,37 @@ console.log('Areas needing attention:', weakAreas);
 ## 6. Context-Aware AI Assistant
 
 ```typescript
-import { createMemoriOpenAI } from 'memorits';
+import { createMemoriOpenAI, Memori, ConfigManager } from 'memorits';
 
 class ContextAwareAssistant {
   private client: any;
+  private memori: Memori;
   private userProfile: any = {};
 
   constructor(apiKey: string) {
-    this.client = createMemoriOpenAI(apiKey, {
-      enableChatMemory: true,
-      autoInitialize: true,
-      memoryProcessingMode: 'conscious'
-    });
+    // Create Memori instance first
+    const config = ConfigManager.loadConfig();
+    config.apiKey = apiKey;
+    config.consciousIngest = true;
+    this.memori = new Memori(config);
+
+    // Create OpenAI client with the Memori instance
+    this.client = createMemoriOpenAI(this.memori, apiKey);
+  }
+
+  async initialize() {
+    await this.memori.enable();
   }
 
   async learnAboutUser(userInfo: string) {
     // Learn and remember user information
-    await this.client.memory.recordConversation(
+    await this.memori.recordConversation(
       `User info: ${userInfo}`,
       `I understand: ${userInfo}`,
-      'user-learning'
+      {
+        model: 'user-learning',
+        metadata: { type: 'user-learning' }
+      }
     );
 
     // Update user profile
@@ -582,9 +605,9 @@ class ContextAwareAssistant {
 
   async buildUserProfile() {
     // Build user profile from memories
-    const userMemories = await this.client.memory.searchMemories('user info', {
-      categories: ['personal', 'conscious-info'],
-      minImportance: 'medium',
+    const userMemories = await this.memori.searchMemories('user info', {
+      categories: ['personal' as any, 'conscious-info' as any],
+      minImportance: 'medium' as any,
       limit: 20
     });
 
@@ -617,9 +640,9 @@ class ContextAwareAssistant {
 
   async answerQuestion(question: string) {
     // Get relevant context
-    const context = await this.client.memory.searchMemories(question, {
+    const context = await this.memori.searchMemories(question, {
       limit: 3,
-      minImportance: 'medium'
+      minImportance: 'medium' as any
     });
 
     // Build context-aware prompt
@@ -646,10 +669,12 @@ Please provide a helpful, personalized response based on the user's profile and 
     });
 
     // Record this interaction
-    await this.client.memory.recordConversation(
+    await this.memori.recordConversation(
       question,
       response.choices[0].message.content,
-      'gpt-4o-mini'
+      {
+        model: 'gpt-4o-mini'
+      }
     );
 
     return response.choices[0].message.content;
@@ -657,10 +682,10 @@ Please provide a helpful, personalized response based on the user's profile and 
 
   async getPersonalizedRecommendations() {
     // Get recommendations based on user profile
-    const recommendations = await this.client.memory.searchMemories(
+    const recommendations = await this.memori.searchMemories(
       'recommendations suggestions',
       {
-        categories: ['essential', 'contextual'],
+        categories: ['essential' as any, 'contextual' as any],
         limit: 10
       }
     );
@@ -675,6 +700,7 @@ Please provide a helpful, personalized response based on the user's profile and 
 
 // Usage
 const assistant = new ContextAwareAssistant(process.env.OPENAI_API_KEY!);
+await assistant.initialize();
 
 // Learn about user
 await assistant.learnAboutUser('I am a software engineer who loves TypeScript and React');
