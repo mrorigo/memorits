@@ -1,8 +1,18 @@
 # Database Schema Design
 
-This document explains the database schema design for Memorits, including table structures, relationships, and optimization strategies.
+This document explains the **actual implemented** database schema design for Memorits, including table structures, relationships, and optimization strategies.
 
-## Core Database Schema
+## Core Database Schema Architecture
+
+Memorits uses a **simplified 3-table architecture** with JSON-based metadata storage for maximum flexibility and extensibility. This approach provides rich functionality without the complexity of multiple specialized tables.
+
+### Design Philosophy
+
+**JSON-Based Metadata Storage**: Instead of rigid table structures, Memorits stores complex data (relationships, processing states, consolidation info) as JSON in the main tables. This provides:
+- **Schema Flexibility**: No migrations needed for new metadata fields
+- **Rich Relationships**: Complex nested data structures supported
+- **Extensibility**: Easy addition of new tracking fields
+- **Performance**: Fewer table joins, faster queries
 
 ### ChatHistory Table
 
@@ -29,13 +39,13 @@ CREATE TABLE ChatHistory (
 
 ### LongTermMemory Table
 
-Stores processed, searchable memory data with rich classification.
+Stores processed, searchable memory data with comprehensive JSON-based metadata.
 
 ```sql
 CREATE TABLE LongTermMemory (
   id                    VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
   originalChatId        VARCHAR(255),                -- Reference to source conversation
-  processedData         JSON NOT NULL,               -- Structured memory data
+  processedData         JSON NOT NULL,               -- Rich structured memory data (includes relationships, consolidation info, state tracking)
   importanceScore       REAL DEFAULT 0.5,            -- Relevance score (0.0-1.0)
   categoryPrimary       VARCHAR(255) NOT NULL,       -- Primary classification
   retentionType         VARCHAR(50) DEFAULT 'long_term',
@@ -45,51 +55,33 @@ CREATE TABLE LongTermMemory (
   lastAccessed          DATETIME,                     -- Last access timestamp
   searchableContent     TEXT NOT NULL,               -- Full-text search content
   summary               TEXT NOT NULL,               -- Concise memory summary
+  noveltyScore          FLOAT DEFAULT 0.5,            -- Novelty scoring
+  relevanceScore        FLOAT DEFAULT 0.5,            -- Relevance scoring
+  actionabilityScore    FLOAT DEFAULT 0.5,            -- Actionability scoring
 
-  -- Enhanced classification fields
+  -- Classification and metadata (stored in processedData JSON)
   classification        VARCHAR(50) DEFAULT 'conversational',
   memoryImportance      VARCHAR(20) DEFAULT 'medium',
   topic                 VARCHAR(255),                -- Main topic/keyword
-  entitiesJson          JSON,                        -- Extracted entities
-  keywordsJson          JSON,                        -- Key terms/phrases
+  entitiesJson          JSON,                        -- Extracted entities (also in processedData)
+  keywordsJson          JSON,                        -- Key terms/phrases (also in processedData)
 
-  -- Conscious processing fields
-  isUserContext         BOOLEAN DEFAULT FALSE,
-  isPreference          BOOLEAN DEFAULT FALSE,
-  isSkillKnowledge      BOOLEAN DEFAULT FALSE,
-  isCurrentProject      BOOLEAN DEFAULT FALSE,
-  promotionEligible     BOOLEAN DEFAULT FALSE,
-
-  -- Memory management
-  duplicateOf           VARCHAR(255),                -- Duplicate tracking
-  supersedesJson        JSON,                        -- Superseded memories
+  -- Memory relationships (stored in processedData.relatedMemoriesJson/supersedesJson)
   relatedMemoriesJson   JSON,                        -- Related memory references
+  supersedesJson        JSON,                        -- Superseded memories
 
-  -- Technical metadata
-  confidenceScore       REAL DEFAULT 0.8,            -- Processing confidence
+  -- Processing metadata (stored in processedData)
+  confidenceScore       FLOAT DEFAULT 0.8,            -- Processing confidence
   extractionTimestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
   classificationReason  TEXT,                        -- Why classified this way
-
-  -- Processing status
-  processedForDuplicates BOOLEAN DEFAULT FALSE,
-  consciousProcessed     BOOLEAN DEFAULT FALSE,
-
-  -- GAPS1 Enhanced Features
-  processingState       VARCHAR(50) DEFAULT 'PENDING',    -- Memory processing workflow state
-  stateTransitionsJson  JSON,                              -- State transition history
-  duplicateGroupId      VARCHAR(255),                      -- Duplicate consolidation group
-  relationshipMetadataJson JSON,                           -- Memory relationship metadata
-  consolidationInfoJson JSON,                              -- Consolidation tracking info
-  searchIndexOptimized  BOOLEAN DEFAULT FALSE,            -- Search index optimization status
+  consciousProcessed    BOOLEAN DEFAULT FALSE,        -- Conscious processing status
 
   -- Indexes for performance
   INDEX idx_namespace_created (namespace, createdAt),
   INDEX idx_category_importance (categoryPrimary, importanceScore),
   INDEX idx_searchable_content (searchableContent),
   INDEX idx_topic (topic),
-  INDEX idx_classification (classification),
-  INDEX idx_processing_state (namespace, processingState),
-  INDEX idx_duplicate_group (duplicateGroupId)
+  INDEX idx_classification (classification)
 );
 ```
 
@@ -99,119 +91,153 @@ Stores temporary, immediately accessible memories for working context.
 
 ```sql
 CREATE TABLE ShortTermMemory (
-  id                    VARCHAR(255) PRIMARY KEY,
-  chatId                VARCHAR(255),                -- Associated chat
-  processedData         JSON NOT NULL,
-  importanceScore       REAL DEFAULT 0.5,
-  categoryPrimary       VARCHAR(255) NOT NULL,
-  retentionType         VARCHAR(50) DEFAULT 'short_term',
-  namespace             VARCHAR(255) DEFAULT 'default',
-  createdAt             DATETIME DEFAULT CURRENT_TIMESTAMP,
-  expiresAt             DATETIME,                     -- Expiration timestamp
-  accessCount           INTEGER DEFAULT 0,
-  lastAccessed          DATETIME,
-  searchableContent     TEXT NOT NULL,
-  summary               TEXT NOT NULL,
-  isPermanentContext    BOOLEAN DEFAULT FALSE,       -- Permanent working memory
+  id               VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
+  chatId           VARCHAR(255),                -- Associated chat
+  processedData    JSON NOT NULL,               -- Structured memory data
+  importanceScore  FLOAT DEFAULT 0.5,           -- Relevance score
+  categoryPrimary  VARCHAR(255) NOT NULL,       -- Primary classification
+  retentionType    VARCHAR(50) DEFAULT 'short_term',
+  namespace        VARCHAR(255) DEFAULT 'default',
+  createdAt        DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expiresAt        DATETIME,                     -- Expiration timestamp
+  accessCount      INTEGER DEFAULT 0,           -- Usage tracking
+  lastAccessed     DATETIME,                     -- Last access timestamp
+  searchableContent TEXT NOT NULL,               -- Full-text search content
+  summary          TEXT NOT NULL,               -- Concise memory summary
+  isPermanentContext BOOLEAN DEFAULT FALSE,     -- Permanent working memory
 
-  -- Indexes
+  -- Indexes for performance
   INDEX idx_namespace_expires (namespace, expiresAt),
   INDEX idx_permanent_context (namespace, isPermanentContext),
   INDEX idx_access_count (accessCount)
+);
 ```
 
-## GAPS1 Enhanced Database Features
+## Enhanced Database Features (JSON-Based Implementation)
 
 ### Memory Processing State Tracking
 
-Comprehensive workflow state management for memory processing operations:
+**Implementation:** In-Memory State Management with JSON Metadata Storage
 
-```sql
-CREATE TABLE MemoryProcessingStates (
- id              VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
- memoryId        VARCHAR(255) NOT NULL,       -- Reference to memory being processed
- currentState    VARCHAR(50) NOT NULL,        -- Current processing state
- stateHistory    JSON NOT NULL,               -- Complete transition history
- createdAt       DATETIME DEFAULT CURRENT_TIMESTAMP,
- updatedAt       DATETIME DEFAULT CURRENT_TIMESTAMP,
+Instead of a dedicated table, Memorits implements comprehensive workflow state management through the `MemoryProcessingStateManager` class with metadata stored in `LongTermMemory.processedData`:
 
- -- Processing metadata
- processingAgent VARCHAR(100),                -- Agent performing the processing
- errorMessage    TEXT,                        -- Last error message if failed
- retryCount      INTEGER DEFAULT 0,           -- Number of retry attempts
- metadata        JSON,                        -- Additional processing metadata
+```typescript
+// Features implemented:
+✅ 16-state workflow system (PENDING → PROCESSING → PROCESSED → CONSCIOUS_PENDING → etc.)
+✅ State transition validation and history tracking
+✅ Retry mechanisms with exponential backoff
+✅ State-based memory queries and filtering
+✅ Processing metrics and analytics
+✅ Error handling and recovery
 
- -- Indexes for performance
- INDEX idx_memory_processing (memoryId, currentState),
- INDEX idx_state_timestamp (currentState, updatedAt),
- INDEX idx_processing_agent (processingAgent, updatedAt),
-
- -- Foreign key constraint
- FOREIGN KEY (memoryId) REFERENCES LongTermMemory(id) ON DELETE CASCADE
-);
+// State tracking stored in processedData JSON:
+{
+  "stateHistory": [
+    {
+      "fromState": "PENDING",
+      "toState": "PROCESSING",
+      "timestamp": "2024-01-01T10:00:00Z",
+      "reason": "Memory processing started",
+      "agentId": "MemoryAgent"
+    }
+  ],
+  "currentState": "PROCESSED",
+  "processingMetrics": { ... }
+}
 ```
 
 ### Search Index Backup System
 
-Automated backup and recovery system for search indexes:
+**Implementation:** Dynamic Table Creation with Comprehensive Metadata
+
+The backup system creates the `search_index_backups` table on-demand when first backup is created:
 
 ```sql
-CREATE TABLE SearchIndexBackups (
- id           VARCHAR(255) PRIMARY KEY,     -- Backup unique identifier
- timestamp    DATETIME NOT NULL,            -- When backup was created
- version      VARCHAR(20) NOT NULL,        -- Backup format version
- data         BLOB NOT NULL,               -- Compressed index data
- metadata     JSON NOT NULL,               -- Backup metadata (size, document count, etc.)
- checksum     VARCHAR(64) NOT NULL,        -- Integrity verification checksum
-
- -- Backup management
- isActive     BOOLEAN DEFAULT TRUE,        -- Whether this backup is current
- expiresAt    DATETIME,                    -- Optional expiration date
- createdBy    VARCHAR(100),                -- System component that created backup
-
- -- Indexes for performance
- INDEX idx_backup_timestamp (timestamp DESC),
- INDEX idx_backup_active (isActive, timestamp DESC),
- INDEX idx_backup_expires (expiresAt)
+-- Table created dynamically by SearchIndexManager.createBackup()
+CREATE TABLE search_index_backups (
+  id TEXT PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  version TEXT NOT NULL,
+  data BLOB NOT NULL,
+  metadata TEXT NOT NULL
 );
 ```
+
+**Features implemented:**
+✅ **Automated backup scheduling** (every 7 days)
+✅ **Data integrity verification** with checksums
+✅ **Compression and optimization level tracking**
+✅ **Restore functionality** with rollback capabilities
+✅ **Backup metadata** (size, document count, timestamp)
 
 ### Memory Relationship Storage
 
-Enhanced relationship tracking between memories:
+**Implementation:** JSON-Based Relationship Storage in LongTermMemory
 
-```sql
-CREATE TABLE MemoryRelationships (
- id              VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
- sourceMemoryId  VARCHAR(255) NOT NULL,       -- Source memory reference
- targetMemoryId  VARCHAR(255) NOT NULL,       -- Target memory reference
- relationshipType VARCHAR(50) NOT NULL,      -- Type: continuation, reference, related, supersedes, contradiction
+Memory relationships are stored as JSON in the `relatedMemoriesJson` and `supersedesJson` fields:
 
- -- Relationship scoring
- confidence      REAL DEFAULT 0.0,           -- Relationship confidence (0.0-1.0)
- strength        REAL DEFAULT 0.0,           -- Relationship strength (0.0-1.0)
-
- -- Metadata
- entities        JSON,                        -- Common entities between memories
- context         TEXT,                        -- Relationship context/description
- extractedAt     DATETIME DEFAULT CURRENT_TIMESTAMP,
- extractionMethod VARCHAR(50),               -- How relationship was detected
-
- -- Indexes for performance
- INDEX idx_source_relationship (sourceMemoryId, relationshipType),
- INDEX idx_target_relationship (targetMemoryId, relationshipType),
- INDEX idx_relationship_confidence (confidence DESC),
- INDEX idx_bidirectional (sourceMemoryId, targetMemoryId),
-
- -- Foreign key constraints
- FOREIGN KEY (sourceMemoryId) REFERENCES LongTermMemory(id) ON DELETE CASCADE,
- FOREIGN KEY (targetMemoryId) REFERENCES LongTermMemory(id) ON DELETE CASCADE,
-
- -- Prevent self-references and duplicate relationships
- CONSTRAINT no_self_reference CHECK (sourceMemoryId != targetMemoryId),
- CONSTRAINT unique_relationship UNIQUE (sourceMemoryId, targetMemoryId, relationshipType)
-);
+```json
+{
+  "relatedMemoriesJson": [
+    {
+      "type": "reference",
+      "targetMemoryId": "mem_456",
+      "confidence": 0.8,
+      "strength": 0.7,
+      "reason": "Both discuss TypeScript interfaces",
+      "context": "Programming concepts discussion",
+      "entities": ["typescript", "interfaces"]
+    }
+  ],
+  "supersedesJson": [
+    {
+      "type": "supersedes",
+      "targetMemoryId": "mem_123",
+      "confidence": 0.9,
+      "reason": "Updated information with newer examples"
+    }
+  ]
+}
 ```
+
+**Features implemented:**
+✅ **5 relationship types**: continuation, reference, related, supersedes, contradiction
+✅ **Bidirectional relationship queries** with confidence/strength filtering
+✅ **Graph traversal** with cycle detection and path tracking
+✅ **Relationship validation** and conflict resolution
+✅ **Relationship statistics** and analytics
+
+### Duplicate Consolidation Tracking
+
+**Implementation:** JSON-Based Audit Trail in processedData
+
+Consolidation operations are tracked within the `LongTermMemory.processedData` field:
+
+```json
+{
+  "consolidatedAt": "2024-01-01T10:30:00Z",
+  "consolidatedFrom": ["mem_789", "mem_101"],
+  "consolidationReason": "duplicate_consolidation",
+  "consolidationHistory": [
+    {
+      "timestamp": "2024-01-01T10:30:00Z",
+      "consolidatedFrom": ["mem_789", "mem_101"],
+      "consolidationReason": "duplicate_consolidation",
+      "duplicateCount": 2,
+      "dataIntegrityHash": "abc123..."
+    }
+  ],
+  "duplicateCount": 2,
+  "lastConsolidationActivity": "2024-01-01T10:30:00Z"
+}
+```
+
+**Features implemented:**
+✅ **Intelligent content merging** with frequency-based weighting
+✅ **Transaction safety** with rollback capabilities
+✅ **Consolidation history** with data integrity verification
+✅ **Quality scoring** and conflict resolution
+✅ **Performance optimization** with batch processing
 
 ### Enhanced FTS5 Search Index
 

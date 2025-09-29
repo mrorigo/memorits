@@ -494,4 +494,170 @@ export class Memori {
       throw error;
     }
   }
+
+  /**
+   * Consolidate duplicate memories with transaction safety and intelligent data merging
+   */
+  async consolidateDuplicateMemories(
+    primaryMemoryId: string,
+    duplicateIds: string[],
+    namespace?: string,
+  ): Promise<{ consolidated: number; errors: string[] }> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    const targetNamespace = namespace || this.config.namespace;
+
+    try {
+      const result = await this.dbManager.consolidateDuplicateMemories(
+        primaryMemoryId,
+        duplicateIds,
+        targetNamespace,
+      );
+
+      logInfo(`Consolidated ${result.consolidated} duplicate memories`, {
+        component: 'Memori',
+        primaryMemoryId,
+        duplicateCount: duplicateIds.length,
+        namespace: targetNamespace,
+        consolidated: result.consolidated,
+        errors: result.errors.length,
+      });
+
+      return result;
+    } catch (error) {
+      logError(`Failed to consolidate duplicate memories`, {
+        component: 'Memori',
+        primaryMemoryId,
+        duplicateIds,
+        namespace: targetNamespace,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get comprehensive health report for the search index
+   */
+  async getIndexHealthReport(): Promise<import('./search/SearchIndexManager').IndexHealthReport> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    try {
+      const searchIndexManager = this.dbManager.getSearchIndexManager();
+      const report = await searchIndexManager.getIndexHealthReport();
+
+      logInfo('Retrieved index health report', {
+        component: 'Memori',
+        health: report.health,
+        issues: report.issues.length,
+        recommendations: report.recommendations.length,
+      });
+
+      return report;
+    } catch (error) {
+      logError('Failed to get index health report', {
+        component: 'Memori',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Perform index optimization with specified strategy
+   */
+  async optimizeIndex(type?: import('./search/SearchIndexManager').OptimizationType): Promise<import('./search/SearchIndexManager').OptimizationResult> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    try {
+      const searchIndexManager = this.dbManager.getSearchIndexManager();
+      const result = await searchIndexManager.optimizeIndex(type);
+
+      logInfo('Index optimization completed', {
+        component: 'Memori',
+        optimizationType: result.optimizationType,
+        duration: result.duration,
+        spaceSaved: result.spaceSaved,
+        performanceImprovement: result.performanceImprovement,
+      });
+
+      return result;
+    } catch (error) {
+      logError('Failed to optimize index', {
+        component: 'Memori',
+        optimizationType: type,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Create a backup of the current search index
+   */
+  async createIndexBackup(): Promise<import('./search/SearchIndexManager').BackupMetadata> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    try {
+      const searchIndexManager = this.dbManager.getSearchIndexManager();
+      const backup = await searchIndexManager.createBackup();
+
+      logInfo('Index backup created', {
+        component: 'Memori',
+        timestamp: backup.timestamp,
+        documentCount: backup.documentCount,
+        indexSize: backup.indexSize,
+      });
+
+      return backup;
+    } catch (error) {
+      logError('Failed to create index backup', {
+        component: 'Memori',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Restore search index from a backup
+   */
+  async restoreIndexFromBackup(backupId: string): Promise<boolean> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    try {
+      const searchIndexManager = this.dbManager.getSearchIndexManager();
+      const success = await searchIndexManager.restoreFromBackup(backupId);
+
+      logInfo('Index backup restore completed', {
+        component: 'Memori',
+        backupId,
+        success,
+      });
+
+      return success;
+    } catch (error) {
+      logError('Failed to restore index from backup', {
+        component: 'Memori',
+        backupId,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
 }

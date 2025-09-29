@@ -222,8 +222,8 @@ class RelationshipSearchStrategy implements ISearchStrategy {
                mr.relationshipType,
                mr.confidence as relationship_confidence
         FROM LongTermMemory m
-        JOIN MemoryRelationships mr ON m.id = mr.targetMemoryId
         WHERE m.namespace = ?
+        AND json_extract(m.processedData, '$.relatedMemoriesJson') IS NOT NULL
           AND MATCH(memory_fts, ?)
           AND mr.strength >= ?
 
@@ -235,9 +235,8 @@ class RelationshipSearchStrategy implements ISearchStrategy {
                rm.relationship_strength * mr.strength,
                mr.relationshipType,
                mr.confidence
-        FROM related_memories rm
-        JOIN MemoryRelationships mr ON rm.id = mr.sourceMemoryId
-        JOIN LongTermMemory m ON mr.targetMemoryId = m.id
+        FROM LongTermMemory m
+        WHERE json_extract(m.processedData, '$.relatedMemoriesJson') LIKE ?
         WHERE rm.depth < ?
           AND (rm.relationship_strength * mr.strength) >= ?
       )

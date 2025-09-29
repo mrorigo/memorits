@@ -122,13 +122,13 @@ const filteredResults = await memori.searchMemories('programming concepts', {
   includeMetadata: true
 });
 
-// Advanced filter expressions (GAPS1)
+// Advanced filter expressions
 const advancedResults = await memori.searchMemories('', {
   filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
   limit: 10
 });
 
-// Memory consolidation (GAPS1)
+// Memory consolidation
 const consolidationResult = await memori.consolidateDuplicateMemories(
   'memory-id-1',
   ['memory-id-2', 'memory-id-3']
@@ -138,18 +138,22 @@ if (consolidationResult.consolidated > 0) {
   console.log(`Consolidated ${consolidationResult.consolidated} duplicate memories`);
 }
 
-// Search with relationships (GAPS1)
-const relationshipSearch = await memori.searchMemories('related to project setup', {
-  includeRelatedMemories: true,
-  maxRelationshipDepth: 2
-});
+// Search with relationships using advanced strategies
+const relationshipSearch = await memori.searchMemoriesWithStrategy(
+  'related to project setup',
+  SearchStrategy.RELATIONSHIP,
+  {
+    limit: 10,
+    includeMetadata: true
+  }
+);
 
-// Get index health report (GAPS1)
+// Get index health report
 const healthReport = await memori.getIndexHealthReport();
 console.log(`Index health: ${healthReport.health}`);
 console.log(`Issues found: ${healthReport.issues.length}`);
 
-// Optimize search index (GAPS1)
+// Optimize search index
 const optimizationResult = await memori.optimizeIndex('merge');
 console.log(`Optimization saved ${optimizationResult.spaceSaved} bytes`);
 ```
@@ -492,7 +496,7 @@ class ValidationError extends Error {
 ### Complete Application Example
 
 ```typescript
-import { Memori, ConfigManager, createMemoriOpenAI } from 'memorits';
+import { Memori, ConfigManager, createMemoriOpenAI, SearchStrategy } from 'memorits';
 
 class MemoryEnabledApplication {
   private memori: Memori;
