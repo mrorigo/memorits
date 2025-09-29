@@ -298,17 +298,105 @@ describe('Logger', () => {
     });
 
     describe('primitive value handling', () => {
-      it('should handle null and undefined', () => {
-        expect(DataRedactor.redact(null)).toBe(null);
-        expect(DataRedactor.redact(undefined)).toBe(undefined);
-      });
+       it('should handle null and undefined', () => {
+         expect(DataRedactor.redact(null)).toBe(null);
+         expect(DataRedactor.redact(undefined)).toBe(undefined);
+       });
 
-      it('should handle numbers and booleans', () => {
-        expect(DataRedactor.redact(123)).toBe(123);
-        expect(DataRedactor.redact(true)).toBe(true);
-        expect(DataRedactor.redact(false)).toBe(false);
-      });
-    });
+       it('should handle numbers and booleans', () => {
+         expect(DataRedactor.redact(123)).toBe(123);
+         expect(DataRedactor.redact(true)).toBe(true);
+         expect(DataRedactor.redact(false)).toBe(false);
+       });
+     });
+
+     describe('identifier detection', () => {
+       describe('isLikelyIdentifier', () => {
+         it('should identify component names as safe identifiers', () => {
+           expect(DataRedactor['isLikelyIdentifier']('performance-dashboard-example')).toBe(true);
+           expect(DataRedactor['isLikelyIdentifier']('database-manager')).toBe(true);
+           expect(DataRedactor['isLikelyIdentifier']('user_service')).toBe(true);
+           expect(DataRedactor['isLikelyIdentifier']('api.gateway')).toBe(true);
+         });
+
+         it('should identify alert IDs as safe identifiers', () => {
+           expect(DataRedactor['isLikelyIdentifier']('alert_1759145947445_p5ntcvo6t')).toBe(true);
+           expect(DataRedactor['isLikelyIdentifier']('alert_123_ci5lukbuq')).toBe(true);
+           expect(DataRedactor['isLikelyIdentifier']('widget_system_overview')).toBe(true);
+         });
+
+         it('should identify UUIDs as safe identifiers', () => {
+           expect(DataRedactor['isLikelyIdentifier']('123e4567-e89b-12d3-a456-426614174000')).toBe(true);
+           expect(DataRedactor['isLikelyIdentifier']('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
+         });
+
+         it('should not identify random long strings as safe identifiers', () => {
+           expect(DataRedactor['isLikelyIdentifier']('sk-1234567890abcdef1234567890abcdef12345678')).toBe(false);
+           expect(DataRedactor['isLikelyIdentifier']('abcdef1234567890abcdef1234567890abcdef12')).toBe(false);
+         });
+
+         it('should not identify very short strings as identifiers', () => {
+           expect(DataRedactor['isLikelyIdentifier']('abc')).toBe(false);
+           expect(DataRedactor['isLikelyIdentifier']('short')).toBe(false);
+         });
+
+         it('should not identify very long strings as identifiers', () => {
+           expect(DataRedactor['isLikelyIdentifier']('a'.repeat(60))).toBe(false);
+           expect(DataRedactor['isLikelyIdentifier']('very-long-component-name-that-exceeds-reasonable-limits')).toBe(false);
+         });
+       });
+
+       describe('isLikelyReadableIdentifier', () => {
+         it('should identify readable word patterns', () => {
+           expect(DataRedactor['isLikelyReadableIdentifier']('user-service-manager')).toBe(true);
+           expect(DataRedactor['isLikelyReadableIdentifier']('database_connection_pool')).toBe(true);
+           expect(DataRedactor['isLikelyReadableIdentifier']('api.rate.limiter')).toBe(true);
+         });
+
+         it('should not identify random character sequences', () => {
+           expect(DataRedactor['isLikelyReadableIdentifier']('abcdef1234567890abcdef')).toBe(false);
+           expect(DataRedactor['isLikelyReadableIdentifier']('sk-1234567890abcdef12345678')).toBe(false);
+         });
+       });
+     });
+
+     describe('improved string redaction', () => {
+       it('should not redact component names', () => {
+         expect(DataRedactor.redact('performance-dashboard-example')).toBe('performance-dashboard-example');
+         expect(DataRedactor.redact('database-manager')).toBe('database-manager');
+         expect(DataRedactor.redact('user-service')).toBe('user-service');
+       });
+
+       it('should not redact alert IDs', () => {
+         expect(DataRedactor.redact('alert_1759145947445_p5ntcvo6t')).toBe('alert_1759145947445_p5ntcvo6t');
+         expect(DataRedactor.redact('widget_system_overview')).toBe('widget_system_overview');
+         expect(DataRedactor.redact('report_daily_2025_01_01')).toBe('report_daily_2025_01_01');
+       });
+
+       it('should still redact actual API keys', () => {
+         expect(DataRedactor.redact('sk-1234567890abcdef1234567890abcdef12345678')).toBe('[REDACTED]');
+         expect(DataRedactor.redact('pk-abcdef1234567890abcdef1234567890abcdef12')).toBe('[REDACTED]');
+       });
+
+       it('should still redact strings with Bearer prefix', () => {
+         expect(DataRedactor.redact('Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c')).toBe('[REDACTED]');
+       });
+
+       it('should still redact very long random strings', () => {
+         expect(DataRedactor.redact('abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef')).toBe('[REDACTED]');
+       });
+
+       it('should still redact sk- prefixed strings', () => {
+         expect(DataRedactor.redact('sk-proj-1234567890abcdef1234567890abcdef12345678')).toBe('[REDACTED]');
+         expect(DataRedactor.redact('sk-1234567890abcdef')).toBe('[REDACTED]');
+       });
+
+       it('should handle edge cases correctly', () => {
+         expect(DataRedactor.redact('component-name-with-numbers-123')).toBe('component-name-with-numbers-123');
+         expect(DataRedactor.redact('service.v1.beta')).toBe('service.v1.beta');
+         expect(DataRedactor.redact('config_production_database')).toBe('config_production_database');
+       });
+     });
   });
 
   describe('Logger with redaction', () => {

@@ -32,18 +32,91 @@ export class DataRedactor {
    * Redact sensitive data from a string value
    */
   private static redactString(value: string): string {
-    // Check if the string looks like an API key, token, or secret
-    // Common patterns: hex strings, base64-like, or very long alphanumeric
-    if (value.length > 20 && /^[a-zA-Z0-9+/=_-]+$/.test(value)) {
-      return '[REDACTED]';
-    }
-
-    // Check for common secret patterns
+    // Check for explicit secret patterns first - these should always be redacted
     if (value.includes('sk-') || value.includes('pk-') || value.includes('Bearer ')) {
       return '[REDACTED]';
     }
 
+    // Skip redaction for common identifier patterns (component names, alert IDs, etc.)
+    // These are typically readable names, not secrets
+    if (this.isLikelyIdentifier(value)) {
+      return value;
+    }
+
+    // Only redact very long alphanumeric strings that look like actual secrets
+    // Increased threshold to 40+ characters to avoid false positives with readable IDs
+    if (value.length >= 40 && /^[a-zA-Z0-9+/=_-]+$/.test(value)) {
+      // Additional check: exclude common readable patterns
+      if (!this.isLikelyReadableIdentifier(value)) {
+        return '[REDACTED]';
+      }
+    }
+
     return value;
+  }
+
+  /**
+   * Check if a string is likely a readable identifier (component name, alert ID, etc.)
+   * rather than a secret
+   */
+  private static isLikelyIdentifier(value: string): boolean {
+    // Component names, alert IDs, and other identifiers are typically:
+    // - 10-50 characters long (not extremely long like real secrets)
+    // - May contain hyphens, underscores, dots in readable patterns
+    // - Often have meaningful word boundaries
+    // - Should NOT start with known secret prefixes
+
+    if (value.length < 10 || value.length > 50) {
+      return false;
+    }
+
+    // Exclude strings that start with known secret prefixes
+    if (value.startsWith('sk-') || value.startsWith('pk-') || value.startsWith('xoxp-') ||
+        value.startsWith('ghp_') || value.startsWith('Bearer ')) {
+      return false;
+    }
+
+    // Check for readable patterns with word boundaries
+    if (/^[a-zA-Z0-9]+([-_][a-zA-Z0-9]+)+$/.test(value)) {
+      // Additional check: make sure it has meaningful word structure
+      const parts = value.split(/[-_]/);
+      const hasReadableParts = parts.some(part => part.length >= 3 && /[aeiouy]/i.test(part));
+      if (hasReadableParts && parts.length >= 2) {
+        return true; // kebab-case or snake_case patterns with readable words
+      }
+    }
+
+    if (/^[a-zA-Z0-9]+([.][a-zA-Z0-9]+)+$/.test(value)) {
+      // Additional check: make sure it has meaningful word structure
+      const parts = value.split(/[.-]/);
+      const hasReadableParts = parts.some(part => part.length >= 3 && /[aeiouy]/i.test(part));
+      if (hasReadableParts && parts.length >= 2) {
+        return true; // dot-separated patterns with readable words
+      }
+    }
+
+    // Check for UUID-like patterns (but not actual secrets)
+    if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value)) {
+      return true; // UUID format
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a string appears to be a readable identifier rather than random characters
+   */
+  private static isLikelyReadableIdentifier(value: string): boolean {
+    // If it has readable word patterns, it's probably not a secret
+    const words = value.split(/[-_.]/);
+    const meaningfulWords = words.filter(word => {
+      // A meaningful word should be 3+ characters and contain at least one vowel or be a known tech term
+      return word.length >= 3 && ( /[aeiouy]/i.test(word) || /^(api|db|sql|http|https|json|xml|yaml|config|auth|token|key|id|uuid|hash|crypto)$/i.test(word) );
+    });
+
+    // If more than 40% of the segments are meaningful words, it's likely readable
+    // Also require at least 2 meaningful words to avoid false positives
+    return meaningfulWords.length >= 2 && meaningfulWords.length / words.length > 0.4;
   }
 
   /**
