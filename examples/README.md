@@ -85,6 +85,9 @@ npm run example:search
 
 # Dual memory mode demonstration
 npm run example:dual-memory
+
+# Performance dashboard demonstration
+npm run example:performance-dashboard
 ```
 
 ### Running Individual Examples Directly
@@ -106,6 +109,9 @@ npx tsx examples/memory-search.ts
 
 # Dual memory mode
 npx tsx examples/dual-memory-mode.ts
+
+# Performance dashboard
+npx tsx examples/performance-dashboard.ts
 ```
 
 ## Example Descriptions
@@ -181,6 +187,24 @@ Comprehensive demonstration of Memori's dual memory processing modes:
 - Background monitoring configuration and status
 - Mode status verification and comparison
 
+### 6. Performance Dashboard (`performance-dashboard.ts`)
+
+Comprehensive demonstration of Memori's performance monitoring and alerting capabilities:
+- **Dashboard initialization**: Setting up default widgets and real-time collection
+- **System status monitoring**: Overall health and component-specific metrics
+- **Real-time metrics**: Collection and analysis of performance data
+- **Alert management**: Threshold-based alerting and acknowledgment system
+- **Performance reporting**: Detailed analysis and trend identification
+- **Widget management**: Dynamic dashboard configuration and updates
+
+**Expected Output:**
+- Dashboard service initialization with default widgets
+- Real-time system status overview with component health
+- Live metrics collection and alert generation
+- Performance report generation with trends and recommendations
+- Alert acknowledgment and resolution workflow
+- Dashboard configuration export and management
+
 ## Expected Output Examples
 
 ### Basic Usage Example Output
@@ -233,6 +257,47 @@ Comprehensive demonstration of Memori's dual memory processing modes:
 2. You can run models efficiently on local hardware...
 
 🎉 Ollama integration example completed successfully!
+```
+
+### Performance Dashboard Example Output
+```
+🚀 Starting Performance Dashboard Example
+
+✅ Performance dashboard service initialized
+✅ Dashboard initialized with default widgets
+✅ Alert callback registered
+
+📊 Getting system status overview...
+System Status Overview: healthy, 0 active alerts, 0 recent incidents
+
+🎛️ Getting dashboard widgets...
+Found 5 dashboard widgets:
+Widget: System Overview (status_indicator)
+Widget: Search Performance (metric_chart)
+Widget: Database Metrics (metric_chart)
+Widget: Active Alerts (alert_list)
+Widget: Performance Trends (trend_analysis)
+
+📈 Collecting real-time metrics...
+Search latency metrics: 10 samples
+Database latency metrics: 10 samples
+System error rate metrics: 10 samples
+
+📸 Getting performance snapshots...
+Retrieved 3 performance snapshots
+
+📊 Generating performance report...
+Performance Report Generated: daily report with healthy status
+
+📈 Analyzing performance trends...
+Updated trend analysis for widgets
+
+Alert Summary by Severity: 0 critical, 0 error, 0 warning
+
+💾 Exporting dashboard configuration...
+Dashboard configuration exported: 5 widgets configured
+
+🎉 Performance dashboard example completed successfully!
 ```
 
 ## Troubleshooting
