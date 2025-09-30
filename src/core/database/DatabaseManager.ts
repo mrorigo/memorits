@@ -194,14 +194,16 @@ export class DatabaseManager {
   }
 
   /**
-    * Initialize or get the SearchService instance
-    */
-   public getSearchService(): SearchService {
-     if (!this.searchService) {
-       this.searchService = new SearchService(this);
-     }
-     return this.searchService;
-   }
+     * Initialize or get the SearchService instance
+     */
+    public async getSearchService(): Promise<SearchService> {
+      if (!this.searchService) {
+        this.searchService = new SearchService(this);
+        // Ensure async initialization is completed
+        await this.searchService.initializeAsync();
+      }
+      return this.searchService;
+    }
 
    /**
     * Initialize or get the SearchIndexManager instance
@@ -390,7 +392,7 @@ export class DatabaseManager {
 
     try {
       // Use the new SearchService for enhanced search capabilities
-      const searchService = this.getSearchService();
+      const searchService = await this.getSearchService();
 
       // Convert SearchOptions to SearchQuery
       const searchQuery: SearchQuery = {
@@ -404,7 +406,7 @@ export class DatabaseManager {
       const searchResults = await searchService.search(searchQuery);
 
       // Transform SearchResult[] to MemorySearchResult[]
-      const results = searchResults.map(result => ({
+      const results = searchResults.map((result: any) => ({
         id: result.id,
         content: result.content,
         summary: result.metadata.summary as string || '',

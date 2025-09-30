@@ -243,7 +243,7 @@ export class Memori {
     }
 
     try {
-      const searchService = this.dbManager.getSearchService();
+      const searchService = await this.dbManager.getSearchService();
 
       const searchQuery: SearchQuery = {
         text: query,
@@ -287,8 +287,8 @@ export class Memori {
   /**
    * Get available search strategies
    */
-  getAvailableSearchStrategies(): SearchStrategy[] {
-    const searchService = this.dbManager.getSearchService();
+  async getAvailableSearchStrategies(): Promise<SearchStrategy[]> {
+    const searchService = await this.dbManager.getSearchService();
     return searchService.getAvailableStrategies();
   }
 

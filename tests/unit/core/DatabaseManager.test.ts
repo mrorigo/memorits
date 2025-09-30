@@ -173,7 +173,7 @@ describe('DatabaseManager', () => {
       };
 
       // Test that the SearchService itself validates properly
-      const searchService = dbManager.getSearchService();
+      const searchService = await dbManager.getSearchService();
       const searchQuery = {
         text: maliciousQuery,
         limit: options.limit,
@@ -193,7 +193,7 @@ describe('DatabaseManager', () => {
       };
 
       // Test that the SearchService itself validates properly
-      const searchService = dbManager.getSearchService();
+      const searchService = await dbManager.getSearchService();
       const searchQuery = {
         text: longQuery,
         limit: options.limit,
@@ -212,7 +212,7 @@ describe('DatabaseManager', () => {
       };
 
       // Test that the SearchService itself validates properly
-      const searchService = dbManager.getSearchService();
+      const searchService = await dbManager.getSearchService();
       const searchQuery = {
         text: 'test query',
         limit: options.limit,

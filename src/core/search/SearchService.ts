@@ -424,6 +424,7 @@ export class SearchService implements ISearchService {
   private advancedFilterEngine?: AdvancedFilterEngine;
   private configManager: SearchStrategyConfigManager;
   private searchIndexManager: SearchIndexManager;
+  private _isInitialized: boolean = false;
 
   // Maintenance and monitoring
   private maintenanceTimer?: NodeJS.Timer;
@@ -483,9 +484,54 @@ export class SearchService implements ISearchService {
       updateHistory: [],
       rollbackInProgress: false,
     };
-    this.initializeStrategies();
+    // Initialize strategies synchronously but defer async operations
+    this.initializeStrategiesSync();
     this.startMaintenanceScheduler();
     this.startPerformanceMonitoring();
+  }
+
+  /**
+   * Initialize SearchService asynchronously
+   */
+  public async initializeAsync(): Promise<void> {
+    if (this._isInitialized) {
+      return;
+    }
+
+    try {
+      await this.initializeStrategies();
+      this._isInitialized = true;
+      console.log('SearchService fully initialized');
+    } catch (error) {
+      console.error('Failed to initialize SearchService:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Synchronous initialization of basic components
+   */
+  private initializeStrategiesSync(): void {
+    // Initialize basic components synchronously
+    // Move console.log statements here to avoid async logging issues in tests
+    if (this.advancedFilterEngine) {
+      try {
+        const templateManager = this.advancedFilterEngine.getTemplateManager();
+        // Log initialization without blocking on template registration
+        console.log('Initializing filter templates...');
+
+        // Register common filter templates for frequent use cases
+        this.registerCommonFilterTemplates(templateManager);
+        this.registerAdvancedFilterTemplates(templateManager);
+        this.registerPerformanceFilterTemplates(templateManager);
+
+        const templateCount = templateManager.listAvailableTemplates().length;
+        console.log(`Filter template initialization completed. Registered ${templateCount} templates.`);
+      } catch (error) {
+        console.error('Failed to initialize filter templates:', error);
+        // Continue without templates - not critical for basic functionality
+      }
+    }
   }
 
   /**
