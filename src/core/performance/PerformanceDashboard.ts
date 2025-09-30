@@ -3,6 +3,8 @@
  * Provides visualization-friendly data formats and alerting capabilities
  */
 
+import { logError } from '../utils/Logger';
+
 export interface RealTimeMetric {
   timestamp: Date;
   value: number;
@@ -401,7 +403,11 @@ export class PerformanceDashboardService {
       try {
         callback(alert);
       } catch (error) {
-        console.error('Alert callback failed:', error);
+        logError('Alert callback failed', {
+          component: 'PerformanceDashboard',
+          error: error instanceof Error ? error.message : String(error),
+          alertId: alert.id,
+        });
       }
     });
   }

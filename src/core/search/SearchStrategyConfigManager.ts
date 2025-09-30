@@ -847,7 +847,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
             component: 'FileConfigurationPersistenceManager',
             operation: 'cleanupOldBackups',
             backupId: backup.id,
-            error: error instanceof Error ? error.message : String(error)
+            error: error instanceof Error ? error.message : String(error),
           });
         }
       }
@@ -900,7 +900,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
         component: 'FileConfigurationPersistenceManager',
         operation: 'validateBackupIntegrity',
         backupId,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       return false;
     }

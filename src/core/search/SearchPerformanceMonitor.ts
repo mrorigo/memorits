@@ -531,7 +531,7 @@ export class SearchPerformanceMonitor {
 
     const strategyUsage = this.calculateStrategyUsagePercentages();
     const slowestStrategy = Object.entries(strategyUsage)
-      .sort(([,a], [,b]) => b - a)[0];
+      .sort(([, a], [, b]) => b - a)[0];
 
     if (slowestStrategy && strategyUsage[slowestStrategy[0] as SearchStrategy] > 50) {
       recommendations.push(`Strategy ${slowestStrategy[0]} is heavily used - consider load balancing`);

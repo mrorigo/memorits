@@ -41,6 +41,7 @@ import { MemoryProcessingParams } from '../types/models';
 import { DatabaseManager } from '../database/DatabaseManager';
 import { MemoryProcessingState } from '../memory/MemoryProcessingStateManager';
 import { RelationshipProcessor } from '../search/relationship/RelationshipProcessor';
+import { logWarn, logError } from '../utils/Logger';
 
 // Memory processing schema definition for prompt generation
 const MEMORY_SCHEMA = {
@@ -127,7 +128,11 @@ export class MemoryAgent {
     try {
       parsedMemory = JSON.parse(cleanContent);
     } catch {
-      console.warn('Failed to parse JSON response, using fallback:', cleanContent.substring(0, 100));
+      logWarn('Failed to parse JSON response, using fallback', {
+        component: 'MemoryAgent',
+        contentPreview: cleanContent.substring(0, 100),
+        chatId,
+      });
       throw new Error('Invalid JSON response from model');
     }
 
@@ -197,7 +202,10 @@ export class MemoryAgent {
 
       return validatedRelationships.filter(r => r.confidence > 0.3); // Filter low-confidence relationships
     } catch (error) {
-      console.warn('Failed to extract memory relationships:', error);
+      logWarn('Failed to extract memory relationships', {
+        component: 'MemoryAgent',
+        error: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
@@ -551,7 +559,11 @@ export class MemoryAgent {
         limit,
       });
     } catch (error) {
-      console.warn('Failed to retrieve recent memories for relationship analysis:', error);
+      logWarn('Failed to retrieve recent memories for relationship analysis', {
+        component: 'MemoryAgent',
+        error: error instanceof Error ? error.message : String(error),
+        sessionId,
+      });
       return [];
     }
   }
@@ -579,7 +591,10 @@ export class MemoryAgent {
       // Validate and return relationships
       return this.validateRelationships(ruleBasedRelationships);
     } catch (error) {
-      console.warn('Enhanced relationship extraction failed:', error);
+      logWarn('Enhanced relationship extraction failed', {
+        component: 'MemoryAgent',
+        error: error instanceof Error ? error.message : String(error),
+      });
       return [];
     }
   }
@@ -601,7 +616,11 @@ export class MemoryAgent {
           },
         );
       } catch (error) {
-        console.warn('Failed to initialize state tracking for memory processing:', error);
+        logWarn('Failed to initialize state tracking for memory processing', {
+          component: 'MemoryAgent',
+          error: error instanceof Error ? error.message : String(error),
+          chatId: params.chatId,
+        });
       }
     }
 
@@ -711,7 +730,7 @@ Extract and classify this memory, including relationship analysis:`;
 
             // Use LLM-extracted relationships if available and high quality
             if (relationshipExtractionResult.relationships.length > 0 &&
-                relationshipExtractionResult.confidence > 0.5) {
+              relationshipExtractionResult.confidence > 0.5) {
               extractedRelationships = relationshipExtractionResult.relationships;
               relationshipMetadata = {
                 extractionMethod: relationshipExtractionResult.extractionMethod,
@@ -757,7 +776,10 @@ Extract and classify this memory, including relationship analysis:`;
             relationshipMetadata,
           };
         } catch (error) {
-          console.warn('Failed to extract memory relationships:', error);
+          logWarn('Failed to extract memory relationships', {
+            component: 'MemoryAgent',
+            error: error instanceof Error ? error.message : String(error),
+          });
           // Continue without relationships - don't fail the entire process
         }
       }
@@ -787,11 +809,21 @@ Extract and classify this memory, including relationship analysis:`;
             },
           );
         } catch (stateError) {
-          console.warn('Failed to update state tracking for failed memory processing:', stateError);
+          logWarn('Failed to update state tracking for failed memory processing', {
+            component: 'MemoryAgent',
+            error: stateError instanceof Error ? stateError.message : String(stateError),
+            chatId: params.chatId,
+          });
         }
       }
 
-      console.error('Memory processing failed:', error);
+      logError('Memory processing failed', {
+        component: 'MemoryAgent',
+        error: error instanceof Error ? error.message : String(error),
+        chatId: params.chatId,
+        userInputLength: params.userInput.length,
+        aiOutputLength: params.aiOutput.length,
+      });
       const fallbackMemory = MemoryAgent.createFallbackMemory(params.userInput, params.aiOutput, params.chatId);
       return {
         ...fallbackMemory,

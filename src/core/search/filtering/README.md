@@ -144,6 +144,8 @@ console.log('Estimated cost:', optimized.estimatedCost);
 ```typescript
 const result = await engine.executeFilterWithMetrics(filter, searchResults);
 
+// Check performance metrics
+// Check performance metrics
 console.log('Execution time:', result.metrics.executionTime);
 console.log('Memory usage:', result.metrics.memoryUsage);
 console.log('Optimization applied:', result.metrics.optimizationApplied);
@@ -160,6 +162,7 @@ const queryResult = await filterEngine.executeFilterAsQuery(
   baseQuery
 );
 
+// Review generated query
 console.log('Generated SQL:', queryResult.sql);
 console.log('Parameters:', queryResult.parameters);
 ```
@@ -348,6 +351,8 @@ const cascade = engine.combineFilters(
 const filters = [filter1, filter2, filter3];
 const optimized = engine.optimizeFilterChain(filters);
 
+// View execution plan
+// Review optimized execution plan
 console.log('Execution order:', optimized.executionOrder);
 console.log('Parallel groups:', optimized.parallelGroups);
 console.log('Estimated cost:', optimized.estimatedCost);
@@ -395,6 +400,7 @@ const validation = engine.validateComplexExpression(
 );
 
 if (!validation.isValid) {
+  // Review validation results
   console.log('Errors:', validation.errors);
   console.log('Warnings:', validation.warnings);
   console.log('Suggestions:', validation.suggestions);
@@ -416,6 +422,7 @@ if (!validation.isValid) {
 ```typescript
 const filter = filterEngine.parseFilter('category = "important"');
 const metadata = filterEngine.getMetadata();
+// View available operators
 console.log('Supported operators:', metadata.supportedOperators);
 ```
 

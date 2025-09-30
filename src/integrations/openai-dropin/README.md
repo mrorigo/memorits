@@ -182,6 +182,7 @@ const memories = await client.memory.searchMemories('search query', {
 
 ```typescript
 const stats = await client.memory.getMemoryStats();
+// Example output: Total memories: 42
 console.log(`Total memories: ${stats.totalMemories}`);
 ```
 
@@ -190,8 +191,10 @@ console.log(`Total memories: ${stats.totalMemories}`);
 ```typescript
 const result = await client.memory.recordChatCompletion(params, response);
 if (result.success) {
+  // Example output: Memory recorded: chat_123
   console.log(`Memory recorded: ${result.chatId}`);
 } else {
+  // Example output: Recording failed: Database connection error
   console.error(`Recording failed: ${result.error}`);
 }
 ```
@@ -335,6 +338,7 @@ const client = new MemoriOpenAI('api-key', {
 
 // Check if memory was actually recorded
 const result = await client.memory.searchMemories('test');
+// Example output: Found memories: 3
 console.log('Found memories:', result.length);
 ```
 
@@ -356,6 +360,7 @@ const client = new MemoriOpenAI('api-key', {
 
 // Test database connection
 const stats = await client.memory.getMemoryStats();
+// Example output: Database connected successfully: { totalMemories: 0, ... }
 console.log('Database connected successfully:', stats);
 ```
 
@@ -434,21 +439,26 @@ try {
   });
 
   // Success - response is guaranteed to be valid
+  // Example output: Response: Hello! How can I help you today?
   console.log('Response:', response.choices[0]?.message?.content);
 } catch (error) {
-  if (error instanceof Error) {
-    // Handle OpenAI API errors (rate limits, invalid requests, etc.)
-    if (error.message.includes('rate limit')) {
-      console.log('Rate limited - implement retry logic');
-    } else if (error.message.includes('invalid model')) {
-      console.log('Invalid model - check model name');
-    } else {
-      console.log('OpenAI error:', error.message);
-    }
-  } else {
-    // Handle memory-specific errors
-    console.log('Memory error (non-critical):', error);
-  }
+ if (error instanceof Error) {
+   // Handle OpenAI API errors (rate limits, invalid requests, etc.)
+   if (error.message.includes('rate limit')) {
+     // Example output: Rate limited - implement retry logic
+     console.log('Rate limited - implement retry logic');
+   } else if (error.message.includes('invalid model')) {
+     // Example output: Invalid model - check model name
+     console.log('Invalid model - check model name');
+   } else {
+     // Example output: OpenAI error: Authentication failed
+     console.log('OpenAI error:', error.message);
+   }
+ } else {
+   // Handle memory-specific errors
+   // Example output: Memory error (non-critical): Database connection timeout
+   console.log('Memory error (non-critical):', error);
+ }
 }
 ```
 
@@ -463,14 +473,17 @@ const client = new MemoriOpenAI('api-key', {
 
 // Check memory system status
 const stats = await client.memory.getMemoryStats();
+// Example output: Memory system status: { totalMemories: 15, ... }
 console.log('Memory system status:', stats);
 
 // Search for specific memories
 const memories = await client.memory.searchMemories('debug test');
+// Example output: Found memories: [Memory objects...]
 console.log('Found memories:', memories);
 
 // Check system health
 const health = await client.memory.getSystemHealth();
+// Example output: System health: { status: 'healthy', ... }
 console.log('System health:', health);
 ```
 
@@ -485,6 +498,7 @@ const client = new MemoriOpenAI('api-key', {
 
 // Get performance metrics
 const metrics = await client.memory.getPerformanceMetrics();
+// Example output: Performance metrics: { averageResponseTime: 150, ... }
 console.log('Performance metrics:', {
   averageResponseTime: metrics.averageResponseTime,
   memoryOperationsPerSecond: metrics.memoryOperationsPerSecond,

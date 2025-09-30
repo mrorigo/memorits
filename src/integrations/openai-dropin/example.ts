@@ -8,13 +8,14 @@ import {
   MemoriOpenAIFromDatabase,
 } from './index';
 import MemoriOpenAI from './index';
+import { logInfo, logError } from '../../core/utils/Logger';
 
 /**
  * Example 1: Simple drop-in replacement (most common use case)
  * Replace OpenAI import with MemoriOpenAI - no other code changes needed!
  */
 async function basicDropInExample() {
-  console.log('=== Basic Drop-in Example ===');
+  logInfo('=== Basic Drop-in Example ===', { component: 'OpenAIExample', example: 'basicDropIn' });
 
   // Pattern 1: Traditional configuration object (current pattern)
   const client = new MemoriOpenAI('your-api-key', {
@@ -32,15 +33,27 @@ async function basicDropInExample() {
       ],
     });
 
-    console.log('Response:', response.choices[0]?.message?.content);
+    logInfo('Response received', {
+      component: 'OpenAIExample',
+      example: 'basicDropIn',
+      responseLength: response.choices[0]?.message?.content?.length || 0,
+    });
 
     // Memory was automatically recorded - you can search it
     const memories = await client.memory.searchMemories('Hello');
-    console.log('Found memories:', memories.length);
+    logInfo('Memory search completed', {
+      component: 'OpenAIExample',
+      example: 'basicDropIn',
+      memoriesFound: memories.length,
+    });
 
     await client.close();
   } catch (error) {
-    console.error('Error in basic example:', error);
+    logError('Error in basic example', {
+      component: 'OpenAIExample',
+      example: 'basicDropIn',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -49,7 +62,7 @@ async function basicDropInExample() {
  * Configure everything through environment variables
  */
 async function environmentExample() {
-  console.log('=== Environment Configuration Example ===');
+  logInfo('=== Environment Configuration Example ===', { component: 'OpenAIExample', example: 'environment' });
 
   // Set environment variables (in real usage, these would be set in your environment)
   process.env.OPENAI_API_KEY = 'your-api-key';
@@ -70,10 +83,18 @@ async function environmentExample() {
       ],
     });
 
-    console.log('Response:', response.choices[0]?.message?.content);
+    logInfo('Environment example response received', {
+      component: 'OpenAIExample',
+      example: 'environment',
+      responseLength: response.choices[0]?.message?.content?.length || 0,
+    });
     await client.close();
   } catch (error) {
-    console.error('Error in environment example:', error);
+    logError('Error in environment example', {
+      component: 'OpenAIExample',
+      example: 'environment',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -82,7 +103,7 @@ async function environmentExample() {
  * Specify a custom database location
  */
 async function databaseExample() {
-  console.log('=== Database URL Configuration Example ===');
+  logInfo('=== Database URL Configuration Example ===', { component: 'OpenAIExample', example: 'database' });
 
   try {
     const client = await MemoriOpenAIFromDatabase(
@@ -102,10 +123,18 @@ async function databaseExample() {
       ],
     });
 
-    console.log('Response:', response.choices[0]?.message?.content);
+    logInfo('Database example response received', {
+      component: 'OpenAIExample',
+      example: 'database',
+      responseLength: response.choices[0]?.message?.content?.length || 0,
+    });
     await client.close();
   } catch (error) {
-    console.error('Error in database example:', error);
+    logError('Error in database example', {
+      component: 'OpenAIExample',
+      example: 'database',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -114,7 +143,7 @@ async function databaseExample() {
  * Full control over all memory settings
  */
 async function advancedExample() {
-  console.log('=== Advanced Configuration Example ===');
+  logInfo('=== Advanced Configuration Example ===', { component: 'OpenAIExample', example: 'advanced' });
 
   try {
     const client = await MemoriOpenAIFromConfig('your-api-key', {
@@ -141,15 +170,27 @@ async function advancedExample() {
       ],
     });
 
-    console.log('Response:', response.choices[0]?.message?.content);
+    logInfo('Advanced example response received', {
+      component: 'OpenAIExample',
+      example: 'advanced',
+      responseLength: response.choices[0]?.message?.content?.length || 0,
+    });
 
     // Check memory statistics
     const stats = await client.memory.getMemoryStats();
-    console.log('Memory stats:', stats);
+    logInfo('Memory statistics retrieved', {
+      component: 'OpenAIExample',
+      example: 'advanced',
+      stats,
+    });
 
     await client.close();
   } catch (error) {
-    console.error('Error in advanced example:', error);
+    logError('Error in advanced example', {
+      component: 'OpenAIExample',
+      example: 'advanced',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -158,7 +199,7 @@ async function advancedExample() {
  * How to migrate existing code with minimal changes
  */
 async function migrationExample() {
-  console.log('=== Migration Example ===');
+  logInfo('=== Migration Example ===', { component: 'OpenAIExample', example: 'migration' });
 
   // BEFORE (existing OpenAI code):
   /*
@@ -182,10 +223,18 @@ async function migrationExample() {
       messages: [{ role: 'user', content: 'Hello! This is migrated code!' }],
     });
 
-    console.log('Migrated response:', response.choices[0]?.message?.content);
+    logInfo('Migration example response received', {
+      component: 'OpenAIExample',
+      example: 'migration',
+      responseLength: response.choices[0]?.message?.content?.length || 0,
+    });
     await client.close();
   } catch (error) {
-    console.error('Error in migration example:', error);
+    logError('Error in migration example', {
+      component: 'OpenAIExample',
+      example: 'migration',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -194,7 +243,7 @@ async function migrationExample() {
  * Demonstrates graceful error handling
  */
 async function errorHandlingExample() {
-  console.log('=== Error Handling Example ===');
+  logInfo('=== Error Handling Example ===', { component: 'OpenAIExample', example: 'errorHandling' });
 
   try {
     const client = new MemoriOpenAI('invalid-api-key', {
@@ -207,7 +256,11 @@ async function errorHandlingExample() {
       messages: [{ role: 'user', content: 'This will fail' }],
     });
   } catch (error) {
-    console.log('Expected error caught:', error instanceof Error ? error.message : String(error));
+    logInfo('Expected error caught in error handling example', {
+      component: 'OpenAIExample',
+      example: 'errorHandling',
+      error: error instanceof Error ? error.message : String(error),
+    });
 
     // Memory recording errors don't break the main functionality
     // The OpenAI error is preserved exactly as it would be
@@ -219,7 +272,7 @@ async function errorHandlingExample() {
  * Use the exact same pattern as OpenAI SDK
  */
 async function openaiSDKPatternExample() {
-  console.log('=== OpenAI SDK Pattern Example ===');
+  logInfo('=== OpenAI SDK Pattern Example ===', { component: 'OpenAIExample', example: 'openaiSDKPattern' });
 
   try {
     // Pattern 2: OpenAI SDK style constructor with baseURL support
@@ -239,10 +292,18 @@ async function openaiSDKPatternExample() {
       ],
     });
 
-    console.log('SDK Pattern Response:', response.choices[0]?.message?.content);
+    logInfo('OpenAI SDK pattern response received', {
+      component: 'OpenAIExample',
+      example: 'openaiSDKPattern',
+      responseLength: response.choices[0]?.message?.content?.length || 0,
+    });
     await client.close();
   } catch (error) {
-    console.error('Error in OpenAI SDK pattern example:', error);
+    logError('Error in OpenAI SDK pattern example', {
+      component: 'OpenAIExample',
+      example: 'openaiSDKPattern',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -251,7 +312,7 @@ async function openaiSDKPatternExample() {
  * How to search and use stored memories
  */
 async function memorySearchExample() {
-  console.log('=== Memory Search Example ===');
+  logInfo('=== Memory Search Example ===', { component: 'OpenAIExample', example: 'memorySearch' });
 
   try {
     const client = new MemoriOpenAI('your-api-key', {
@@ -280,18 +341,28 @@ async function memorySearchExample() {
       minImportance: 'medium' as any,
     });
 
-    console.log(`Found ${memories.length} memories about Alice:`);
-    memories.forEach((memory, index) => {
-      console.log(`${index + 1}. ${memory.content.substring(0, 100)}...`);
+    logInfo('Alice memories search completed', {
+      component: 'OpenAIExample',
+      example: 'memorySearch',
+      memoriesFound: memories.length,
+      memoryPreviews: memories.map((m, i) => `${i + 1}. ${m.content.substring(0, 100)}...`),
     });
 
     // Search for programming-related memories
     const programmingMemories = await client.memory.searchMemories('programming');
-    console.log(`Found ${programmingMemories.length} programming-related memories`);
+    logInfo('Programming memories search completed', {
+      component: 'OpenAIExample',
+      example: 'memorySearch',
+      programmingMemoriesFound: programmingMemories.length,
+    });
 
     await client.close();
   } catch (error) {
-    console.error('Error in memory search example:', error);
+    logError('Error in memory search example', {
+      component: 'OpenAIExample',
+      example: 'memorySearch',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -300,33 +371,37 @@ async function memorySearchExample() {
  * In real usage, you would only run the examples you need
  */
 export async function runAllExamples() {
-  console.log('Starting MemoriOpenAI Examples...\n');
+  logInfo('Starting MemoriOpenAI Examples...\n', { component: 'OpenAIExample', example: 'runAll' });
 
   try {
     await basicDropInExample();
-    console.log('\n' + '='.repeat(50) + '\n');
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIExample', example: 'separator' });
 
     await openaiSDKPatternExample();
-    console.log('\n' + '='.repeat(50) + '\n');
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIExample', example: 'separator' });
 
     await environmentExample();
-    console.log('\n' + '='.repeat(50) + '\n');
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIExample', example: 'separator' });
 
     await databaseExample();
-    console.log('\n' + '='.repeat(50) + '\n');
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIExample', example: 'separator' });
 
     await advancedExample();
-    console.log('\n' + '='.repeat(50) + '\n');
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIExample', example: 'separator' });
 
     await migrationExample();
-    console.log('\n' + '='.repeat(50) + '\n');
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIExample', example: 'separator' });
 
     await memorySearchExample();
-    console.log('\n' + '='.repeat(50) + '\n');
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIExample', example: 'separator' });
 
     await errorHandlingExample();
   } catch (error) {
-    console.error('Error running examples:', error);
+    logError('Error running examples', {
+      component: 'OpenAIExample',
+      example: 'runAll',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -343,6 +418,12 @@ export {
 };
 
 // If this file is run directly, execute all examples
-if (require.main === module) {
-  runAllExamples().catch(console.error);
+if (typeof process !== 'undefined' && process.argv0) {
+  runAllExamples().catch((error) => {
+    logError('Unhandled error in OpenAI examples', {
+      component: 'OpenAIExample',
+      example: 'main',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 }
