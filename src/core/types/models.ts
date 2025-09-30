@@ -107,6 +107,8 @@ export interface MemoriConfig extends BaseConfig, ProviderConfig {
   consciousIngest: boolean;
   /** Enable automatic memory ingestion mode */
   autoIngest: boolean;
+  /** Enable relationship extraction during memory processing */
+  enableRelationshipExtraction: boolean;
   /** User context information for enhanced processing */
   userContext?: UserContext;
   /** Background update interval for conscious mode (milliseconds) */

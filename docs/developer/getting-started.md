@@ -83,6 +83,7 @@ MEMORI_MODEL=gpt-4o-mini
 # Memory Modes
 MEMORI_AUTO_INGEST=true
 MEMORI_CONSCIOUS_INGEST=false
+MEMORI_ENABLE_RELATIONSHIP_EXTRACTION=true
 ```
 
 ### Programmatic Configuration
@@ -95,7 +96,8 @@ const config = MemoriConfigSchema.parse({
   namespace: 'my-app',
   model: 'gpt-4o-mini',
   autoIngest: true,
-  consciousIngest: false
+  consciousIngest: false,
+  enableRelationshipExtraction: true
 });
 
 const memori = new Memori(config);
@@ -110,12 +112,30 @@ const memori = new Memori(config);
 - **How it works**: Every conversation is processed and stored
 - **Search behavior**: Dynamic search triggered by each query
 - **Performance**: Optimized for real-time applications
+- **Relationship extraction**: Can be controlled independently (default: enabled)
 - **Use case**: Chat applications, assistants, general AI apps
 
 ```typescript
 const config = MemoriConfigSchema.parse({
   autoIngest: true,
-  consciousIngest: false
+  consciousIngest: false,
+  enableRelationshipExtraction: true  // Enable relationship extraction
+});
+```
+
+**Relationship Extraction Control**: You can independently control relationship extraction:
+
+```typescript
+// Enable auto-ingestion with relationship extraction
+const config = MemoriConfigSchema.parse({
+  autoIngest: true,
+  enableRelationshipExtraction: true
+});
+
+// Enable auto-ingestion WITHOUT relationship extraction
+const config = MemoriConfigSchema.parse({
+  autoIngest: true,
+  enableRelationshipExtraction: false  // Disable relationship extraction
 });
 ```
 
@@ -219,6 +239,7 @@ const config = MemoriConfigSchema.parse({
 // Ensure memory processing is enabled
 const config = MemoriConfigSchema.parse({
   autoIngest: true,  // Enable memory processing
+  enableRelationshipExtraction: true,  // Enable relationship extraction (optional)
   model: 'gpt-4o-mini'  // Ensure model is available
 });
 ```

@@ -164,9 +164,9 @@ export class Memori {
         this.config.namespace,
       );
 
-      // Store memory relationships if they were extracted
+      // Store memory relationships if they were extracted and relationship extraction is enabled
       const extractedRelationships = processedMemory.relatedMemories || [];
-      if (extractedRelationships && extractedRelationships.length > 0) {
+      if (extractedRelationships && extractedRelationships.length > 0 && this.config.enableRelationshipExtraction) {
         try {
           // Separate relationships by type for storage
           const generalRelationships = extractedRelationships.filter((r: MemoryRelationship) =>

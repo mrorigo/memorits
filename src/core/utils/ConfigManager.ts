@@ -13,6 +13,7 @@ export const MemoriConfigSchema = z.object({
   namespace: z.string().default('default'),
   consciousIngest: z.boolean().default(false),
   autoIngest: z.boolean().default(false),
+  enableRelationshipExtraction: z.boolean().default(true),
   model: z.string().default('gpt-4o-mini'),
   apiKey: z.string(),
   baseUrl: z.string().optional(),
@@ -52,6 +53,12 @@ export class ConfigManager {
         'boolean'
       ) as boolean;
 
+      const enableRelationshipExtraction = sanitizeEnvironmentVariable(
+        'MEMORI_ENABLE_RELATIONSHIP_EXTRACTION',
+        process.env.MEMORI_ENABLE_RELATIONSHIP_EXTRACTION || 'true',
+        'boolean'
+      ) as boolean;
+
       const model = sanitizeString(
         process.env.MEMORI_MODEL || 'gpt-4o-mini',
         {
@@ -79,6 +86,7 @@ export class ConfigManager {
         namespace,
         consciousIngest,
         autoIngest,
+        enableRelationshipExtraction,
         model,
         apiKey,
         baseUrl,
