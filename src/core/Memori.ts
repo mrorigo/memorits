@@ -11,7 +11,7 @@ import {
   RecordConversationOptions,
   SearchOptions,
 } from './types/models';
-import { ProcessedLongTermMemory, MemoryClassification, MemoryImportanceLevel } from './types/schemas';
+import { ProcessedLongTermMemory, MemoryClassification, MemoryImportanceLevel, MemoryRelationship } from './types/schemas';
 import { SearchStrategy, SearchQuery } from './search/types';
 
 export class Memori {
@@ -165,14 +165,14 @@ export class Memori {
       );
 
       // Store memory relationships if they were extracted
-      const extractedRelationships = (processedMemory as any).relatedMemories;
+      const extractedRelationships = processedMemory.relatedMemories || [];
       if (extractedRelationships && extractedRelationships.length > 0) {
         try {
           // Separate relationships by type for storage
-          const generalRelationships = extractedRelationships.filter((r: any) =>
+          const generalRelationships = extractedRelationships.filter((r: MemoryRelationship) =>
             r.type !== 'supersedes',
           );
-          const supersedingRelationships = extractedRelationships.filter((r: any) =>
+          const supersedingRelationships = extractedRelationships.filter((r: MemoryRelationship) =>
             r.type === 'supersedes',
           );
 
@@ -211,7 +211,7 @@ export class Memori {
         chatId,
         memoryId,
         namespace: this.config.namespace,
-        relationshipsStored: extractedRelationships?.length || 0,
+        relationshipsStored: processedMemory.relatedMemories?.length || 0,
       });
     } catch (error) {
       logError(`Failed to process memory for chat ${chatId}`, {

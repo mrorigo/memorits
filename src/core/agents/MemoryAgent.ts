@@ -35,7 +35,7 @@ import {
   MemoryImportanceLevel,
   MemoryRelationshipType,
   MemoryRelationship,
-  MemoryRelationshipSchema,
+  ProcessedLongTermMemory,
 } from '../types/schemas';
 import { MemoryProcessingParams } from '../types/models';
 import { DatabaseManager } from '../database/DatabaseManager';
@@ -378,7 +378,7 @@ export class MemoryAgent {
 
     // Entity overlap
     const entityMatches = entities.filter(entity =>
-      entity && contentLower.includes(entity.toLowerCase())
+      entity && contentLower.includes(entity.toLowerCase()),
     ).length;
 
     if (entities.length > 0) {
@@ -584,7 +584,7 @@ export class MemoryAgent {
     }
   }
 
-  async processConversation(params: MemoryProcessingParams): Promise<z.infer<typeof ProcessedLongTermMemorySchema>> {
+  async processConversation(params: MemoryProcessingParams): Promise<ProcessedLongTermMemory> {
     // Initialize state tracking if database manager is available
     if (this.dbManager && params.chatId) {
       try {
@@ -684,8 +684,8 @@ Extract and classify this memory, including relationship analysis:`;
       const processedMemory = MemoryAgent.processLLMResponse(content, params.chatId);
 
       // Extract memory relationships if database manager is available
-      let extractedRelationships: any[] = [];
-      let relationshipMetadata: any = null;
+      let extractedRelationships: MemoryRelationship[] = [];
+      let relationshipMetadata: ProcessedLongTermMemory['relationshipMetadata'];
 
       if (this.dbManager) {
         try {
@@ -750,18 +750,24 @@ Extract and classify this memory, including relationship analysis:`;
             };
           }
 
-          // Add relationships to the processed memory
-          (processedMemory as any).relatedMemories = extractedRelationships;
-          if (relationshipMetadata) {
-            (processedMemory as any).relationshipMetadata = relationshipMetadata;
-          }
+          // Add relationships to the processed memory using proper typing
+          return {
+            ...processedMemory,
+            relatedMemories: extractedRelationships,
+            relationshipMetadata,
+          };
         } catch (error) {
           console.warn('Failed to extract memory relationships:', error);
           // Continue without relationships - don't fail the entire process
         }
       }
 
-      return processedMemory;
+      // Return processed memory with empty relationships if none were extracted
+      return {
+        ...processedMemory,
+        relatedMemories: extractedRelationships,
+        relationshipMetadata,
+      };
     } catch (error) {
       // Track processing failure
       if (this.dbManager && params.chatId) {
@@ -786,7 +792,16 @@ Extract and classify this memory, including relationship analysis:`;
       }
 
       console.error('Memory processing failed:', error);
-      return MemoryAgent.createFallbackMemory(params.userInput, params.aiOutput, params.chatId);
+      const fallbackMemory = MemoryAgent.createFallbackMemory(params.userInput, params.aiOutput, params.chatId);
+      return {
+        ...fallbackMemory,
+        relatedMemories: [],
+        relationshipMetadata: {
+          extractionMethod: 'fallback',
+          confidence: 0.0,
+          extractedAt: new Date(),
+        },
+      } as ProcessedLongTermMemory;
     }
   }
 }

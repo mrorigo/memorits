@@ -62,6 +62,20 @@ export const ProcessedLongTermMemorySchema = z.object({
   confidenceScore: ConfidenceScore.default(0.8),
   classificationReason: z.string(),
   promotionEligible: z.boolean().default(false),
+  // Optional relationship fields for processing-time usage
+  relatedMemories: z.array(MemoryRelationshipSchema).default([]).optional(),
+  relationshipMetadata: z.object({
+    extractionMethod: z.string(),
+    confidence: z.number(),
+    extractedAt: z.date(),
+    processingMetadata: z.object({
+      llmModel: z.string().optional(),
+      llmTokensUsed: z.number().optional(),
+      analysisDepth: z.number().optional(),
+      relatedMemoriesAnalyzed: z.number().optional(),
+      processingTime: z.number().optional(),
+    }).optional(),
+  }).optional(),
 });
 
 export const ConversationContextSchema = z.object({
@@ -75,4 +89,5 @@ export const ConversationContextSchema = z.object({
 });
 
 export type ProcessedLongTermMemory = z.infer<typeof ProcessedLongTermMemorySchema>;
+
 export type ConversationContext = z.infer<typeof ConversationContextSchema>;
