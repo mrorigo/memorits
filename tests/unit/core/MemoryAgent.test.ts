@@ -1,6 +1,7 @@
 // tests/unit/core/MemoryAgent.test.ts
 import { MemoryAgent } from '../../../src/core/agents/MemoryAgent';
 import { MemoryClassification, MemoryImportanceLevel } from '../../../src/core/types/schemas';
+import * as Logger from '../../../src/core/utils/Logger';
 
 describe('MemoryAgent Static Methods', () => {
   describe('processLLMResponse', () => {
@@ -36,20 +37,24 @@ describe('MemoryAgent Static Methods', () => {
     it('should handle invalid JSON response and throw error', () => {
       const invalidJsonResponse = '{ invalid json content }';
 
-      // Capture console.warn to verify it's called
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      // Capture logWarn to verify it's called
+      const logWarnSpy = jest.spyOn(Logger, 'logWarn').mockImplementation(() => {});
 
       expect(() => {
         MemoryAgent.processLLMResponse(invalidJsonResponse, 'test-chat-123');
       }).toThrow('Invalid JSON response from model');
 
-      // Verify that console.warn was called with the right message
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Failed to parse JSON response, using fallback:',
-        '{ invalid json content }',
+      // Verify that logWarn was called with the right message and context
+      expect(logWarnSpy).toHaveBeenCalledWith(
+        'Failed to parse JSON response, using fallback',
+        expect.objectContaining({
+          component: 'MemoryAgent',
+          contentPreview: '{ invalid json content }',
+          chatId: 'test-chat-123',
+        }),
       );
 
-      consoleWarnSpy.mockRestore();
+      logWarnSpy.mockRestore();
     });
 
     it('should normalize uppercase enum values to lowercase', () => {
