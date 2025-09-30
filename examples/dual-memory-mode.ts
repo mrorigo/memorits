@@ -1,11 +1,12 @@
 /**
-  * Dual Memory Mode Example
-  *
-  * This example demonstrates the dual memory mode functionality in Memori:
-  * 1. Auto-ingestion mode: Automatically processes conversations into memories
-  * 2. Conscious ingestion mode: Stores conversations for manual processing
-  * 3. Background monitoring for conscious updates
-  */
+   * Dual Memory Mode Example
+   *
+   * This example demonstrates the dual memory mode functionality in Memori:
+   * 1. Auto-ingestion mode: Automatically processes conversations into memories
+   * 2. Conscious ingestion mode: Stores conversations for manual processing
+   * 3. Background monitoring for conscious updates
+   * 4. Independent relationship extraction control
+   */
 
 import { Memori, ConfigManager } from '../src/index';
 import { logInfo, logError } from '../src/core/utils/Logger';
@@ -115,6 +116,57 @@ async function dualModeComparison(): Promise<void> {
   await memori.close();
 }
 
+async function relationshipExtractionControlExample(): Promise<void> {
+  logInfo('\n🔗 Relationship Extraction Control Example', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+  logInfo('=============================================', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+
+  // Example 1: Auto-ingestion with relationship extraction enabled (default)
+  logInfo('\n📝 Example 1: Auto-ingestion WITH relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+
+  const configWithRelationships = ConfigManager.loadConfig();
+  configWithRelationships.autoIngest = true;
+  configWithRelationships.consciousIngest = false;
+  configWithRelationships.enableRelationshipExtraction = true;
+
+  const memoriWithRelationships = new Memori(configWithRelationships);
+  await memoriWithRelationships.enable();
+
+  logInfo('✅ Auto-ingestion mode enabled', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+  logInfo('✅ Relationship extraction: ENABLED', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+
+  await memoriWithRelationships.recordConversation(
+    'TypeScript provides excellent developer experience with static typing.',
+    'Yes, static typing helps catch errors at compile time and improves code quality.',
+  );
+
+  logInfo('✅ Conversation processed with relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+  await memoriWithRelationships.close();
+
+  // Example 2: Auto-ingestion with relationship extraction disabled
+  logInfo('\n📝 Example 2: Auto-ingestion WITHOUT relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+
+  const configWithoutRelationships = ConfigManager.loadConfig();
+  configWithoutRelationships.autoIngest = true;
+  configWithoutRelationships.consciousIngest = false;
+  configWithoutRelationships.enableRelationshipExtraction = false;
+
+  const memoriWithoutRelationships = new Memori(configWithoutRelationships);
+  await memoriWithoutRelationships.enable();
+
+  logInfo('✅ Auto-ingestion mode enabled', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+  logInfo('✅ Relationship extraction: DISABLED', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+
+  await memoriWithoutRelationships.recordConversation(
+    'JavaScript is dynamically typed and very flexible.',
+    'Dynamic typing allows for rapid prototyping but can lead to runtime errors.',
+  );
+
+  logInfo('✅ Conversation processed WITHOUT relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+  await memoriWithoutRelationships.close();
+
+  logInfo('💡 Relationship extraction can be controlled independently of ingestion mode', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
+}
+
 async function main(): Promise<void> {
   logInfo('🚀 Memori Dual Memory Mode Examples', { component: 'dual-memory-mode-example' });
   logInfo('=====================================\n', { component: 'dual-memory-mode-example' });
@@ -123,6 +175,7 @@ async function main(): Promise<void> {
     await autoIngestionExample();
     await consciousIngestionExample();
     await dualModeComparison();
+    await relationshipExtractionControlExample();
 
     logInfo('\n🎉 All dual memory mode examples completed successfully!', { component: 'dual-memory-mode-example' });
   } catch (error) {

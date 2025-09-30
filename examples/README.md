@@ -23,6 +23,7 @@ MEMORI_NAMESPACE="development"
 # Memory Processing Settings
 MEMORI_CONSCIOUS_INGEST="false"  # Enable conscious ingestion mode
 MEMORI_AUTO_INGEST="true"        # Enable automatic memory processing
+MEMORI_ENABLE_RELATIONSHIP_EXTRACTION="true"  # Enable relationship extraction
 
 # AI Model Configuration
 MEMORI_MODEL="gpt-4o-mini"
@@ -83,7 +84,7 @@ npm run example:openai
 # Memory search and retrieval example
 npm run example:search
 
-# Dual memory mode demonstration
+# Dual memory mode demonstration (includes relationship extraction control)
 npm run example:dual-memory
 
 # Performance dashboard demonstration
@@ -180,12 +181,14 @@ Comprehensive demonstration of Memori's dual memory processing modes:
 - **Conscious ingestion mode**: Manual processing with background monitoring
 - **Mode status checking**: Query current processing state
 - **Background processing**: Configurable monitoring intervals
+- **Relationship extraction control**: Independent control of relationship processing
 
 **Expected Output:**
 - Auto-ingestion mode demonstration with automatic memory processing
 - Conscious ingestion mode with manual processing triggers
 - Background monitoring configuration and status
 - Mode status verification and comparison
+- Relationship extraction control examples (enabled/disabled scenarios)
 
 ### 6. Performance Dashboard (`performance-dashboard.ts`)
 
