@@ -1,5 +1,6 @@
 import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, SearchStrategyMetadata } from '../types';
 import { SearchCapability } from '../SearchStrategy';
+import { logWarn } from '../../utils/Logger';
 
 /**
  * Semantic search strategy (placeholder for future implementation)
@@ -43,7 +44,11 @@ export class SemanticSearchStrategy implements ISearchStrategy {
   }
 
   async search(_query: SearchQuery): Promise<SearchResult[]> {
-    console.log('Semantic search not yet implemented, skipping...');
+    logWarn('Semantic search not yet implemented, skipping...', {
+      component: 'SemanticSearchStrategy',
+      operation: 'search',
+      queryText: _query.text
+    });
     return [];
   }
 

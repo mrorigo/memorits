@@ -55,13 +55,7 @@ export type {
   SearchErrorCategory,
 };
 
-// Logger interface for consistent logging across strategies
-export interface ILogger {
-  info(message: string, meta?: Record<string, unknown>): void;
-  error(message: string, meta?: Record<string, unknown>): void;
-  warn(message: string, meta?: Record<string, unknown>): void;
-  debug(message: string, meta?: Record<string, unknown>): void;
-}
+// Logger functionality is handled directly through Logger utility imports
 
 // Backup metadata interface for tracking backup information
 export interface BackupMetadata {

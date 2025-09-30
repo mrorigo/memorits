@@ -12,6 +12,7 @@
 import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy } from '../types';
 import { SearchStrategyMetadata, SearchCapability, SearchError } from '../SearchStrategy';
 import { DatabaseManager } from '../../database/DatabaseManager';
+import { logError, logWarn, logInfo } from '../../utils/Logger';
 
 /**
  * Extended query interface for metadata filtering
@@ -115,7 +116,6 @@ export class MetadataFilterStrategy implements ISearchStrategy {
   ] as const;
 
   private readonly databaseManager: DatabaseManager;
-  private readonly logger: typeof console;
   private readonly config: MetadataFilterStrategyConfig;
   private readonly cache = new Map<string, { result: SearchResult[]; timestamp: number }>();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -123,11 +123,9 @@ export class MetadataFilterStrategy implements ISearchStrategy {
   constructor(
     config: MetadataFilterStrategyConfig,
     databaseManager: DatabaseManager,
-    logger?: typeof console,
   ) {
     this.config = config;
     this.databaseManager = databaseManager;
-    this.logger = logger || console;
   }
 
   /**
@@ -199,13 +197,26 @@ export class MetadataFilterStrategy implements ISearchStrategy {
 
       // Log performance metrics
       const duration = Date.now() - startTime;
-      this.logger.info(`Metadata search completed in ${duration}ms, found ${processedResults.length} results`);
+      logInfo(`Metadata search completed in ${duration}ms, found ${processedResults.length} results`, {
+        component: 'MetadataFilterStrategy',
+        operation: 'execute',
+        strategy: this.name,
+        duration: `${duration}ms`,
+        resultCount: processedResults.length
+      });
 
       return processedResults;
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`Metadata search failed after ${duration}ms:`, error);
+      logError(`Metadata search failed after ${duration}ms`, {
+        component: 'MetadataFilterStrategy',
+        operation: 'execute',
+        strategy: this.name,
+        query: query.text,
+        duration: `${duration}ms`,
+        error: error instanceof Error ? error.message : String(error)
+      });
 
       throw new SearchError(
         `Metadata filter strategy failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -246,13 +257,26 @@ export class MetadataFilterStrategy implements ISearchStrategy {
 
       // Log performance metrics
       const duration = Date.now() - startTime;
-      this.logger.info(`Metadata search completed in ${duration}ms, found ${processedResults.length} results`);
+      logInfo(`Metadata search completed in ${duration}ms, found ${processedResults.length} results`, {
+        component: 'MetadataFilterStrategy',
+        operation: 'search',
+        strategy: this.name,
+        duration: `${duration}ms`,
+        resultCount: processedResults.length
+      });
 
       return processedResults;
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`Metadata search failed after ${duration}ms:`, error);
+      logError(`Metadata search failed after ${duration}ms`, {
+        component: 'MetadataFilterStrategy',
+        operation: 'search',
+        strategy: this.name,
+        query: query.text,
+        duration: `${duration}ms`,
+        error: error instanceof Error ? error.message : String(error)
+      });
 
       throw new SearchError(
         `Metadata filter strategy failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -591,11 +615,13 @@ export class MetadataFilterStrategy implements ISearchStrategy {
       return await db.$queryRawUnsafe(sql, ...parameters);
     } catch (error) {
       // Log detailed error information for debugging
-      this.logger.error('Metadata query execution failed with details:', {
+      logError('Metadata query execution failed with details', {
+        component: 'MetadataFilterStrategy',
+        operation: 'executeMetadataQuery',
         error: error instanceof Error ? error.message : String(error),
         sql: sql.substring(0, 500) + (sql.length > 500 ? '...' : ''), // Log first 500 chars of SQL
         parameters: parameters,
-        stack: error instanceof Error ? error.stack : undefined,
+        stack: error instanceof Error ? error.stack : undefined
       });
 
       // Re-throw with more context
@@ -636,7 +662,12 @@ export class MetadataFilterStrategy implements ISearchStrategy {
             if (this.config.validation.failOnInvalidMetadata) {
               continue; // Skip invalid metadata
             } else {
-              this.logger.warn('Invalid metadata found:', validation.errors);
+              logWarn('Invalid metadata found', {
+                component: 'MetadataFilterStrategy',
+                operation: 'processMetadataResults',
+                rowId: row.id,
+                validationErrors: validation.errors
+              });
             }
           }
         }
@@ -664,9 +695,11 @@ export class MetadataFilterStrategy implements ISearchStrategy {
         searchResults.push(searchResult);
 
       } catch (error) {
-        this.logger.warn('Error processing metadata result row:', {
+        logWarn('Error processing metadata result row', {
+          component: 'MetadataFilterStrategy',
+          operation: 'processMetadataResults',
           rowId: row.memory_id,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error as Error)
         });
         continue;
       }
@@ -1108,7 +1141,11 @@ export class MetadataFilterStrategy implements ISearchStrategy {
       return true;
 
     } catch (error) {
-      this.logger.error('Configuration validation failed:', error);
+      logError('Configuration validation failed', {
+        component: 'MetadataFilterStrategy',
+        operation: 'validateConfiguration',
+        error: error instanceof Error ? error.message : String(error)
+      });
       return false;
     }
   }

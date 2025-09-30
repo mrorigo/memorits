@@ -1,4 +1,5 @@
 import { SearchStrategy, SearchErrorContext } from './types';
+import { logError, logWarn, logInfo } from '../utils/Logger';
 
 /**
  * Error handling and recovery mechanisms module for search operations
@@ -338,11 +339,22 @@ export class SearchErrorHandler {
    * Handle critical error trends
    */
   private handleCriticalErrorTrend(trends: ErrorTrendAnalysis): void {
-    console.warn('Critical error trend detected:', trends);
+    logWarn('Critical error trend detected', {
+      component: 'SearchErrorHandler',
+      operation: 'handleCriticalErrorTrend',
+      hasCriticalTrend: trends.hasCriticalTrend,
+      strategyCount: trends.strategyTrends.size
+    });
 
     for (const [strategy, trend] of trends.strategyTrends) {
       if (trend.trendDirection === 'degrading' && trend.errorRate > 0.1) {
-        console.error(`Strategy ${strategy} showing critical error trend. Consider disabling.`);
+        logError(`Strategy ${strategy} showing critical error trend. Consider disabling.`, {
+          component: 'SearchErrorHandler',
+          operation: 'handleCriticalErrorTrend',
+          strategy,
+          errorRate: trend.errorRate,
+          trendDirection: trend.trendDirection
+        });
       }
     }
   }
@@ -355,13 +367,19 @@ export class SearchErrorHandler {
       try {
         this.errorNotificationCallback(context);
       } catch (error) {
-        console.error('Error notification callback failed:', error);
+        logError('Error notification callback failed', {
+          component: 'SearchErrorHandler',
+          operation: 'sendErrorNotification',
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
     }
 
-    console.error('Critical search error occurred', {
+    logError('Critical search error occurred', {
+      component: 'SearchErrorHandler',
+      operation: 'sendErrorNotification',
       strategy: context.strategy,
-      operation: context.operation,
+      contextOperation: context.operation,
       errorCategory: context.errorCategory,
       executionTime: context.executionTime,
       timestamp: context.timestamp,
@@ -392,12 +410,12 @@ export class SearchErrorHandler {
    */
   categorizeErrorSeverity(strategy: SearchStrategy, operation: string): 'low' | 'medium' | 'high' | 'critical' {
     switch (strategy) {
-    case SearchStrategy.FTS5:
-      return this.categorizeFTSErrorSeverity(operation);
-    case SearchStrategy.LIKE:
-      return this.categorizeLikeErrorSeverity(operation);
-    default:
-      return 'medium';
+      case SearchStrategy.FTS5:
+        return this.categorizeFTSErrorSeverity(operation);
+      case SearchStrategy.LIKE:
+        return this.categorizeLikeErrorSeverity(operation);
+      default:
+        return 'medium';
     }
   }
 
@@ -453,12 +471,23 @@ export class SearchErrorHandler {
       try {
         const recoveryResult = await strategyFn(query, error);
         if (recoveryResult && recoveryResult.length > 0) {
-          console.log(`Recovery successful using ${strategyFn.name || 'custom strategy'}`);
+          logInfo(`Recovery successful using ${strategyFn.name || 'custom strategy'}`, {
+            component: 'SearchErrorHandler',
+            operation: 'attemptStrategyRecovery',
+            strategy: strategy,
+            recoveryStrategyName: strategyFn.name || 'custom strategy'
+          });
           context.recoveryAttempts = (context.recoveryAttempts || 0) + 1;
           return recoveryResult;
         }
       } catch (recoveryError) {
-        console.warn('Recovery strategy failed:', recoveryError);
+        logWarn('Recovery strategy failed', {
+          component: 'SearchErrorHandler',
+          operation: 'attemptStrategyRecovery',
+          strategy: strategy,
+          recoveryStrategyName: strategyFn.name || 'custom strategy',
+          error: recoveryError instanceof Error ? recoveryError.message : String(recoveryError)
+        });
         continue;
       }
     }
@@ -472,14 +501,14 @@ export class SearchErrorHandler {
    */
   private getDefaultRecoveryStrategies(strategy: SearchStrategy): Array<(query: any, error: any) => Promise<any[]>> {
     switch (strategy) {
-    case SearchStrategy.FTS5:
-      return [this.recoverFTSStrategy.bind(this)];
-    case SearchStrategy.LIKE:
-      return [this.recoverLikeStrategy.bind(this)];
-    case SearchStrategy.RECENT:
-      return [this.recoverRecentStrategy.bind(this)];
-    default:
-      return [];
+      case SearchStrategy.FTS5:
+        return [this.recoverFTSStrategy.bind(this)];
+      case SearchStrategy.LIKE:
+        return [this.recoverLikeStrategy.bind(this)];
+      case SearchStrategy.RECENT:
+        return [this.recoverRecentStrategy.bind(this)];
+      default:
+        return [];
     }
   }
 
@@ -492,7 +521,11 @@ export class SearchErrorHandler {
       breaker.recordSuccess();
     }
 
-    console.log('FTS strategy recovery attempted');
+    logInfo('FTS strategy recovery attempted', {
+      component: 'SearchErrorHandler',
+      operation: 'recoverFTSStrategy',
+      strategy: SearchStrategy.FTS5
+    });
     throw new Error('FTS recovery not implemented in extracted module');
   }
 
@@ -505,7 +538,11 @@ export class SearchErrorHandler {
       breaker.recordSuccess();
     }
 
-    console.log('LIKE strategy recovery attempted');
+    logInfo('LIKE strategy recovery attempted', {
+      component: 'SearchErrorHandler',
+      operation: 'recoverLikeStrategy',
+      strategy: SearchStrategy.LIKE
+    });
     throw new Error('LIKE recovery not implemented in extracted module');
   }
 
@@ -518,7 +555,11 @@ export class SearchErrorHandler {
       breaker.recordSuccess();
     }
 
-    console.log('Recent strategy recovery attempted');
+    logInfo('Recent strategy recovery attempted', {
+      component: 'SearchErrorHandler',
+      operation: 'recoverRecentStrategy',
+      strategy: SearchStrategy.RECENT
+    });
     throw new Error('Recent strategy recovery not implemented in extracted module');
   }
 

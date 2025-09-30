@@ -6,6 +6,7 @@
 import { FilterEngine, FilterBuilder } from './FilterEngine';
 import { FilterOperator, FilterType } from './types';
 import { SearchQuery } from '../types';
+import { logInfo, logError } from '../../utils/Logger';
 
 /**
  * Example: Enhanced SearchService with filtering integration
@@ -169,7 +170,11 @@ export class FilteringExamples {
     const filterExpression = 'city = "New York" AND age >= 25';
     const result = await this.filterEngine.parseAndExecute(filterExpression, data);
 
-    console.log('Filtered results:', result.filteredItems);
+    logInfo('Filter execution completed', {
+      component: 'FilteringExamples',
+      operation: 'example1',
+      resultCount: result.filteredItems.length
+    });
   }
 
   /**
@@ -192,7 +197,11 @@ export class FilteringExamples {
 
     if (filter) {
       const result = await this.filterEngine.executeFilter(filter, data);
-      console.log('Filtered results:', result.filteredItems);
+      logInfo('Filter execution completed', {
+        component: 'FilteringExamples',
+        operation: 'example2',
+        resultCount: result.filteredItems.length
+      });
     }
   }
 
@@ -208,8 +217,12 @@ export class FilteringExamples {
       baseQuery
     );
 
-    console.log('Generated SQL:', queryResult.sql);
-    console.log('Parameters:', queryResult.parameters);
+    logInfo('Database query generation completed', {
+      component: 'FilteringExamples',
+      operation: 'example3',
+      sql: queryResult.sql,
+      parameterCount: queryResult.parameters.length
+    });
   }
 
   /**
@@ -223,10 +236,18 @@ export class FilteringExamples {
       const validation = this.filterEngine.validateFilter(filter);
 
       if (!validation.isValid) {
-        console.log('Validation errors:', validation.errors);
+        logInfo('Filter validation completed with errors', {
+          component: 'FilteringExamples',
+          operation: 'example4',
+          errorCount: validation.errors.length
+        });
       }
     } catch (error) {
-      console.log('Parse error:', error);
+      logError('Filter parsing failed', {
+        component: 'FilteringExamples',
+        operation: 'example4',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 }

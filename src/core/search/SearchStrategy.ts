@@ -1,5 +1,5 @@
 import { DatabaseManager } from '../database/DatabaseManager';
-import { ILogger } from './types';
+import { logError, logInfo } from '../utils/Logger';
 
 // SearchStrategy interface and base classes
 
@@ -7,62 +7,62 @@ import { ILogger } from './types';
  * Search capability enumeration for strategy features
  */
 export enum SearchCapability {
-    KEYWORD_SEARCH = 'keyword_search',
-    SEMANTIC_SEARCH = 'semantic_search',
-    FILTERING = 'filtering',
-    SORTING = 'sorting',
-    RELEVANCE_SCORING = 'relevance_scoring',
-    CATEGORIZATION = 'categorization',
-    TEMPORAL_FILTERING = 'temporal_filtering',
-    TIME_RANGE_PROCESSING = 'time_range_processing',
-    TEMPORAL_PATTERN_MATCHING = 'temporal_pattern_matching',
-    TEMPORAL_AGGREGATION = 'temporal_aggregation',
+  KEYWORD_SEARCH = 'keyword_search',
+  SEMANTIC_SEARCH = 'semantic_search',
+  FILTERING = 'filtering',
+  SORTING = 'sorting',
+  RELEVANCE_SCORING = 'relevance_scoring',
+  CATEGORIZATION = 'categorization',
+  TEMPORAL_FILTERING = 'temporal_filtering',
+  TIME_RANGE_PROCESSING = 'time_range_processing',
+  TEMPORAL_PATTERN_MATCHING = 'temporal_pattern_matching',
+  TEMPORAL_AGGREGATION = 'temporal_aggregation',
 }
 
 /**
  * Search query interface for strategy operations
  */
 export interface SearchQuery {
-    /** The search text/query string */
-    text: string;
-    /** Maximum number of results to return */
-    limit?: number;
-    /** Number of results to skip for pagination */
-    offset?: number;
-    /** Key-value pairs for simple filtering */
-    filters?: Record<string, unknown>;
-    /**
-     * Advanced filter expression that will be parsed and executed by AdvancedFilterEngine.
-     * This field accepts filter expressions as strings that support complex boolean logic,
-     * field comparisons, and nested conditions. When provided, this takes precedence over
-     * the simple filters field for more sophisticated filtering requirements.
-     */
-    filterExpression?: string;
-    /** Sort configuration for results */
-    sortBy?: {
-        /** Field name to sort by */
-        field: string;
-        /** Sort direction */
-        direction: 'asc' | 'desc';
-    };
-    /** Whether to include metadata in search results */
-    includeMetadata?: boolean;
-    /** Additional context information for the search operation */
-    context?: Record<string, unknown>;
+  /** The search text/query string */
+  text: string;
+  /** Maximum number of results to return */
+  limit?: number;
+  /** Number of results to skip for pagination */
+  offset?: number;
+  /** Key-value pairs for simple filtering */
+  filters?: Record<string, unknown>;
+  /**
+   * Advanced filter expression that will be parsed and executed by AdvancedFilterEngine.
+   * This field accepts filter expressions as strings that support complex boolean logic,
+   * field comparisons, and nested conditions. When provided, this takes precedence over
+   * the simple filters field for more sophisticated filtering requirements.
+   */
+  filterExpression?: string;
+  /** Sort configuration for results */
+  sortBy?: {
+    /** Field name to sort by */
+    field: string;
+    /** Sort direction */
+    direction: 'asc' | 'desc';
+  };
+  /** Whether to include metadata in search results */
+  includeMetadata?: boolean;
+  /** Additional context information for the search operation */
+  context?: Record<string, unknown>;
 }
 
 /**
  * Search result interface with standardized structure
  */
 export interface SearchResult {
-    id: string;
-    content: string;
-    metadata: Record<string, unknown>;
-    score: number;
-    strategy: string;
-    timestamp: Date;
-    error?: string;
-    context?: Record<string, unknown>;
+  id: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  score: number;
+  strategy: string;
+  timestamp: Date;
+  error?: string;
+  context?: Record<string, unknown>;
 }
 
 /**
@@ -95,94 +95,94 @@ export interface EnhancedErrorContext {
  * Standardized error context interface for consistent debugging
  */
 export interface SearchErrorContext {
-   strategy: string;
-   operation: string;
-   query?: string;
-   parameters?: Record<string, unknown>;
-   duration?: number;
-   timestamp: Date;
-   executionTime?: number;
-   databaseState?: {
-     connectionStatus: 'connected' | 'disconnected' | 'error';
-     lastError?: string;
-     queryCount?: number;
-   };
-   systemContext?: {
-     memoryUsage?: number;
-     availableMemory?: number;
-     cpuUsage?: number;
-   };
-   systemState?: {
-     memoryUsage: number;
-     activeConnections: number;
-     databaseStatus: string;
-   };
-   errorCategory?: 'low' | 'medium' | 'high' | 'critical';
-   recoveryAttempts?: number;
-   circuitBreakerState?: 'closed' | 'open' | 'half-open';
+  strategy: string;
+  operation: string;
+  query?: string;
+  parameters?: Record<string, unknown>;
+  duration?: number;
+  timestamp: Date;
+  executionTime?: number;
+  databaseState?: {
+    connectionStatus: 'connected' | 'disconnected' | 'error';
+    lastError?: string;
+    queryCount?: number;
+  };
+  systemContext?: {
+    memoryUsage?: number;
+    availableMemory?: number;
+    cpuUsage?: number;
+  };
+  systemState?: {
+    memoryUsage: number;
+    activeConnections: number;
+    databaseStatus: string;
+  };
+  errorCategory?: 'low' | 'medium' | 'high' | 'critical';
+  recoveryAttempts?: number;
+  circuitBreakerState?: 'closed' | 'open' | 'half-open';
 }
 
 /**
  * Enhanced error categories for better error classification
  */
 export enum SearchErrorCategory {
-    VALIDATION = 'validation',
-    EXECUTION = 'execution',
-    DATABASE = 'database',
-    TIMEOUT = 'timeout',
-    CONFIGURATION = 'configuration',
-    AUTHENTICATION = 'authentication',
-    AUTHORIZATION = 'authorization',
-    NETWORK = 'network',
-    PARSE = 'parse',
-    TRANSFORMATION = 'transformation',
-    UNKNOWN = 'unknown'
+  VALIDATION = 'validation',
+  EXECUTION = 'execution',
+  DATABASE = 'database',
+  TIMEOUT = 'timeout',
+  CONFIGURATION = 'configuration',
+  AUTHENTICATION = 'authentication',
+  AUTHORIZATION = 'authorization',
+  NETWORK = 'network',
+  PARSE = 'parse',
+  TRANSFORMATION = 'transformation',
+  UNKNOWN = 'unknown'
 }
 
 /**
  * Search strategy metadata for runtime information
  */
 export interface SearchStrategyMetadata {
-    name: string;
-    version: string;
-    description: string;
-    capabilities: SearchCapability[];
-    supportedMemoryTypes: ('short_term' | 'long_term')[];
-    configurationSchema?: Record<string, unknown>;
-    performanceMetrics?: {
-        averageResponseTime: number;
-        throughput: number;
-        memoryUsage: number;
-    };
+  name: string;
+  version: string;
+  description: string;
+  capabilities: SearchCapability[];
+  supportedMemoryTypes: ('short_term' | 'long_term')[];
+  configurationSchema?: Record<string, unknown>;
+  performanceMetrics?: {
+    averageResponseTime: number;
+    throughput: number;
+    memoryUsage: number;
+  };
 }
 
 /**
  * Search strategy configuration interface
  */
 export interface SearchStrategyConfig {
-    enabled: boolean;
-    priority: number;
-    timeout: number;
-    maxResults: number;
-    minScore: number;
-    options?: Record<string, unknown>;
+  enabled: boolean;
+  priority: number;
+  timeout: number;
+  maxResults: number;
+  minScore: number;
+  options?: Record<string, unknown>;
 }
 
 /**
  * SearchStrategy interface
  */
 export interface ISearchStrategy {
-    readonly name: string;
-    readonly description: string;
-    readonly capabilities: readonly SearchCapability[];
-    readonly priority: number;
-    readonly supportedMemoryTypes: readonly ('short_term' | 'long_term')[];
+  readonly name: string;
+  readonly description: string;
+  readonly capabilities: readonly SearchCapability[];
+  readonly priority: number;
+  readonly supportedMemoryTypes: readonly ('short_term' | 'long_term')[];
 
-    canHandle(query: SearchQuery): boolean;
-    search(query: SearchQuery): Promise<SearchResult[]>;
-    execute(query: SearchQuery, dbManager: DatabaseManager): Promise<SearchResult[]>;
-    getMetadata(): SearchStrategyMetadata;
-    validateConfiguration(): Promise<boolean>;
+  canHandle(query: SearchQuery): boolean;
+  search(query: SearchQuery): Promise<SearchResult[]>;
+  execute(query: SearchQuery, dbManager: DatabaseManager): Promise<SearchResult[]>;
+  getMetadata(): SearchStrategyMetadata;
+  validateConfiguration(): Promise<boolean>;
 }
 
 /**
@@ -191,385 +191,413 @@ export interface ISearchStrategy {
 export abstract class BaseSearchStrategy implements ISearchStrategy {
   protected readonly config: SearchStrategyConfig;
   protected readonly databaseManager: DatabaseManager;
-  protected readonly logger: ILogger;
 
-    abstract readonly name: string;
-    abstract readonly description: string;
-    abstract readonly capabilities: readonly SearchCapability[];
-    abstract readonly priority: number;
-    abstract readonly supportedMemoryTypes: readonly ('short_term' | 'long_term')[];
+  abstract readonly name: string;
+  abstract readonly description: string;
+  abstract readonly capabilities: readonly SearchCapability[];
+  abstract readonly priority: number;
+  abstract readonly supportedMemoryTypes: readonly ('short_term' | 'long_term')[];
 
-    constructor(config: SearchStrategyConfig, databaseManager: DatabaseManager, logger?: ILogger) {
-      this.config = config;
-      this.databaseManager = databaseManager;
-      this.logger = logger || console;
-    }
+  constructor(config: SearchStrategyConfig, databaseManager: DatabaseManager) {
+    this.config = config;
+    this.databaseManager = databaseManager;
+  }
 
-    abstract canHandle(query: SearchQuery): boolean;
-    abstract search(query: SearchQuery): Promise<SearchResult[]>;
-    abstract execute(query: SearchQuery, dbManager: DatabaseManager): Promise<SearchResult[]>;
+  abstract canHandle(query: SearchQuery): boolean;
+  abstract search(query: SearchQuery): Promise<SearchResult[]>;
+  abstract execute(query: SearchQuery, dbManager: DatabaseManager): Promise<SearchResult[]>;
 
-    /**
-     * Get metadata about this search strategy
-     */
-    getMetadata(): SearchStrategyMetadata {
-      return {
-        name: this.name,
-        version: '1.0.0',
-        description: this.description,
-        capabilities: [...this.capabilities],
-        supportedMemoryTypes: ['short_term', 'long_term'],
-        configurationSchema: this.getConfigurationSchema(),
-        performanceMetrics: this.getPerformanceMetrics(),
-      };
-    }
+  /**
+   * Get metadata about this search strategy
+   */
+  getMetadata(): SearchStrategyMetadata {
+    return {
+      name: this.name,
+      version: '1.0.0',
+      description: this.description,
+      capabilities: [...this.capabilities],
+      supportedMemoryTypes: ['short_term', 'long_term'],
+      configurationSchema: this.getConfigurationSchema(),
+      performanceMetrics: this.getPerformanceMetrics(),
+    };
+  }
 
-    /**
-     * Validate the current configuration
-     */
-    async validateConfiguration(): Promise<boolean> {
-      try {
-        if (!this.config.enabled) {
-          return true; // Disabled strategies are considered valid
-        }
-
-        if (this.config.priority < 0 || this.config.priority > 100) {
-          throw new Error('Priority must be between 0 and 100');
-        }
-
-        if (this.config.timeout < 1000 || this.config.timeout > 30000) {
-          throw new Error('Timeout must be between 1000ms and 30000ms');
-        }
-
-        if (this.config.maxResults < 1 || this.config.maxResults > 1000) {
-          throw new Error('MaxResults must be between 1 and 1000');
-        }
-
-        if (this.config.minScore < 0 || this.config.minScore > 1) {
-          throw new Error('MinScore must be between 0 and 1');
-        }
-
-        return this.validateStrategyConfiguration();
-      } catch (error) {
-        this.logger.error(`Configuration validation failed for ${this.name}:`, {
-          error: error instanceof Error ? error.message : String(error),
-          strategy: this.name,
-        });
-        return false;
+  /**
+   * Validate the current configuration
+   */
+  async validateConfiguration(): Promise<boolean> {
+    try {
+      if (!this.config.enabled) {
+        return true; // Disabled strategies are considered valid
       }
-    }
 
-    /**
-     * Create a standardized search result
-     */
-    protected createSearchResult(
-      id: string,
-      content: string,
-      metadata: Record<string, unknown>,
-      score: number,
-    ): SearchResult {
-      return {
-        id,
-        content,
-        metadata: {
-          strategy: this.name,
-          createdAt: new Date(),
-          ...metadata,
-        },
-        score: Math.max(0, Math.min(1, score)), // Clamp score between 0 and 1
-        strategy: this.name,
-        timestamp: new Date(),
-      };
-    }
+      if (this.config.priority < 0 || this.config.priority > 100) {
+        throw new Error('Priority must be between 0 and 100');
+      }
 
-    /**
-     * Create an error search result
-     */
-    protected createErrorResult(
-      error: string,
-      context: Record<string, unknown> = {},
-    ): SearchResult {
-      return {
-        id: '',
-        content: '',
-        metadata: {
-          error: true,
-          strategy: this.name,
-          ...context,
-        },
-        score: 0,
-        strategy: this.name,
-        timestamp: new Date(),
-        error,
-      };
-    }
+      if (this.config.timeout < 1000 || this.config.timeout > 30000) {
+        throw new Error('Timeout must be between 1000ms and 30000ms');
+      }
 
-    /**
-     * Log search operation metrics
-     */
-    protected logSearchOperation(operation: string, duration: number, resultCount: number): void {
-      this.logger.info(`Search operation: ${operation}`, {
+      if (this.config.maxResults < 1 || this.config.maxResults > 1000) {
+        throw new Error('MaxResults must be between 1 and 1000');
+      }
+
+      if (this.config.minScore < 0 || this.config.minScore > 1) {
+        throw new Error('MinScore must be between 0 and 1');
+      }
+
+      return this.validateStrategyConfiguration();
+    } catch (error) {
+      logError(`Configuration validation failed for ${this.name}`, {
+        component: 'BaseSearchStrategy',
+        operation: 'validateConfiguration',
         strategy: this.name,
-        duration: `${duration}ms`,
-        resultCount,
-        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error)
       });
+      return false;
     }
+  }
 
-    /**
-     * Handle search errors with enhanced context and structured logging
-     */
-    protected handleSearchError(
-      error: unknown,
-      operation: string,
-      context?: Record<string, unknown>,
-      category: SearchErrorCategory = SearchErrorCategory.EXECUTION,
-    ): SearchError {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const startTime = context?.startTime as number || Date.now();
-      const executionTime = Date.now() - startTime;
-
-      // Determine severity based on error type and context
-      const severity = this.determineErrorSeverity(error, category, executionTime);
-
-      // Build comprehensive error context
-      const errorContext: EnhancedErrorContext = {
+  /**
+   * Create a standardized search result
+   */
+  protected createSearchResult(
+    id: string,
+    content: string,
+    metadata: Record<string, unknown>,
+    score: number,
+  ): SearchResult {
+    return {
+      id,
+      content,
+      metadata: {
         strategy: this.name,
-        operation,
-        query: context?.query as string || '',
-        parameters: context || {},
-        executionTime,
-        timestamp: new Date(),
-        severity,
-        databaseState: this.getDatabaseState(),
-        systemContext: this.getSystemContext(),
-        originalError: error instanceof Error ? error : undefined,
+        createdAt: new Date(),
+        ...metadata,
+      },
+      score: Math.max(0, Math.min(1, score)), // Clamp score between 0 and 1
+      strategy: this.name,
+      timestamp: new Date(),
+    };
+  }
+
+  /**
+   * Create an error search result
+   */
+  protected createErrorResult(
+    error: string,
+    context: Record<string, unknown> = {},
+  ): SearchResult {
+    return {
+      id: '',
+      content: '',
+      metadata: {
+        error: true,
+        strategy: this.name,
+        ...context,
+      },
+      score: 0,
+      strategy: this.name,
+      timestamp: new Date(),
+      error,
+    };
+  }
+
+  /**
+   * Log search operation metrics
+   */
+  protected logSearchOperation(operation: string, duration: number, resultCount: number): void {
+    logInfo(`Search operation: ${operation}`, {
+      component: 'BaseSearchStrategy',
+      operation,
+      strategy: this.name,
+      duration: `${duration}ms`,
+      resultCount,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Handle search errors with enhanced context and structured logging
+   */
+  protected handleSearchError(
+    error: unknown,
+    operation: string,
+    context?: Record<string, unknown>,
+    category: SearchErrorCategory = SearchErrorCategory.EXECUTION,
+  ): SearchError {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const startTime = context?.startTime as number || Date.now();
+    const executionTime = Date.now() - startTime;
+
+    // Determine severity based on error type and context
+    const severity = this.determineErrorSeverity(error, category, executionTime);
+
+    // Build comprehensive error context
+    const errorContext: EnhancedErrorContext = {
+      strategy: this.name,
+      operation,
+      query: context?.query as string || '',
+      parameters: context || {},
+      executionTime,
+      timestamp: new Date(),
+      severity,
+      databaseState: this.getDatabaseState(),
+      systemContext: this.getSystemContext(),
+      originalError: error instanceof Error ? error : undefined,
+    };
+
+    const searchError = new SearchError(
+      `Search strategy ${this.name} failed during ${operation}: ${errorMessage}`,
+      this.name,
+      errorContext,
+      error instanceof Error ? error : undefined,
+      category,
+    );
+
+    // Enhanced structured logging
+    logError('Search strategy error', {
+      component: 'BaseSearchStrategy',
+      operation: 'handleSearchError',
+      strategy: this.name,
+      ...searchError.getErrorSummary()
+    });
+
+    return searchError;
+  }
+
+  /**
+   * Handle database-specific errors with database context
+   */
+  protected handleDatabaseError(
+    error: unknown,
+    operation: string,
+    query?: string,
+    context?: Record<string, unknown>,
+  ): SearchDatabaseError {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    const dbContext: SearchErrorContext = {
+      strategy: this.name,
+      operation,
+      query,
+      parameters: context,
+      timestamp: new Date(),
+      databaseState: this.getDatabaseState(),
+    };
+
+    // Use dbContext to avoid unused variable warning
+    logError('Database error context', {
+      component: 'BaseSearchStrategy',
+      operation: 'handleDatabaseError',
+      strategy: this.name,
+      dbContext
+    });
+
+    const dbError = new SearchDatabaseError(
+      this.name,
+      errorMessage,
+      operation,
+      context,
+      error instanceof Error ? error : undefined,
+    );
+
+    logError('Database error', {
+      component: 'BaseSearchStrategy',
+      operation: 'handleDatabaseError',
+      strategy: this.name,
+      ...dbError.getErrorSummary()
+    });
+
+    return dbError;
+  }
+
+  /**
+   * Handle validation errors with field-specific context
+   */
+  protected handleValidationError(
+    message: string,
+    field?: string,
+    value?: unknown,
+    context?: Record<string, unknown>,
+  ): SearchValidationError {
+    const validationError = new SearchValidationError(
+      message,
+      field,
+      value,
+      this.name,
+      context,
+    );
+
+    logError('Validation error', {
+      component: 'BaseSearchStrategy',
+      operation: 'handleValidationError',
+      strategy: this.name,
+      ...validationError.getErrorSummary()
+    });
+
+    return validationError;
+  }
+
+  /**
+   * Handle timeout errors with timeout context
+   */
+  protected handleTimeoutError(
+    timeout: number,
+    operation: string,
+    context?: Record<string, unknown>,
+  ): SearchTimeoutError {
+    const timeoutError = new SearchTimeoutError(
+      this.name,
+      timeout,
+      operation,
+      context,
+    );
+
+    logError('Timeout error', {
+      component: 'BaseSearchStrategy',
+      operation: 'handleTimeoutError',
+      strategy: this.name,
+      ...timeoutError.getErrorSummary()
+    });
+
+    return timeoutError;
+  }
+
+  /**
+   * Get current database state for error context
+   */
+  private getDatabaseState(): SearchErrorContext['databaseState'] {
+    try {
+      const dbManager = this.databaseManager as any;
+      return {
+        connectionStatus: dbManager?.isConnected ? 'connected' : 'disconnected',
+        lastError: dbManager?.lastError,
+        queryCount: dbManager?.queryCount,
       };
-
-      const searchError = new SearchError(
-        `Search strategy ${this.name} failed during ${operation}: ${errorMessage}`,
-        this.name,
-        errorContext,
-        error instanceof Error ? error : undefined,
-        category,
-      );
-
-      // Enhanced structured logging
-      this.logger.error('Search strategy error:', searchError.getErrorSummary());
-
-      return searchError;
-    }
-
-    /**
-     * Handle database-specific errors with database context
-     */
-    protected handleDatabaseError(
-      error: unknown,
-      operation: string,
-      query?: string,
-      context?: Record<string, unknown>,
-    ): SearchDatabaseError {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      const dbContext: SearchErrorContext = {
-          strategy: this.name,
-          operation,
-          query,
-          parameters: context,
-          timestamp: new Date(),
-          databaseState: this.getDatabaseState(),
+    } catch {
+      return {
+        connectionStatus: 'error',
       };
+    }
+  }
 
-      // Use dbContext to avoid unused variable warning
-      console.error('Database error context:', dbContext);
-
-      const dbError = new SearchDatabaseError(
-        this.name,
-        errorMessage,
-        operation,
-        context,
-        error instanceof Error ? error : undefined,
-      );
-
-      this.logger.error('Database error:', dbError.getErrorSummary());
-
-      return dbError;
+  /**
+   * Determine error severity based on error type and context
+   */
+  private determineErrorSeverity(
+    error: unknown,
+    category: SearchErrorCategory,
+    executionTime: number,
+  ): 'low' | 'medium' | 'high' | 'critical' {
+    // Critical errors - database connection failures, authentication issues
+    if (category === SearchErrorCategory.DATABASE ||
+      category === SearchErrorCategory.AUTHENTICATION ||
+      category === SearchErrorCategory.AUTHORIZATION) {
+      return 'critical';
     }
 
-    /**
-     * Handle validation errors with field-specific context
-     */
-    protected handleValidationError(
-      message: string,
-      field?: string,
-      value?: unknown,
-      context?: Record<string, unknown>,
-    ): SearchValidationError {
-      const validationError = new SearchValidationError(
-        message,
-        field,
-        value,
-        this.name,
-        context,
-      );
-
-      this.logger.error('Validation error:', validationError.getErrorSummary());
-
-      return validationError;
+    // High severity - timeouts, configuration errors
+    if (category === SearchErrorCategory.TIMEOUT ||
+      category === SearchErrorCategory.CONFIGURATION) {
+      return 'high';
     }
 
-    /**
-     * Handle timeout errors with timeout context
-     */
-    protected handleTimeoutError(
-      timeout: number,
-      operation: string,
-      context?: Record<string, unknown>,
-    ): SearchTimeoutError {
-      const timeoutError = new SearchTimeoutError(
-        this.name,
-        timeout,
-        operation,
-        context,
-      );
-
-      this.logger.error('Timeout error:', timeoutError.getErrorSummary());
-
-      return timeoutError;
-    }
-
-    /**
-     * Get current database state for error context
-     */
-    private getDatabaseState(): SearchErrorContext['databaseState'] {
-      try {
-        const dbManager = this.databaseManager as any;
-        return {
-          connectionStatus: dbManager?.isConnected ? 'connected' : 'disconnected',
-          lastError: dbManager?.lastError,
-          queryCount: dbManager?.queryCount,
-        };
-      } catch {
-        return {
-          connectionStatus: 'error',
-        };
-      }
-    }
-
-    /**
-     * Determine error severity based on error type and context
-     */
-    private determineErrorSeverity(
-      error: unknown,
-      category: SearchErrorCategory,
-      executionTime: number,
-    ): 'low' | 'medium' | 'high' | 'critical' {
-      // Critical errors - database connection failures, authentication issues
-      if (category === SearchErrorCategory.DATABASE ||
-            category === SearchErrorCategory.AUTHENTICATION ||
-            category === SearchErrorCategory.AUTHORIZATION) {
-        return 'critical';
-      }
-
-      // High severity - timeouts, configuration errors
-      if (category === SearchErrorCategory.TIMEOUT ||
-            category === SearchErrorCategory.CONFIGURATION) {
-        return 'high';
-      }
-
-      // Medium severity - execution errors with long execution time
-      if (category === SearchErrorCategory.EXECUTION && executionTime > 10000) {
-        return 'medium';
-      }
-
-      // Low severity - validation errors, parse errors
-      if (category === SearchErrorCategory.VALIDATION ||
-            category === SearchErrorCategory.PARSE) {
-        return 'low';
-      }
-
-      // Default to medium for unknown cases
+    // Medium severity - execution errors with long execution time
+    if (category === SearchErrorCategory.EXECUTION && executionTime > 10000) {
       return 'medium';
     }
 
-    /**
-     * Get system context for error reporting
-     */
-    private getSystemContext(): EnhancedErrorContext['systemContext'] {
-        try {
-            // Access process information for memory usage (Node.js environment)
-            if (typeof process !== 'undefined' && process.memoryUsage) {
-                return {
-                    memoryUsage: process.memoryUsage().heapUsed,
-                    availableMemory: process.memoryUsage().heapTotal,
-                };
-            }
-            return {};
-        } catch {
-            return {};
-        }
+    // Low severity - validation errors, parse errors
+    if (category === SearchErrorCategory.VALIDATION ||
+      category === SearchErrorCategory.PARSE) {
+      return 'low';
     }
 
-    /**
-     * Execute operation with standardized error handling and timeout
-     */
-    protected async executeWithErrorHandling<T>(
-      operation: string,
-      operationFn: () => Promise<T>,
-      context?: Record<string, unknown>,
-      timeoutMs?: number,
-    ): Promise<T> {
-      const startTime = Date.now();
-      const timeout = timeoutMs || this.config.timeout;
+    // Default to medium for unknown cases
+    return 'medium';
+  }
 
-      const enhancedContext = { ...context, startTime };
-
-      try {
-        // Execute with timeout
-        const result = await Promise.race([
-          operationFn(),
-          new Promise<never>((_, reject) => {
-            setTimeout(() => {
-              reject(this.handleTimeoutError(timeout, operation, enhancedContext));
-            }, timeout);
-          }),
-        ]);
-
-        // Log successful operation
-        const duration = Date.now() - startTime;
-        this.logger.info(`Search operation completed: ${operation}`, {
-          strategy: this.name,
-          operation,
-          duration: `${duration}ms`,
-          success: true,
-          timestamp: new Date().toISOString(),
-        });
-
-        return result;
-      } catch (error) {
-        if (error instanceof SearchError) {
-          throw error; // Already properly formatted
-        }
-
-        // Handle unknown errors
-        throw this.handleSearchError(error, operation, enhancedContext);
+  /**
+   * Get system context for error reporting
+   */
+  private getSystemContext(): EnhancedErrorContext['systemContext'] {
+    try {
+      // Access process information for memory usage (Node.js environment)
+      if (typeof process !== 'undefined' && process.memoryUsage) {
+        return {
+          memoryUsage: process.memoryUsage().heapUsed,
+          availableMemory: process.memoryUsage().heapTotal,
+        };
       }
+      return {};
+    } catch {
+      return {};
     }
+  }
 
-    /**
-     * Validate strategy-specific configuration
-     */
-    protected abstract validateStrategyConfiguration(): boolean;
+  /**
+   * Execute operation with standardized error handling and timeout
+   */
+  protected async executeWithErrorHandling<T>(
+    operation: string,
+    operationFn: () => Promise<T>,
+    context?: Record<string, unknown>,
+    timeoutMs?: number,
+  ): Promise<T> {
+    const startTime = Date.now();
+    const timeout = timeoutMs || this.config.timeout;
 
-    /**
-     * Get configuration schema for this strategy
-     */
-    protected abstract getConfigurationSchema(): Record<string, unknown>;
+    const enhancedContext = { ...context, startTime };
 
-    /**
-     * Get performance metrics for this strategy
-     */
-    protected abstract getPerformanceMetrics(): SearchStrategyMetadata['performanceMetrics'];
+    try {
+      // Execute with timeout
+      const result = await Promise.race([
+        operationFn(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(this.handleTimeoutError(timeout, operation, enhancedContext));
+          }, timeout);
+        }),
+      ]);
+
+      // Log successful operation
+      const duration = Date.now() - startTime;
+      logInfo(`Search operation completed: ${operation}`, {
+        component: 'BaseSearchStrategy',
+        operation,
+        strategy: this.name,
+        duration: `${duration}ms`,
+        success: true,
+        timestamp: new Date().toISOString(),
+      });
+
+      return result;
+    } catch (error) {
+      if (error instanceof SearchError) {
+        throw error; // Already properly formatted
+      }
+
+      // Handle unknown errors
+      throw this.handleSearchError(error, operation, enhancedContext);
+    }
+  }
+
+  /**
+   * Validate strategy-specific configuration
+   */
+  protected abstract validateStrategyConfiguration(): boolean;
+
+  /**
+   * Get configuration schema for this strategy
+   */
+  protected abstract getConfigurationSchema(): Record<string, unknown>;
+
+  /**
+   * Get performance metrics for this strategy
+   */
+  protected abstract getPerformanceMetrics(): SearchStrategyMetadata['performanceMetrics'];
 }
 
 /**
@@ -631,11 +659,11 @@ export class SearchResultBuilder {
      */
   static createBatch(
     results: Array<{
-            id: string;
-            content: string;
-            metadata?: Record<string, unknown>;
-            score: number;
-        }>,
+      id: string;
+      content: string;
+      metadata?: Record<string, unknown>;
+      score: number;
+    }>,
     strategy: string,
   ): SearchResult[] {
     return results.map(result =>
@@ -654,11 +682,11 @@ export class SearchResultBuilder {
      */
   static createWithNormalizedScores(
     results: Array<{
-            id: string;
-            content: string;
-            metadata?: Record<string, unknown>;
-            rawScore: number;
-        }>,
+      id: string;
+      content: string;
+      metadata?: Record<string, unknown>;
+      rawScore: number;
+    }>,
     strategy: string,
     normalizationFactor: number = 1,
   ): SearchResult[] {
@@ -685,10 +713,10 @@ export class SearchError extends Error {
 
   constructor(
     message: string,
-        public readonly strategy?: string,
-        context?: Record<string, unknown> | SearchErrorContext,
-        public readonly cause?: Error,
-        category: SearchErrorCategory = SearchErrorCategory.UNKNOWN,
+    public readonly strategy?: string,
+    context?: Record<string, unknown> | SearchErrorContext,
+    public readonly cause?: Error,
+    category: SearchErrorCategory = SearchErrorCategory.UNKNOWN,
   ) {
     super(message);
     this.name = 'SearchError';
@@ -999,9 +1027,9 @@ export class StrategyValidator {
  * Validation result interface
  */
 export interface ValidationResult {
-    isValid: boolean;
-    errors: string[];
-    warnings: string[];
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 /**
@@ -1117,11 +1145,11 @@ export class SearchErrorHandler {
 
     // Add system information if available
     try {
-        if (typeof process !== 'undefined' && process.memoryUsage) {
-            metadata.memoryUsage = process.memoryUsage().heapUsed;
-        }
+      if (typeof process !== 'undefined' && process.memoryUsage) {
+        metadata.memoryUsage = process.memoryUsage().heapUsed;
+      }
     } catch {
-        // Ignore process module errors
+      // Ignore process module errors
     }
 
     return metadata;

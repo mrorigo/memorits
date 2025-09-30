@@ -1,6 +1,7 @@
 import { SearchCapability, SearchStrategyMetadata, BaseSearchStrategy, SearchQuery, SearchResult, SearchStrategyConfig } from './SearchStrategy';
-import { SearchStrategy, ILogger, DatabaseQueryResult } from './types';
+import { SearchStrategy, DatabaseQueryResult } from './types';
 import { DatabaseManager } from '../database/DatabaseManager';
+import { logError, logWarn } from '../utils/Logger';
 
 /**
  * Configuration interface for time-based relevance scoring
@@ -83,8 +84,8 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     minRangeMs: 60 * 1000, // 1 minute
   };
 
-  constructor(config: SearchStrategyConfig, databaseManager: DatabaseManager, logger?: ILogger) {
-    super(config, databaseManager, logger);
+  constructor(config: SearchStrategyConfig, databaseManager: DatabaseManager) {
+    super(config, databaseManager);
   }
 
   /**
@@ -424,7 +425,9 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     try {
       return await db.$queryRawUnsafe(sql, ...parameters);
     } catch (error) {
-      this.logger.error('Temporal query execution failed:', {
+      logError('Temporal query execution failed', {
+        component: 'RecentMemoriesStrategy',
+        operation: 'executeTemporalQuery',
         error: error instanceof Error ? error.message : String(error)
       });
       throw new Error(`Temporal query failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -471,9 +474,11 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
         searchResults.push(searchResult);
 
       } catch (error) {
-        this.logger.warn('Error processing temporal result row:', {
+        logWarn('Error processing temporal result row', {
+          component: 'RecentMemoriesStrategy',
+          operation: 'processTemporalResults',
           rowId: row.memory_id,
-          error: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.message : String(error)
         });
         continue;
       }

@@ -1,6 +1,7 @@
 import { SearchCapability, SearchStrategyMetadata, SearchStrategyError } from './SearchStrategy';
-import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy, ILogger, DatabaseQueryResult } from './types';
+import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy, DatabaseQueryResult } from './types';
 import { DatabaseManager } from '../database/DatabaseManager';
+import { logError, logWarn, logInfo } from '../utils/Logger';
 
 /**
  * Comprehensive LIKE-based search strategy implementation
@@ -34,11 +35,9 @@ export class LikeSearchStrategy implements ISearchStrategy {
   };
 
   private readonly databaseManager: DatabaseManager;
-  private readonly logger: ILogger;
 
-  constructor(databaseManager: DatabaseManager, logger?: ILogger) {
+  constructor(databaseManager: DatabaseManager) {
     this.databaseManager = databaseManager;
-    this.logger = logger || console;
   }
 
   /**
@@ -66,7 +65,13 @@ export class LikeSearchStrategy implements ISearchStrategy {
 
       // Log performance metrics
       const duration = Date.now() - startTime;
-      this.logger.info(`LIKE search completed in ${duration}ms, found ${processedResults.length} results`);
+      logInfo(`LIKE search completed in ${duration}ms, found ${processedResults.length} results`, {
+        component: 'LikeSearchStrategy',
+        operation: 'execute',
+        strategy: this.name,
+        duration: `${duration}ms`,
+        resultCount: processedResults.length
+      });
 
       return processedResults;
 
@@ -91,13 +96,15 @@ export class LikeSearchStrategy implements ISearchStrategy {
       };
 
       // Log detailed error information
-      this.logger.error(`LIKE search failed after ${duration}ms:`, {
-        error: error instanceof Error ? error.message : String(error),
+      logError(`LIKE search failed after ${duration}ms`, {
+        component: 'LikeSearchStrategy',
+        operation: 'search',
         strategy: this.name,
         query: query.text,
         executionTime: duration,
         errorCategory: this.categorizeLikeError(error),
         databaseState: this.getDatabaseState(),
+        error: error instanceof Error ? error.message : String(error)
       });
 
       throw new SearchStrategyError(
@@ -127,13 +134,22 @@ export class LikeSearchStrategy implements ISearchStrategy {
 
       // Log performance metrics
       const duration = Date.now() - startTime;
-      this.logger.info(`LIKE search completed in ${duration}ms, found ${processedResults.length} results`);
+      logInfo(`LIKE search completed in ${duration}ms, found ${processedResults.length} results`, {
+        component: 'LikeSearchStrategy',
+        operation: 'search',
+        strategy: this.name,
+        duration: `${duration}ms`,
+        resultCount: processedResults.length
+      });
 
       return processedResults;
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`LIKE search failed after ${duration}ms:`, {
+      logError(`LIKE search failed after ${duration}ms`, {
+        component: 'LikeSearchStrategy',
+        operation: 'execute',
+        strategy: this.name,
         error: error instanceof Error ? error.message : String(error),
         duration: `${duration}ms`
       });
@@ -398,9 +414,11 @@ export class LikeSearchStrategy implements ISearchStrategy {
         });
 
       } catch (error) {
-        this.logger.warn('Error processing LIKE result row:', {
+        logWarn('Error processing LIKE result row', {
+          component: 'LikeSearchStrategy',
+          operation: 'processLikeResults',
           rowId: row.memory_id,
-          error: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.message : String(error)
         });
         continue;
       }
@@ -496,63 +514,63 @@ export class LikeSearchStrategy implements ISearchStrategy {
   /**
     * Validate strategy-specific configuration
     */
-   protected validateStrategyConfiguration(): boolean {
-     // Validate wildcard sensitivity
-     const validSensitivities = ['low', 'medium', 'high'];
-     if (!validSensitivities.includes(this.likeConfig.wildcardSensitivity)) {
-       return false;
-     }
+  protected validateStrategyConfiguration(): boolean {
+    // Validate wildcard sensitivity
+    const validSensitivities = ['low', 'medium', 'high'];
+    if (!validSensitivities.includes(this.likeConfig.wildcardSensitivity)) {
+      return false;
+    }
 
-     // Validate max wildcard terms
-     if (this.likeConfig.maxWildcardTerms < 1 || this.likeConfig.maxWildcardTerms > 50) {
-       return false;
-     }
+    // Validate max wildcard terms
+    if (this.likeConfig.maxWildcardTerms < 1 || this.likeConfig.maxWildcardTerms > 50) {
+      return false;
+    }
 
-     return true;
-   }
+    return true;
+  }
 
-   /**
-    * Categorize LIKE-specific errors for better error handling
-    */
-   private categorizeLikeError(error: unknown): string {
-     const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  /**
+   * Categorize LIKE-specific errors for better error handling
+   */
+  private categorizeLikeError(error: unknown): string {
+    const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
 
-     if (errorMessage.includes('syntax error') || errorMessage.includes('malformed query')) {
-       return 'high'; // Query syntax issues
-     }
+    if (errorMessage.includes('syntax error') || errorMessage.includes('malformed query')) {
+      return 'high'; // Query syntax issues
+    }
 
-     if (errorMessage.includes('database locked') || errorMessage.includes('busy')) {
-       return 'medium'; // Temporary database issues
-     }
+    if (errorMessage.includes('database locked') || errorMessage.includes('busy')) {
+      return 'medium'; // Temporary database issues
+    }
 
-     if (errorMessage.includes('out of memory') || errorMessage.includes('too many terms')) {
-       return 'high'; // Resource issues
-     }
+    if (errorMessage.includes('out of memory') || errorMessage.includes('too many terms')) {
+      return 'high'; // Resource issues
+    }
 
-     if (errorMessage.includes('empty query') || errorMessage.includes('no search text')) {
-       return 'low'; // User input issues
-     }
+    if (errorMessage.includes('empty query') || errorMessage.includes('no search text')) {
+      return 'low'; // User input issues
+    }
 
-     return 'medium'; // Default category
-   }
+    return 'medium'; // Default category
+  }
 
-   /**
-    * Get database state for error context
-    */
-   private getDatabaseState(): Record<string, unknown> {
-     try {
-       const dbManager = this.databaseManager as any;
-       return {
-         connectionStatus: dbManager?.isConnected ? 'connected' : 'disconnected',
-         lastError: dbManager?.lastError,
-         queryCount: dbManager?.queryCount,
-       };
-     } catch {
-       return {
-         connectionStatus: 'error',
-       };
-     }
-   }
+  /**
+   * Get database state for error context
+   */
+  private getDatabaseState(): Record<string, unknown> {
+    try {
+      const dbManager = this.databaseManager as any;
+      return {
+        connectionStatus: dbManager?.isConnected ? 'connected' : 'disconnected',
+        lastError: dbManager?.lastError,
+        queryCount: dbManager?.queryCount,
+      };
+    } catch {
+      return {
+        connectionStatus: 'error',
+      };
+    }
+  }
 
   /**
    * Get metadata about this search strategy

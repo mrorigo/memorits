@@ -7,8 +7,8 @@ import {
   ConfigurationAuditEntry,
   SearchStrategy,
 } from './types';
-import { ILogger } from './types';
 import { promises as fs } from 'fs';
+import { logError, logWarn, logInfo } from '../utils/Logger';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
 import { BackupMetadata } from './types';
@@ -379,32 +379,32 @@ class ConfigurationValidator {
     const warnings: string[] = [];
 
     switch (strategyName) {
-    case SearchStrategy.FTS5:
-      this.validateFTS5Settings(settings, errors, warnings);
-      break;
-    case SearchStrategy.LIKE:
-      this.validateLikeSettings(settings, errors, warnings);
-      break;
-    case SearchStrategy.RECENT:
-      this.validateRecentSettings(settings, errors, warnings);
-      break;
-    case SearchStrategy.SEMANTIC:
-      this.validateSemanticSettings(settings, errors, warnings);
-      break;
-    case SearchStrategy.CATEGORY_FILTER:
-      this.validateCategoryFilterSettings(settings, errors, warnings);
-      break;
-    case SearchStrategy.TEMPORAL_FILTER:
-      this.validateTemporalFilterSettings(settings, errors, warnings);
-      break;
-    case SearchStrategy.METADATA_FILTER:
-      this.validateMetadataFilterSettings(settings, errors, warnings);
-      break;
-    case SearchStrategy.RELATIONSHIP:
-      this.validateRelationshipSettings(settings, errors, warnings);
-      break;
-    default:
-      warnings.push(`Unknown strategy: ${strategyName}`);
+      case SearchStrategy.FTS5:
+        this.validateFTS5Settings(settings, errors, warnings);
+        break;
+      case SearchStrategy.LIKE:
+        this.validateLikeSettings(settings, errors, warnings);
+        break;
+      case SearchStrategy.RECENT:
+        this.validateRecentSettings(settings, errors, warnings);
+        break;
+      case SearchStrategy.SEMANTIC:
+        this.validateSemanticSettings(settings, errors, warnings);
+        break;
+      case SearchStrategy.CATEGORY_FILTER:
+        this.validateCategoryFilterSettings(settings, errors, warnings);
+        break;
+      case SearchStrategy.TEMPORAL_FILTER:
+        this.validateTemporalFilterSettings(settings, errors, warnings);
+        break;
+      case SearchStrategy.METADATA_FILTER:
+        this.validateMetadataFilterSettings(settings, errors, warnings);
+        break;
+      case SearchStrategy.RELATIONSHIP:
+        this.validateRelationshipSettings(settings, errors, warnings);
+        break;
+      default:
+        warnings.push(`Unknown strategy: ${strategyName}`);
     }
 
     return { isValid: errors.length === 0, errors, warnings };
@@ -511,12 +511,10 @@ class ConfigurationValidator {
 class FileConfigurationPersistenceManager implements ConfigurationPersistenceManager {
   private readonly configDir: string;
   private readonly backupDir: string;
-  private logger?: ILogger;
 
-  constructor(configDir: string = './config/search', logger?: ILogger) {
+  constructor(configDir: string = './config/search') {
     this.configDir = configDir;
     this.backupDir = join(configDir, 'backups');
-    this.logger = logger;
     this.initializeConfigDirectory();
   }
 
@@ -799,7 +797,12 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
           backups.push(metadata);
         } catch (error) {
           // Skip corrupted metadata files
-          this.logger?.warn(`Skipping corrupted metadata file: ${metadataFile}`, { error });
+          logWarn(`Skipping corrupted metadata file: ${metadataFile}`, {
+            component: 'FileConfigurationPersistenceManager',
+            operation: 'listStrategyBackups',
+            metadataFile,
+            error: error instanceof Error ? error.message : String(error)
+          });
         }
       }
 
@@ -840,7 +843,12 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
             await fs.unlink(metadataFilepath);
           }
         } catch (error) {
-          this.logger?.warn(`Failed to delete old backup ${backup.id}`, { error });
+          logWarn(`Failed to delete old backup ${backup.id}`, {
+            component: 'FileConfigurationPersistenceManager',
+            operation: 'cleanupOldBackups',
+            backupId: backup.id,
+            error: error instanceof Error ? error.message : String(error)
+          });
         }
       }
     } catch (error) {
@@ -888,7 +896,12 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
 
       return true;
     } catch (error) {
-      this.logger?.error(`Backup integrity validation failed for ${backupId}`, { error });
+      logError(`Backup integrity validation failed for ${backupId}`, {
+        component: 'FileConfigurationPersistenceManager',
+        operation: 'validateBackupIntegrity',
+        backupId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return false;
     }
   }
@@ -945,7 +958,6 @@ class MemoryConfigurationAuditManager implements ConfigurationAuditManager {
 export class SearchStrategyConfigManager implements ConfigurationManager {
   private persistenceManager: ConfigurationPersistenceManager;
   private auditManager: ConfigurationAuditManager;
-  private logger: ILogger;
   private configurations: Map<string, SearchStrategyConfiguration> = new Map();
 
   // Performance monitoring
@@ -966,11 +978,9 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
   constructor(
     persistenceManager?: ConfigurationPersistenceManager,
     auditManager?: ConfigurationAuditManager,
-    logger?: ILogger,
   ) {
-    this.persistenceManager = persistenceManager || new FileConfigurationPersistenceManager('./config/search', logger);
+    this.persistenceManager = persistenceManager || new FileConfigurationPersistenceManager('./config/search');
     this.auditManager = auditManager || new MemoryConfigurationAuditManager();
-    this.logger = logger || console;
   }
 
   async loadConfiguration(name: string): Promise<SearchStrategyConfiguration | null> {
@@ -1040,7 +1050,12 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      this.logger.error(`Failed to load configuration for ${name}:`, { error: error instanceof Error ? error.message : String(error) });
+      logError(`Failed to load configuration for ${name}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'loadConfiguration',
+        strategyName: name,
+        error: error instanceof Error ? error.message : String(error)
+      });
       this.recordOperationMetrics(metrics);
       return null;
     }
@@ -1076,7 +1091,11 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
         changes,
       });
 
-      this.logger.info(`Configuration saved for ${name}`);
+      logInfo(`Configuration saved for ${name}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'saveConfiguration',
+        strategyName: name
+      });
     } catch (error) {
       await this.auditManager.log({
         timestamp: new Date(),
@@ -1086,7 +1105,12 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      this.logger.error(`Failed to save configuration for ${name}:`, { error: error instanceof Error ? error.message : String(error) });
+      logError(`Failed to save configuration for ${name}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'saveConfiguration',
+        strategyName: name,
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }
@@ -1095,7 +1119,11 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     try {
       return await this.persistenceManager.list();
     } catch (error) {
-      this.logger.error('Failed to get configuration names:', { error: error instanceof Error ? error.message : String(error) });
+      logError('Failed to get configuration names', {
+        component: 'SearchStrategyConfigManager',
+        operation: 'getConfigurationNames',
+        error: error instanceof Error ? error.message : String(error)
+      });
       return [];
     }
   }
@@ -1112,7 +1140,11 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
         success: true,
       });
 
-      this.logger.info(`Configuration deleted for ${name}`);
+      logInfo(`Configuration deleted for ${name}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'deleteConfiguration',
+        strategyName: name
+      });
     } catch (error) {
       await this.auditManager.log({
         timestamp: new Date(),
@@ -1122,7 +1154,12 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      this.logger.error(`Failed to delete configuration for ${name}:`, { error: error instanceof Error ? error.message : String(error) });
+      logError(`Failed to delete configuration for ${name}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'deleteConfiguration',
+        strategyName: name,
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }
@@ -1257,7 +1294,11 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     try {
       return await this.persistenceManager.export();
     } catch (error) {
-      this.logger.error('Failed to export configurations:', { error: error instanceof Error ? error.message : String(error) });
+      logError('Failed to export configurations', {
+        component: 'SearchStrategyConfigManager',
+        operation: 'exportConfigurations',
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }
@@ -1284,7 +1325,11 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
         },
       });
 
-      this.logger.info(`Imported ${Object.keys(configs).length} configurations`);
+      logInfo(`Imported ${Object.keys(configs).length} configurations`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'importConfigurations',
+        importedCount: Object.keys(configs).length
+      });
     } catch (error) {
       await this.auditManager.log({
         timestamp: new Date(),
@@ -1294,7 +1339,11 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      this.logger.error('Failed to import configurations:', { error: error instanceof Error ? error.message : String(error) });
+      logError('Failed to import configurations', {
+        component: 'SearchStrategyConfigManager',
+        operation: 'importConfigurations',
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }
@@ -1306,7 +1355,11 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     try {
       return await this.auditManager.getHistory(strategyName, limit);
     } catch (error) {
-      this.logger.error('Failed to get audit history:', { error: error instanceof Error ? error.message : String(error) });
+      logError('Failed to get audit history', {
+        component: 'SearchStrategyConfigManager',
+        operation: 'getAuditHistory',
+        error: error instanceof Error ? error.message : String(error)
+      });
       return [];
     }
   }
@@ -1318,7 +1371,12 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     try {
       return await this.persistenceManager.listStrategyBackups(strategyName);
     } catch (error) {
-      this.logger.error(`Failed to get backups for strategy ${strategyName}:`, { error: error instanceof Error ? error.message : String(error) });
+      logError(`Failed to get backups for strategy ${strategyName}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'getStrategyBackups',
+        strategyName,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return [];
     }
   }
@@ -1330,7 +1388,12 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     try {
       return await this.persistenceManager.validateBackupIntegrity(backupId);
     } catch (error) {
-      this.logger.error(`Failed to validate backup ${backupId}:`, { error: error instanceof Error ? error.message : String(error) });
+      logError(`Failed to validate backup ${backupId}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'validateBackup',
+        backupId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return false;
     }
   }
@@ -1341,9 +1404,19 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
   async cleanupBackups(strategyName: string, maxBackups: number = 10): Promise<void> {
     try {
       await this.persistenceManager.cleanupOldBackups(strategyName, maxBackups);
-      this.logger.info(`Cleaned up old backups for strategy ${strategyName}, keeping last ${maxBackups}`);
+      logInfo(`Cleaned up old backups for strategy ${strategyName}, keeping last ${maxBackups}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'cleanupBackups',
+        strategyName,
+        maxBackups
+      });
     } catch (error) {
-      this.logger.error(`Failed to cleanup backups for strategy ${strategyName}:`, { error: error instanceof Error ? error.message : String(error) });
+      logError(`Failed to cleanup backups for strategy ${strategyName}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'cleanupBackups',
+        strategyName,
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }
@@ -1355,10 +1428,20 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     try {
       const metadata = await this.persistenceManager.backup(name);
       await this.persistenceManager.cleanupOldBackups(name, maxBackups);
-      this.logger.info(`Backup created for ${name} with automatic cleanup (keeping last ${maxBackups})`);
+      logInfo(`Backup created for ${name} with automatic cleanup (keeping last ${maxBackups})`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'backupWithCleanup',
+        strategyName: name,
+        maxBackups
+      });
       return metadata;
     } catch (error) {
-      this.logger.error(`Failed to create backup with cleanup for ${name}:`, { error: error instanceof Error ? error.message : String(error) });
+      logError(`Failed to create backup with cleanup for ${name}`, {
+        component: 'SearchStrategyConfigManager',
+        operation: 'backupWithCleanup',
+        strategyName: name,
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     }
   }

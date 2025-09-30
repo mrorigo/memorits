@@ -42,10 +42,10 @@ describe('DatabaseManager', () => {
               searchService.maintenanceTimer = null;
               console.log('Cleared SearchService maintenanceTimer');
             }
-            if (searchService.performanceCollectionTimer) {
-              clearInterval(searchService.performanceCollectionTimer);
-              searchService.performanceCollectionTimer = null;
-              console.log('Cleared SearchService performanceCollectionTimer');
+            // Clean up SearchPerformanceMonitor timer
+            if (searchService.performanceMonitor) {
+              searchService.performanceMonitor.cleanup();
+              console.log('Cleaned up SearchPerformanceMonitor');
             }
           }
 

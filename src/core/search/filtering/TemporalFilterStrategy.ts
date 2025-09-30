@@ -12,6 +12,7 @@
 import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy } from '../types';
 import { SearchStrategyMetadata, SearchCapability, SearchError } from '../SearchStrategy';
 import { DatabaseManager } from '../../database/DatabaseManager';
+import { logInfo, logError, logWarn } from '../../utils/Logger';
 
 // Import temporal processing classes
 import { DateTimeNormalizer } from './temporal/DateTimeNormalizer';
@@ -174,13 +175,23 @@ export class TemporalFilterStrategy implements ISearchStrategy {
 
       // Log performance metrics
       const duration = Date.now() - startTime;
-      this.logger.info(`Temporal search completed in ${duration}ms, found ${processedResults.length} results`);
+      logInfo('Temporal search completed', {
+        component: 'TemporalFilterStrategy',
+        operation: 'search',
+        duration: `${duration}ms`,
+        resultCount: processedResults.length
+      });
 
       return processedResults;
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`Temporal search failed after ${duration}ms:`, error);
+      logError('Temporal search failed', {
+        component: 'TemporalFilterStrategy',
+        operation: 'search',
+        duration: `${duration}ms`,
+        error: error instanceof Error ? error.message : String(error)
+      });
 
       throw new SearchError(
         `Temporal filter strategy failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -239,7 +250,12 @@ export class TemporalFilterStrategy implements ISearchStrategy {
               end: new Date(normalized.date.getTime() + 60 * 60 * 1000)
             });
           } catch (error) {
-            this.logger.warn(`Failed to parse relative expression: ${expr}`, error);
+            logWarn('Failed to parse relative expression', {
+              component: 'TemporalFilterStrategy',
+              operation: 'buildTemporalQuery',
+              expression: expr,
+              error: error instanceof Error ? error.message : String(error)
+            });
           }
         });
       }
@@ -458,7 +474,11 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     try {
       return await db.$queryRawUnsafe(sql, ...parameters);
     } catch (error) {
-      this.logger.error('Temporal query execution failed:', error);
+      logError('Temporal query execution failed', {
+        component: 'TemporalFilterStrategy',
+        operation: 'executeTemporalQuery',
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw new Error(`Temporal query failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -509,7 +529,9 @@ export class TemporalFilterStrategy implements ISearchStrategy {
         searchResults.push(searchResult);
 
       } catch (error) {
-        this.logger.warn('Error processing temporal result row:', {
+        logWarn('Error processing temporal result row', {
+          component: 'TemporalFilterStrategy',
+          operation: 'processTemporalResults',
           rowId: row.memory_id,
           error: error instanceof Error ? error.message : String(error)
         });
@@ -675,7 +697,12 @@ export class TemporalFilterStrategy implements ISearchStrategy {
         end: new Date(normalized.date.getTime() + windowSize)
       };
     } catch (error) {
-      this.logger.warn(`Failed to parse time expression: ${expression}`, error);
+      logWarn('Failed to parse time expression', {
+        component: 'TemporalFilterStrategy',
+        operation: 'parseTimeExpression',
+        expression,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return {};
     }
   }
@@ -742,7 +769,10 @@ export class TemporalFilterStrategy implements ISearchStrategy {
   protected validateStrategyConfiguration(): boolean {
    const config = this.config;
    if (!config.naturalLanguage.enableParsing && !config.naturalLanguage.enablePatternMatching) {
-     this.logger.warn('TemporalFilterStrategy: Both natural language and pattern matching are disabled');
+     logWarn('TemporalFilterStrategy: Both natural language and pattern matching are disabled', {
+       component: 'TemporalFilterStrategy',
+       operation: 'validateStrategyConfiguration'
+     });
    }
 
    if (config.performance.maxExecutionTime <= 0) {
@@ -839,7 +869,11 @@ export class TemporalFilterStrategy implements ISearchStrategy {
       return true;
 
     } catch (error) {
-      this.logger.error('Configuration validation failed:', error);
+      logError('Configuration validation failed', {
+        component: 'TemporalFilterStrategy',
+        operation: 'validateConfiguration',
+        error: error instanceof Error ? error.message : String(error)
+      });
       return false;
     }
   }

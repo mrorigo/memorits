@@ -1,4 +1,5 @@
 import { SearchStrategy } from './types';
+import { logError, logWarn, logInfo } from '../utils/Logger';
 
 /**
  * Performance monitoring and analytics module for search operations
@@ -121,7 +122,7 @@ export interface PerformanceAlert {
 export class SearchPerformanceMonitor {
   private performanceMetrics: PerformanceMetrics;
   private performanceMonitoringConfig: PerformanceMonitoringConfig;
-  private performanceCollectionTimer?: NodeJS.Timeout;
+  private performanceCollectionTimer?: ReturnType<typeof setInterval>;
   private performanceAlertCallbacks: Array<(alert: PerformanceAlert) => void> = [];
 
   constructor(config?: Partial<PerformanceMonitoringConfig>) {
@@ -159,6 +160,17 @@ export class SearchPerformanceMonitor {
   }
 
   /**
+   * Clean up resources and stop monitoring
+   */
+  cleanup(): void {
+    if (this.performanceCollectionTimer) {
+      clearInterval(this.performanceCollectionTimer);
+      this.performanceCollectionTimer = undefined;
+    }
+    this.performanceAlertCallbacks = [];
+  }
+
+  /**
    * Start the performance monitoring system
    */
   private startPerformanceMonitoring(): void {
@@ -168,7 +180,10 @@ export class SearchPerformanceMonitor {
       this.checkPerformanceAlerts();
     }, this.performanceMonitoringConfig.collectionInterval);
 
-    console.log('Performance monitoring system started');
+    logInfo('Performance monitoring system started', {
+      component: 'SearchPerformanceMonitor',
+      operation: 'startPerformanceMonitoring'
+    });
   }
 
   /**
@@ -377,11 +392,21 @@ export class SearchPerformanceMonitor {
       try {
         callback(alert);
       } catch (error) {
-        console.error('Performance alert callback failed:', error);
+        logError('Performance alert callback failed', {
+          component: 'SearchPerformanceMonitor',
+          operation: 'generatePerformanceAlert',
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
     });
 
-    console.warn('Performance Alert:', alert);
+    logWarn('Performance Alert generated', {
+      component: 'SearchPerformanceMonitor',
+      operation: 'generatePerformanceAlert',
+      alertType: alert.type,
+      severity: alert.severity,
+      message: alert.message
+    });
   }
 
   /**

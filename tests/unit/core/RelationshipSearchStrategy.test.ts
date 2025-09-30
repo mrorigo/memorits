@@ -1,3 +1,19 @@
+// Mock logger
+const mockLogger = {
+  info: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+};
+
+// Mock the Logger module
+jest.mock('../../../src/core/utils/Logger', () => ({
+  logInfo: mockLogger.info,
+  logError: mockLogger.error,
+  logWarn: mockLogger.warn,
+  logDebug: mockLogger.debug,
+}));
+
 import { RelationshipSearchStrategy } from '../../../src/core/search/strategies/RelationshipSearchStrategy';
 import { SearchStrategy } from '../../../src/core/search/types';
 import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
@@ -103,11 +119,15 @@ class MockDatabaseManager {
       return true;
     }).slice(0, options.limit || 10);
 
-
     return filteredRelationships.map(rel => ({
       memory: this.mockMemories.get(rel.targetMemoryId),
       relationship: rel,
     })).filter(item => item.memory !== undefined);
+  }
+
+  // Add the missing method that RelationshipSearchStrategy expects
+  async findMemory(memoryId: string): Promise<any> {
+    return this.mockMemories.get(memoryId) || null;
   }
 
   getPrismaClient() {
@@ -124,13 +144,14 @@ class MockDatabaseManager {
   }
 }
 
-// Mock logger
-const mockLogger = {
-  info: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-};
+
+// Mock the Logger module
+jest.mock('../../../src/core/utils/Logger', () => ({
+  logInfo: mockLogger.info,
+  logError: mockLogger.error,
+  logWarn: mockLogger.warn,
+  logDebug: mockLogger.debug,
+}));
 
 describe('RelationshipSearchStrategy', () => {
   let strategy: RelationshipSearchStrategy;
@@ -138,7 +159,7 @@ describe('RelationshipSearchStrategy', () => {
 
   beforeEach(() => {
     mockDbManager = new MockDatabaseManager();
-    strategy = new RelationshipSearchStrategy(mockDbManager as any, mockLogger);
+    strategy = new RelationshipSearchStrategy(mockDbManager as any);
     jest.clearAllMocks();
   });
 

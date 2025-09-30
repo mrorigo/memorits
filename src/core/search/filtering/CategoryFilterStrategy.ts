@@ -1,6 +1,7 @@
 import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy } from '../types';
 import { DatabaseManager } from '../../database/DatabaseManager';
 import { SearchStrategyMetadata, SearchCapability, SearchStrategyError } from '../SearchStrategy';
+import { logInfo, logError, logWarn } from '../../utils/Logger';
 
 /**
  * Extended query interface for category filtering
@@ -131,13 +132,23 @@ export class CategoryFilterStrategy implements ISearchStrategy {
 
       // Log performance metrics
       const duration = Date.now() - startTime;
-      this.logger.info(`Category search completed in ${duration}ms, found ${processedResults.length} results`);
+      logInfo('Category search completed', {
+        component: 'CategoryFilterStrategy',
+        operation: 'search',
+        duration: `${duration}ms`,
+        resultCount: processedResults.length
+      });
 
       return processedResults;
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`Category search failed after ${duration}ms:`, error);
+      logError('Category search failed', {
+        component: 'CategoryFilterStrategy',
+        operation: 'search',
+        duration: `${duration}ms`,
+        error: error instanceof Error ? error.message : String(error)
+      });
 
       throw new SearchStrategyError(
         this.name,
@@ -318,7 +329,12 @@ export class CategoryFilterStrategy implements ISearchStrategy {
         });
 
       } catch (error) {
-        this.logger.warn('Error processing category result:', error);
+        logWarn('Error processing category result', {
+          component: 'CategoryFilterStrategy',
+          operation: 'processCategoryResults',
+          rowId: row.memory_id,
+          error: error instanceof Error ? error.message : String(error)
+        });
         continue;
       }
     }
@@ -428,7 +444,11 @@ export class CategoryFilterStrategy implements ISearchStrategy {
       return true;
 
     } catch (error) {
-      this.logger.error('Configuration validation failed:', error);
+      logError('Configuration validation failed', {
+        component: 'CategoryFilterStrategy',
+        operation: 'validateConfiguration',
+        error: error instanceof Error ? error.message : String(error)
+      });
       return false;
     }
   }

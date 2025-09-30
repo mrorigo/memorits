@@ -1,7 +1,8 @@
 import { SearchCapability, SearchStrategyMetadata, SearchError, SearchValidationError } from '../SearchStrategy';
-import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy, ILogger, RelationshipSearchQuery, RelationshipPath, RelationshipSearchResult } from '../types';
+import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy, RelationshipSearchQuery, RelationshipPath, RelationshipSearchResult } from '../types';
 import { DatabaseManager } from '../../database/DatabaseManager';
 import { MemoryRelationship, MemoryRelationshipType } from '../../types/schemas';
+import { logError, logWarn, logInfo, logDebug } from '../../utils/Logger';
 
 /**
  * Advanced relationship-based search strategy implementation
@@ -35,13 +36,11 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
   };
 
   private readonly databaseManager: DatabaseManager;
-  private readonly logger: ILogger;
   private visitedMemoryCache: Set<string> = new Set();
   private relationshipPathCache: Map<string, RelationshipPath[]> = new Map();
 
-  constructor(databaseManager: DatabaseManager, logger?: ILogger) {
+  constructor(databaseManager: DatabaseManager) {
     this.databaseManager = databaseManager;
-    this.logger = logger || console;
   }
 
   /**
@@ -73,7 +72,9 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
 
       // Log performance metrics
       const duration = Date.now() - startTime;
-      this.logger.info(`Relationship search completed in ${duration}ms, found ${results.length} results`, {
+      logInfo(`Relationship search completed in ${duration}ms, found ${results.length} results`, {
+        component: 'RelationshipSearchStrategy',
+        operation: 'search',
         strategy: this.name,
         query: query.text,
         resultCount: results.length,
@@ -101,12 +102,14 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
         severity: this.categorizeRelationshipError(error) as 'low' | 'medium' | 'high' | 'critical',
       };
 
-      this.logger.error(`Relationship search failed after ${duration}ms:`, {
-        error: error instanceof Error ? error.message : String(error),
+      logError(`Relationship search failed after ${duration}ms`, {
+        component: 'RelationshipSearchStrategy',
+        operation: 'search',
         strategy: this.name,
         query: query.text,
         executionTime: duration,
         errorCategory: this.categorizeRelationshipError(error),
+        error: error instanceof Error ? error.message : String(error)
       });
 
       throw new SearchError(
@@ -179,9 +182,11 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
 
       return true;
     } catch (error) {
-      this.logger.error(`Configuration validation failed for ${this.name}:`, {
-        error: error instanceof Error ? error.message : String(error),
+      logError(`Configuration validation failed for ${this.name}`, {
+        component: 'RelationshipSearchStrategy',
+        operation: 'validateConfiguration',
         strategy: this.name,
+        error: error instanceof Error ? error.message : String(error)
       });
       return false;
     }
@@ -342,7 +347,11 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
 
       // Check for cycles using path information
       if (this.detectCycle(current.path)) {
-        this.logger.debug(`Cycle detected in relationship path: ${current.path.join(' -> ')}`);
+        logDebug(`Cycle detected in relationship path: ${current.path.join(' -> ')}`, {
+          component: 'RelationshipSearchStrategy',
+          operation: 'executeRelationshipSearch',
+          path: current.path
+        });
         continue;
       }
 
@@ -474,8 +483,11 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
 
       return null;
     } catch (error) {
-      this.logger.warn(`Failed to retrieve memory ${memoryId}:`, {
-        error: error instanceof Error ? error.message : String(error),
+      logWarn(`Failed to retrieve memory ${memoryId}`, {
+        component: 'RelationshipSearchStrategy',
+        operation: 'getMemoryById',
+        memoryId,
+        error: error instanceof Error ? error.message : String(error)
       });
       return null;
     }
@@ -512,8 +524,11 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
         confidence: related.relationship.confidence,
       }));
     } catch (error) {
-      this.logger.warn(`Failed to get related memories for ${memoryId}:`, {
-        error: error instanceof Error ? error.message : String(error),
+      logWarn(`Failed to get related memories for ${memoryId}`, {
+        component: 'RelationshipSearchStrategy',
+        operation: 'getRelatedMemories',
+        memoryId,
+        error: error instanceof Error ? error.message : String(error)
       });
       return [];
     }
@@ -529,7 +544,7 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
   ): number {
     // Base score from relationship strength and confidence
     const baseScore = (cumulativeStrength * this.relationshipConfig.strengthWeight) +
-                     (cumulativeConfidence * this.relationshipConfig.confidenceWeight);
+      (cumulativeConfidence * this.relationshipConfig.confidenceWeight);
 
     // Apply depth penalty (closer relationships are more relevant)
     const depthPenalty = Math.pow(0.8, depth);
@@ -569,9 +584,9 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
         // Sort queue by relationship strength for priority-based traversal
         queue.sort((a, b) => {
           const scoreA = (a.cumulativeStrength * this.relationshipConfig.strengthWeight) +
-                        (a.cumulativeConfidence * this.relationshipConfig.confidenceWeight);
+            (a.cumulativeConfidence * this.relationshipConfig.confidenceWeight);
           const scoreB = (b.cumulativeStrength * this.relationshipConfig.strengthWeight) +
-                        (b.cumulativeConfidence * this.relationshipConfig.confidenceWeight);
+            (b.cumulativeConfidence * this.relationshipConfig.confidenceWeight);
           return scoreB - scoreA;
         });
         return true;

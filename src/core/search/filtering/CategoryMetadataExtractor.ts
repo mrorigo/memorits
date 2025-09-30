@@ -1,4 +1,5 @@
 import { CategoryHierarchyManager } from './CategoryHierarchyManager';
+import { logError, logWarn } from '../../utils/Logger';
 
 /**
  * Configuration for category extraction
@@ -206,7 +207,11 @@ export class CategoryMetadataExtractor {
       return result;
 
     } catch (error) {
-      console.warn('Category extraction failed:', error);
+      logWarn('Category extraction failed', {
+        component: 'CategoryMetadataExtractor',
+        operation: 'extractCategories',
+        error: error instanceof Error ? error.message : String(error)
+      });
       return this.createFallbackResult(metadata);
     }
   }
@@ -481,7 +486,10 @@ export class CategoryMetadataExtractor {
   private async extractFromML(_metadata: MemoryMetadata): Promise<ExtractedCategory[]> {
     // Placeholder for ML-based extraction
     // This would integrate with OpenAI, Hugging Face, or other ML services
-    console.log('ML extraction not yet implemented, skipping...');
+    logWarn('ML extraction not yet implemented, skipping...', {
+      component: 'CategoryMetadataExtractor',
+      operation: 'extractFromML'
+    });
     return [];
   }
 

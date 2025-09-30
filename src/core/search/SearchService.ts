@@ -15,7 +15,7 @@ import { SearchPerformanceMonitor } from './SearchPerformanceMonitor';
 import { SearchErrorHandler } from './SearchErrorHandler';
 import { SearchConfigurationManager } from './SearchConfigurationManager';
 import { SearchFilterProcessor } from './SearchFilterProcessor';
-import { logError } from '../utils/Logger';
+import { logError, logWarn, logInfo } from '../utils/Logger';
 import {
   sanitizeString,
   sanitizeSearchQuery,
@@ -63,13 +63,17 @@ export class SearchService implements ISearchService {
     }
 
     try {
-      await this.initializeStrategies();
-      this._isInitialized = true;
-      console.log('SearchService fully initialized');
-    } catch (error) {
-      console.error('Failed to initialize SearchService:', error);
-      throw error;
-    }
+       await this.initializeStrategies();
+       this._isInitialized = true;
+       logInfo('SearchService fully initialized', { component: 'SearchService', operation: 'initializeAsync' });
+     } catch (error) {
+       logError('Failed to initialize SearchService', {
+         component: 'SearchService',
+         operation: 'initializeAsync',
+         error: error instanceof Error ? error.message : String(error)
+       });
+       throw error;
+     }
   }
 
   /**
@@ -77,7 +81,7 @@ export class SearchService implements ISearchService {
    */
   private initializeStrategiesSync(): void {
     // Initialize basic components synchronously
-    console.log('Initializing search strategies...');
+    logInfo('Initializing search strategies...', { component: 'SearchService', operation: 'initializeStrategiesSync' });
   }
 
   /**
@@ -99,7 +103,11 @@ export class SearchService implements ISearchService {
       await this.initializeRelationshipStrategy();
 
     } catch (error) {
-      console.error('Failed to initialize search strategies:', error);
+      logError('Failed to initialize search strategies', {
+        component: 'SearchService',
+        operation: 'initializeStrategies',
+        error: error instanceof Error ? error.message : String(error)
+      });
       // Fall back to basic initialization
       this.initializeStrategiesFallback();
     }
@@ -126,7 +134,12 @@ export class SearchService implements ISearchService {
         // Cache the configuration for this strategy
         this.strategyConfigs.set(strategyName, config);
       } catch (error) {
-        console.warn(`Failed to load configuration for ${strategyName}, using defaults:`, error);
+        logWarn(`Failed to load configuration for ${strategyName}, using defaults`, {
+          component: 'SearchService',
+          operation: 'initializeStrategyConfigurations',
+          strategyName,
+          error: error instanceof Error ? error.message : String(error)
+        });
         // Use default configuration as fallback
         const config = this.configManager.getDefaultConfiguration(strategyName);
         this.strategyConfigs.set(strategyName, config);
@@ -154,7 +167,11 @@ export class SearchService implements ISearchService {
               ...ftsConfig.bm25Weights as Record<string, number>
             };
           } catch (error) {
-            console.warn('Failed to apply FTS5 BM25 weights configuration:', error);
+            logWarn('Failed to apply FTS5 BM25 weights configuration', {
+              component: 'SearchService',
+              operation: 'initializeFTSStrategy',
+              error: error instanceof Error ? error.message : String(error)
+            });
           }
         }
         if (typeof ftsConfig.queryTimeout === 'number') {
@@ -580,7 +597,11 @@ export class SearchService implements ISearchService {
 
           return finalResults;
         } catch (error) {
-          console.warn('Advanced filter execution failed, falling back to regular results:', error);
+          logWarn('Advanced filter execution failed, falling back to regular results', {
+            component: 'SearchService',
+            operation: 'search',
+            error: error instanceof Error ? error.message : String(error)
+          });
           // Fall back to regular results if filtering fails
         }
       }
@@ -1019,12 +1040,22 @@ export class SearchService implements ISearchService {
 
     const fallbackStrategyInstance = this.strategies.get(fallbackStrategy);
     if (!fallbackStrategyInstance) {
-      console.warn(`No fallback strategy available for ${failedStrategy}`);
+      logWarn(`No fallback strategy available for ${failedStrategy}`, {
+        component: 'SearchService',
+        operation: 'executeFallbackStrategy',
+        failedStrategy,
+        fallbackStrategy
+      });
       return;
     }
 
     try {
-      console.log(`Executing fallback strategy ${fallbackStrategy} for failed strategy ${failedStrategy}`);
+      logInfo(`Executing fallback strategy ${fallbackStrategy} for failed strategy ${failedStrategy}`, {
+        component: 'SearchService',
+        operation: 'executeFallbackStrategy',
+        failedStrategy,
+        fallbackStrategy
+      });
       const fallbackResults = await this.executeStrategy(fallbackStrategyInstance, query);
 
       // Add fallback results that haven't been seen before
@@ -1035,7 +1066,13 @@ export class SearchService implements ISearchService {
         }
       }
     } catch (fallbackError) {
-      console.warn(`Fallback strategy ${fallbackStrategy} also failed:`, fallbackError);
+      logWarn(`Fallback strategy ${fallbackStrategy} also failed`, {
+        component: 'SearchService',
+        operation: 'executeFallbackStrategy',
+        failedStrategy,
+        fallbackStrategy,
+        error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+      });
     }
   }
 

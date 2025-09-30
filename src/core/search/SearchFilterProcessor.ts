@@ -1,4 +1,5 @@
 import { SearchResult } from './types';
+import { logError, logWarn } from '../utils/Logger';
 
 /**
  * Advanced filter processing module for search operations
@@ -291,7 +292,11 @@ export class SearchFilterProcessor {
       return postFilteredResults.refinedResults;
 
     } catch (error) {
-      console.error('Advanced filter execution failed:', error);
+      logError('Advanced filter execution failed', {
+        component: 'SearchFilterProcessor',
+        operation: 'applyAdvancedFilter',
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw new Error(`Filter execution failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -331,7 +336,11 @@ export class SearchFilterProcessor {
       }
 
     } catch (error) {
-      console.warn('Pre-filtering optimization failed, continuing with full dataset:', error);
+      logWarn('Pre-filtering optimization failed, continuing with full dataset', {
+        component: 'SearchFilterProcessor',
+        operation: 'performPreFiltering',
+        error: error instanceof Error ? error.message : String(error)
+      });
       optimizations.push('pre_filtering_failed');
     }
 
@@ -360,7 +369,11 @@ export class SearchFilterProcessor {
       refinedResults = this.applyFilterBasedRanking(refinedResults, filterExpression, query);
 
     } catch (error) {
-      console.warn('Post-filtering refinement failed, returning original results:', error);
+      logWarn('Post-filtering refinement failed, returning original results', {
+        component: 'SearchFilterProcessor',
+        operation: 'performPostFiltering',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
 
     return {

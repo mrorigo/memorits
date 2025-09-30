@@ -1,5 +1,6 @@
 import { SearchStrategy, SearchStrategyConfiguration } from './types';
 import { SearchConfigurationError } from './SearchStrategy';
+import { logError, logWarn, logInfo } from '../utils/Logger';
 
 /**
  * Configuration management module for search operations
@@ -129,7 +130,12 @@ export class SearchConfigurationManager {
             this.notifyConfigurationChange(strategyName, currentConfig, updatedConfig);
 
             const updateDuration = Date.now() - updateStartTime;
-            console.log(`Configuration updated for ${strategyName} in ${updateDuration}ms`);
+            logInfo(`Configuration updated for ${strategyName} in ${updateDuration}ms`, {
+                component: 'SearchConfigurationManager',
+                operation: 'updateStrategyConfiguration',
+                strategyName,
+                updateDuration
+            });
 
         } catch (error) {
             this.recordConfigurationUpdate({
@@ -169,7 +175,11 @@ export class SearchConfigurationManager {
      */
     async saveConfiguration(strategyName: string, config: SearchStrategyConfiguration): Promise<void> {
         // This would typically save to a configuration file or database
-        console.log(`Saving configuration for ${strategyName}`, config);
+        logInfo(`Saving configuration for ${strategyName}`, {
+            component: 'SearchConfigurationManager',
+            operation: 'saveConfiguration',
+            strategyName
+        });
     }
 
     /**
@@ -336,7 +346,11 @@ export class SearchConfigurationManager {
         config: SearchStrategyConfiguration,
     ): Promise<void> {
         // This would apply the configuration to a running strategy instance
-        console.log(`Applying configuration to strategy ${strategyName}`, config);
+        logInfo(`Applying configuration to strategy ${strategyName}`, {
+            component: 'SearchConfigurationManager',
+            operation: 'applyConfigurationToStrategy',
+            strategyName
+        });
     }
 
     /**
@@ -345,9 +359,18 @@ export class SearchConfigurationManager {
     private async createConfigurationBackup(strategyName: string): Promise<void> {
         try {
             // This would create a backup of the current configuration
-            console.log(`Creating backup for strategy ${strategyName}`);
+            logInfo(`Creating backup for strategy ${strategyName}`, {
+                component: 'SearchConfigurationManager',
+                operation: 'createConfigurationBackup',
+                strategyName
+            });
         } catch (error) {
-            console.warn(`Failed to create configuration backup for ${strategyName}:`, error);
+            logWarn(`Failed to create configuration backup for ${strategyName}`, {
+                component: 'SearchConfigurationManager',
+                operation: 'createConfigurationBackup',
+                strategyName,
+                error: error instanceof Error ? error.message : String(error)
+            });
         }
     }
 
@@ -356,7 +379,11 @@ export class SearchConfigurationManager {
      */
     private updateCachedConfiguration(strategyName: string, config: SearchStrategyConfiguration): void {
         // This would update any cached configuration
-        console.log(`Updating cached configuration for ${strategyName}`);
+        logInfo(`Updating cached configuration for ${strategyName}`, {
+            component: 'SearchConfigurationManager',
+            operation: 'updateCachedConfiguration',
+            strategyName
+        });
     }
 
     /**
@@ -395,7 +422,12 @@ export class SearchConfigurationManager {
             try {
                 listener(oldConfig, newConfig);
             } catch (error) {
-                console.error(`Configuration change listener error for ${strategyName}:`, error);
+                logError(`Configuration change listener error for ${strategyName}`, {
+                    component: 'SearchConfigurationManager',
+                    operation: 'notifyConfigurationChange',
+                    strategyName,
+                    error: error instanceof Error ? error.message : String(error)
+                });
             }
         });
     }
@@ -471,7 +503,11 @@ export class SearchConfigurationManager {
                 success: true,
             });
 
-            console.log(`Configuration rolled back for ${strategyName}`);
+            logInfo(`Configuration rolled back for ${strategyName}`, {
+                component: 'SearchConfigurationManager',
+                operation: 'rollbackConfiguration',
+                strategyName
+            });
 
         } catch (error) {
             this.recordConfigurationUpdate({

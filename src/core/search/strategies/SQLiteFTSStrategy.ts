@@ -1,6 +1,7 @@
 import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, SearchStrategyMetadata } from '../types';
 import { SearchCapability, SearchStrategyError, SearchTimeoutError } from '../SearchStrategy';
 import { DatabaseManager } from '../../database/DatabaseManager';
+import { logError, logWarn, logInfo } from '../../utils/Logger';
 
 /**
  * Enhanced SQLite FTS5 search strategy implementation with BM25 ranking and metadata filtering
@@ -44,10 +45,17 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
       const ftsStatus = await this.databaseManager.getFTSStatus();
 
       if (!ftsStatus.enabled) {
-        console.warn('FTS5 not available in this SQLite build, FTS strategy will be disabled');
+        logWarn('FTS5 not available in this SQLite build, FTS strategy will be disabled', {
+          component: 'SQLiteFTSStrategy',
+          operation: 'initializeFTSSupport'
+        });
       }
     } catch (error) {
-      console.warn('FTS5 initialization failed, FTS strategy will not be available:', error);
+      logWarn('FTS5 initialization failed, FTS strategy will not be available', {
+        component: 'SQLiteFTSStrategy',
+        operation: 'initializeFTSSupport',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
@@ -75,7 +83,9 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
       const processedResults = this.processFTSResults(results, query);
 
       const duration = Date.now() - startTime;
-      console.log(`FTS5 search completed in ${duration}ms, found ${processedResults.length} results`, {
+      logInfo(`FTS5 search completed in ${duration}ms, found ${processedResults.length} results`, {
+        component: 'SQLiteFTSStrategy',
+        operation: 'search',
         strategy: this.name,
         query: query.text,
         resultCount: processedResults.length,
@@ -109,13 +119,15 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
         severity: this.categorizeFTSError(error) as 'low' | 'medium' | 'high' | 'critical',
       };
 
-      console.error(`FTS5 search failed after ${duration}ms:`, {
-        error: error instanceof Error ? error.message : String(error),
+      logError(`FTS5 search failed after ${duration}ms`, {
+        component: 'SQLiteFTSStrategy',
+        operation: 'search',
         strategy: this.name,
         query: query.text,
         executionTime: duration,
         errorCategory: this.categorizeFTSError(error),
         databaseState: this.getDatabaseState(),
+        error: error instanceof Error ? error.message : String(error)
       });
 
       throw new SearchStrategyError(
@@ -329,7 +341,9 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
         });
 
       } catch (error) {
-        console.warn('Error processing FTS result row:', {
+        logWarn('Error processing FTS result row', {
+          component: 'SQLiteFTSStrategy',
+          operation: 'processFTSResults',
           rowId: row.memory_id,
           error: error instanceof Error ? error.message : String(error),
         });
