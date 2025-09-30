@@ -527,7 +527,7 @@ export class Memori {
 
       return result;
     } catch (error) {
-      logError(`Failed to consolidate duplicate memories`, {
+      logError('Failed to consolidate duplicate memories', {
         component: 'Memori',
         primaryMemoryId,
         duplicateIds,
