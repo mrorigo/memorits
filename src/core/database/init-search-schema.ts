@@ -114,9 +114,11 @@ export async function initializeSearchSchema(prisma: PrismaClient): Promise<bool
        if (error instanceof Error && (
          error.message.includes('Engine is not yet connected') ||
          error.message.includes('Response from the Engine was empty') ||
-         error.message.includes('constraint failed')
+         error.message.includes('constraint failed') ||
+         error.message.includes('database or disk is full') ||
+         error.message.includes('disk I/O error')
        )) {
-         logInfo('Skipping performance index creation due to connection state', {
+         logInfo('Skipping performance index creation due to connection state or I/O error', {
            component: 'DatabaseInit',
            error: error.message,
          });

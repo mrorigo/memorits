@@ -38,7 +38,29 @@ async function autoIngestionExample(): Promise<void> {
 
   logInfo('✅ Conversations automatically processed into memories', { component: 'dual-memory-mode-example', mode: 'auto' });
 
-  await memori.close();
+  try {
+    await memori.close();
+  } catch (error) {
+    // Handle specific cleanup errors gracefully
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Engine is not yet connected') ||
+        errorMessage.includes('Response from the Engine was empty') ||
+        errorMessage.includes('database or disk is full') ||
+        errorMessage.includes('disk I/O error')) {
+      logInfo('Database cleanup error (non-critical)', {
+        component: 'dual-memory-mode-example',
+        mode: 'auto',
+        error: errorMessage,
+      });
+    } else {
+      logError('Error closing Memori instance', {
+        component: 'dual-memory-mode-example',
+        mode: 'auto',
+        error: errorMessage,
+      });
+      // Don't fail the entire example for cleanup errors
+    }
+  }
 }
 
 async function consciousIngestionExample(): Promise<void> {
@@ -83,7 +105,29 @@ async function consciousIngestionExample(): Promise<void> {
   logInfo(`✅ Conscious mode enabled: ${memori.isConsciousModeEnabled()}`, { component: 'dual-memory-mode-example', mode: 'conscious' });
   logInfo(`✅ Auto mode enabled: ${memori.isAutoModeEnabled()}`, { component: 'dual-memory-mode-example', mode: 'conscious' });
 
-  await memori.close();
+  try {
+    await memori.close();
+  } catch (error) {
+    // Handle specific cleanup errors gracefully
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Engine is not yet connected') ||
+        errorMessage.includes('Response from the Engine was empty') ||
+        errorMessage.includes('database or disk is full') ||
+        errorMessage.includes('disk I/O error')) {
+      logInfo('Database cleanup error (non-critical)', {
+        component: 'dual-memory-mode-example',
+        mode: 'conscious',
+        error: errorMessage,
+      });
+    } else {
+      logError('Error closing Memori instance', {
+        component: 'dual-memory-mode-example',
+        mode: 'conscious',
+        error: errorMessage,
+      });
+      // Don't fail the entire example for cleanup errors
+    }
+  }
 }
 
 async function dualModeComparison(): Promise<void> {
@@ -113,7 +157,29 @@ async function dualModeComparison(): Promise<void> {
   logInfo(`✅ Conscious mode enabled: ${memori.isConsciousModeEnabled()}`, { component: 'dual-memory-mode-example', mode: 'comparison' });
   logInfo(`✅ Auto mode enabled: ${memori.isAutoModeEnabled()}`, { component: 'dual-memory-mode-example', mode: 'comparison' });
 
-  await memori.close();
+  try {
+    await memori.close();
+  } catch (error) {
+    // Handle specific cleanup errors gracefully
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Engine is not yet connected') ||
+        errorMessage.includes('Response from the Engine was empty') ||
+        errorMessage.includes('database or disk is full') ||
+        errorMessage.includes('disk I/O error')) {
+      logInfo('Database cleanup error (non-critical)', {
+        component: 'dual-memory-mode-example',
+        mode: 'comparison',
+        error: errorMessage,
+      });
+    } else {
+      logError('Error closing Memori instance', {
+        component: 'dual-memory-mode-example',
+        mode: 'comparison',
+        error: errorMessage,
+      });
+      // Don't fail the entire example for cleanup errors
+    }
+  }
 }
 
 async function relationshipExtractionControlExample(): Promise<void> {
@@ -140,7 +206,29 @@ async function relationshipExtractionControlExample(): Promise<void> {
   );
 
   logInfo('✅ Conversation processed with relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
-  await memoriWithRelationships.close();
+  try {
+    await memoriWithRelationships.close();
+  } catch (error) {
+    // Handle specific cleanup errors gracefully
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Engine is not yet connected') ||
+        errorMessage.includes('Response from the Engine was empty') ||
+        errorMessage.includes('database or disk is full') ||
+        errorMessage.includes('disk I/O error')) {
+      logInfo('Database cleanup error (non-critical)', {
+        component: 'dual-memory-mode-example',
+        mode: 'relationship-control',
+        error: errorMessage,
+      });
+    } else {
+      logError('Error closing Memori instance', {
+        component: 'dual-memory-mode-example',
+        mode: 'relationship-control',
+        error: errorMessage,
+      });
+      // Don't fail the entire example for cleanup errors
+    }
+  }
 
   // Example 2: Auto-ingestion with relationship extraction disabled
   logInfo('\n📝 Example 2: Auto-ingestion WITHOUT relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
@@ -162,7 +250,29 @@ async function relationshipExtractionControlExample(): Promise<void> {
   );
 
   logInfo('✅ Conversation processed WITHOUT relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
-  await memoriWithoutRelationships.close();
+  try {
+    await memoriWithoutRelationships.close();
+  } catch (error) {
+    // Handle specific cleanup errors gracefully
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Engine is not yet connected') ||
+        errorMessage.includes('Response from the Engine was empty') ||
+        errorMessage.includes('database or disk is full') ||
+        errorMessage.includes('disk I/O error')) {
+      logInfo('Database cleanup error (non-critical)', {
+        component: 'dual-memory-mode-example',
+        mode: 'relationship-control',
+        error: errorMessage,
+      });
+    } else {
+      logError('Error closing Memori instance', {
+        component: 'dual-memory-mode-example',
+        mode: 'relationship-control',
+        error: errorMessage,
+      });
+      // Don't fail the entire example for cleanup errors
+    }
+  }
 
   logInfo('💡 Relationship extraction can be controlled independently of ingestion mode', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
 }
