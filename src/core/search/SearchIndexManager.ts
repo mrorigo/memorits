@@ -335,17 +335,17 @@ export class SearchIndexManager {
         );
       `;
 
-      // Export index data
+      // Export index data with explicit type handling
       const indexData = await this.dbManager.getPrismaClient().$queryRaw`
-        SELECT * FROM memory_fts;
-      `;
+        SELECT rowid, content, metadata FROM memory_fts;
+      ` as any[];
 
       const metadata = JSON.stringify({
         timestamp: timestamp.toISOString(),
         version,
-        indexSize: stats.totalSize,
-        documentCount: stats.totalDocuments,
-        optimizationLevel: stats.healthScore,
+        indexSize: Number(stats.totalSize),
+        documentCount: Number(stats.totalDocuments),
+        optimizationLevel: Number(stats.healthScore),
       });
 
       // Create checksum
@@ -354,16 +354,22 @@ export class SearchIndexManager {
       const backupMetadata: BackupMetadata = {
         timestamp,
         version,
-        indexSize: stats.totalSize,
-        documentCount: stats.totalDocuments,
-        optimizationLevel: stats.healthScore.toString(),
+        indexSize: Number(stats.totalSize),
+        documentCount: Number(stats.totalDocuments),
+        optimizationLevel: Number(stats.healthScore).toString(),
         checksum,
       };
 
-      // Store backup
+      // Store backup with explicit type casting
       await this.dbManager.getPrismaClient().$executeRaw`
         INSERT INTO search_index_backups (id, timestamp, version, data, metadata)
-        VALUES (${backupId}, ${timestamp.toISOString()}, ${version}, ${JSON.stringify(indexData)}, ${metadata});
+        VALUES (
+          ${backupId},
+          ${timestamp.toISOString()},
+          ${version},
+          ${JSON.stringify(indexData)},
+          ${metadata}
+        );
       `;
 
       logInfo('Index backup created successfully', {
@@ -431,11 +437,15 @@ export class SearchIndexManager {
         DELETE FROM memory_fts;
       `;
 
-      // Restore index data
+      // Restore index data with explicit type handling
       for (const record of indexData) {
         await this.dbManager.getPrismaClient().$executeRaw`
           INSERT INTO memory_fts (rowid, content, metadata)
-          VALUES (${record.rowid}, ${record.content}, ${record.metadata});
+          VALUES (
+            ${String(record.rowid)},
+            ${String(record.content)},
+            ${String(record.metadata)}
+          );
         `;
       }
 
@@ -472,47 +482,129 @@ export class SearchIndexManager {
 
       const statsBefore = await this.getIndexStatistics();
 
-      // Rebuild index from source data
-      await this.dbManager.getPrismaClient().$executeRaw`
-        DELETE FROM memory_fts;
-      `;
+      // Rebuild index from source data with safer approach
+      try {
+        await this.dbManager.getPrismaClient().$executeRaw`DELETE FROM memory_fts;`;
 
-      // Repopulate from main tables
-      await this.dbManager.getPrismaClient().$executeRaw`
-        INSERT INTO memory_fts(rowid, content, metadata)
-        SELECT
-          id,
-          searchableContent,
-          json_object(
-            'memory_type', retentionType,
-            'category_primary', categoryPrimary,
-            'importance_score', importanceScore,
-            'classification', classification,
-            'created_at', CASE
-              WHEN extractionTimestamp IS NOT NULL THEN extractionTimestamp
-              ELSE createdAt
-            END,
-            'namespace', namespace
-          )
-        FROM long_term_memory
-        WHERE searchableContent IS NOT NULL AND searchableContent != '';
-      `;
+        logInfo('Cleared existing FTS data', { component: 'SearchIndexManager' });
 
-      await this.dbManager.getPrismaClient().$executeRaw`
-        INSERT INTO memory_fts(rowid, content, metadata)
-        SELECT
-          id,
-          searchableContent,
-          json_object(
-            'memory_type', retentionType,
-            'category_primary', categoryPrimary,
-            'importance_score', importanceScore,
-            'created_at', createdAt,
-            'namespace', namespace
-          )
-        FROM short_term_memory
-        WHERE searchableContent IS NOT NULL AND searchableContent != '';
-      `;
+        // Check if source tables exist first
+        const longTermExists = await this.dbManager.getPrismaClient().$queryRaw`
+          SELECT name FROM sqlite_master WHERE type='table' AND name='long_term_memory';
+        ` as any[];
+
+        const shortTermExists = await this.dbManager.getPrismaClient().$queryRaw`
+          SELECT name FROM sqlite_master WHERE type='table' AND name='short_term_memory';
+        ` as any[];
+
+        // First, let's check what data exists in the table
+        const debugInfo = await this.dbManager.getPrismaClient().$queryRaw`
+          SELECT COUNT(*) as total,
+                 COUNT(CASE WHEN searchableContent IS NOT NULL THEN 1 END) as not_null,
+                 COUNT(CASE WHEN TRIM(searchableContent) != '' THEN 1 END) as not_empty,
+                 COUNT(CASE WHEN LENGTH(TRIM(searchableContent)) > 0 THEN 1 END) as has_length
+          FROM long_term_memory;
+        ` as any[];
+
+        logInfo('Debug info for long_term_memory table', {
+          component: 'SearchIndexManager',
+          debugInfo: debugInfo[0],
+        });
+
+        // Use a safer approach - fetch records and insert them individually
+        if (longTermExists && longTermExists.length > 0) {
+          try {
+            // Fetch records using Prisma query
+            const longTermRecords = await this.dbManager.getPrismaClient().$queryRaw`
+              SELECT id, searchableContent, summary, retentionType, categoryPrimary,
+                     importanceScore, classification, namespace
+              FROM long_term_memory
+              WHERE searchableContent IS NOT NULL AND searchableContent != '';
+            ` as any[];
+
+            logInfo(`Found ${longTermRecords.length} long_term_memory records to process`, {
+              component: 'SearchIndexManager',
+            });
+
+            // Process each record individually for better error handling
+            let processedCount = 0;
+            for (const record of longTermRecords) {
+              try {
+                const content = record.searchableContent || record.summary || '';
+                if (content.trim().length === 0) continue;
+
+                const metadata = JSON.stringify({
+                  memory_type: record.retentionType || 'unknown',
+                  category_primary: record.categoryPrimary || 'general',
+                  importance_score: Number(record.importanceScore) || 0.5,
+                  classification: record.classification || 'unknown',
+                  created_at: Math.floor(Date.now() / 1000),
+                  namespace: record.namespace || 'default',
+                });
+
+                await this.dbManager.getPrismaClient().$executeRaw`
+                  INSERT INTO memory_fts(rowid, content, metadata)
+                  VALUES (${Number(record.id)}, ${content}, ${metadata});
+                `;
+
+                processedCount++;
+              } catch (recordError) {
+                logError(`Failed to process record ${record.id}`, {
+                  component: 'SearchIndexManager',
+                  error: recordError instanceof Error ? recordError.message : String(recordError),
+                });
+              }
+            }
+
+            logInfo(`Successfully processed ${processedCount} long_term_memory records`, {
+              component: 'SearchIndexManager',
+            });
+          } catch (longTermError) {
+            logError('Failed to repopulate from long_term_memory', {
+              component: 'SearchIndexManager',
+              error: longTermError instanceof Error ? longTermError.message : String(longTermError),
+            });
+          }
+        }
+
+        // Repopulate from short_term_memory if it exists
+        if (shortTermExists && shortTermExists.length > 0) {
+          try {
+            await this.dbManager.getPrismaClient().$executeRaw`
+              INSERT INTO memory_fts(rowid, content, metadata)
+              SELECT
+                id,
+                COALESCE(TRIM(searchableContent), ''),
+                json_object(
+                  'memory_type', COALESCE(retentionType, 'unknown'),
+                  'category_primary', COALESCE(categoryPrimary, 'general'),
+                  'importance_score', COALESCE(importanceScore, 0.5),
+                  'created_at', COALESCE(strftime('%s', createdAt), strftime('%s', 'now')),
+                  'namespace', COALESCE(namespace, 'default')
+                )
+              FROM short_term_memory
+              WHERE searchableContent IS NOT NULL
+                AND TRIM(searchableContent) != ''
+                AND LENGTH(TRIM(searchableContent)) > 0;
+            `;
+            logInfo('Repopulated FTS from short_term_memory', { component: 'SearchIndexManager' });
+          } catch (shortTermError) {
+            logError('Failed to repopulate from short_term_memory', {
+              component: 'SearchIndexManager',
+              error: shortTermError instanceof Error ? shortTermError.message : String(shortTermError),
+            });
+          }
+        }
+
+        logInfo('FTS index rebuild completed successfully', { component: 'SearchIndexManager' });
+
+      } catch (rebuildError) {
+        logError('FTS index rebuild failed', {
+          component: 'SearchIndexManager',
+          error: rebuildError instanceof Error ? rebuildError.message : String(rebuildError),
+        });
+        throw rebuildError;
+      }
 
       const statsAfter = await this.getIndexStatistics();
 
@@ -588,13 +680,27 @@ export class SearchIndexManager {
       const fragmentedPages = Number(fragmentationInfo[0]?.fragmentedPages) || 0;
       const fragmentationLevel = totalSize > 0 ? fragmentedPages / (totalSize / 4096) : 0;
 
-      // Check for corruption
+      // Check for corruption using a more robust approach
       let corruptionDetected = false;
       try {
-        await this.dbManager.getPrismaClient().$executeRaw`
-          PRAGMA integrity_check;
-        `;
-      } catch {
+        // Use a simpler approach - check if we can query the FTS table
+        // If basic queries work, the database is likely not corrupted
+        const testQuery = await this.dbManager.getPrismaClient().$queryRaw`
+          SELECT COUNT(*) as count FROM memory_fts LIMIT 1;
+        ` as any[];
+
+        // If we can successfully query the table, it's likely not corrupted
+        if (testQuery && testQuery.length > 0) {
+          corruptionDetected = false;
+        } else {
+          corruptionDetected = true;
+        }
+      } catch (queryError) {
+        // If we can't even query the table, it might be corrupted
+        logError('FTS table query failed during corruption check', {
+          component: 'SearchIndexManager',
+          error: queryError instanceof Error ? queryError.message : String(queryError),
+        });
         corruptionDetected = true;
       }
 

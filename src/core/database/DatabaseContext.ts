@@ -352,65 +352,75 @@ export class DatabaseContext {
   }
 
   /**
-   * Cleanup all registered managers and resources
-   */
-  async cleanup(): Promise<void> {
-    if (this.isShuttingDown) {
-      return;
-    }
+    * Cleanup all registered managers and resources
+    */
+   async cleanup(): Promise<void> {
+     if (this.isShuttingDown) {
+       return;
+     }
 
-    this.isShuttingDown = true;
-    const startTime = Date.now();
+     this.isShuttingDown = true;
+     const startTime = Date.now();
 
-    logInfo('Starting DatabaseContext cleanup', {
-      component: 'DatabaseContext',
-      managersCount: this.managers.size,
-    });
+     logInfo('Starting DatabaseContext cleanup', {
+       component: 'DatabaseContext',
+       managersCount: this.managers.size,
+     });
 
-    try {
-      // Stop health monitoring
-      if (this.healthCheckInterval) {
-        clearInterval(this.healthCheckInterval);
-        this.healthCheckInterval = undefined;
-      }
+     try {
+       // Stop health monitoring first
+       if (this.healthCheckInterval) {
+         clearInterval(this.healthCheckInterval);
+         this.healthCheckInterval = undefined;
+       }
 
-      // Cleanup managers in reverse order
-      const managerNames = Array.from(this.managers.keys());
-      for (const name of managerNames.reverse()) {
-        try {
-          const manager = this.managers.get(name);
-          if (manager?.cleanup) {
-            manager.cleanup();
-          }
-        } catch (error) {
-          logError(`Failed to cleanup manager: ${name}`, {
-            component: 'DatabaseContext',
-            managerName: name,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+       // Cleanup managers in reverse order
+       const managerNames = Array.from(this.managers.keys());
+       for (const name of managerNames.reverse()) {
+         try {
+           const manager = this.managers.get(name);
+           if (manager?.cleanup) {
+             manager.cleanup();
+           }
+         } catch (error) {
+           logError(`Failed to cleanup manager: ${name}`, {
+             component: 'DatabaseContext',
+             managerName: name,
+             error: error instanceof Error ? error.message : String(error),
+           });
+         }
+       }
 
-      // Disconnect Prisma client
-      await this.prisma.$disconnect();
+       // Disconnect Prisma client only if not already disconnecting
+       try {
+         if (this.prisma) {
+           await this.prisma.$disconnect();
+         }
+       } catch (disconnectError) {
+         // Log but don't fail - disconnect errors during cleanup are common
+         logInfo('Prisma disconnect during cleanup', {
+           component: 'DatabaseContext',
+           error: disconnectError instanceof Error ? disconnectError.message : String(disconnectError),
+         });
+       }
 
-      const duration = Date.now() - startTime;
-      logInfo('DatabaseContext cleanup completed', {
-        component: 'DatabaseContext',
-        duration,
-        managersCleaned: managerNames.length,
-      });
+       const duration = Date.now() - startTime;
+       logInfo('DatabaseContext cleanup completed', {
+         component: 'DatabaseContext',
+         duration,
+         managersCleaned: managerNames.length,
+       });
 
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logError('DatabaseContext cleanup failed', {
-        component: 'DatabaseContext',
-        error: error instanceof Error ? error.message : String(error),
-        duration,
-      });
-      throw error;
-    }
-  }
+     } catch (error) {
+       const duration = Date.now() - startTime;
+       logError('DatabaseContext cleanup failed', {
+         component: 'DatabaseContext',
+         error: error instanceof Error ? error.message : String(error),
+         duration,
+       });
+       // Don't rethrow cleanup errors to prevent cascading failures
+     }
+   }
 
   /**
    * Get database performance metrics
