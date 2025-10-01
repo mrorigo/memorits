@@ -390,6 +390,56 @@ describe('SanitizationUtils', () => {
       expect(result.hasPathTraversal).toBe(false);
       expect(result.hasCommandInjection).toBe(false);
     });
+
+    describe('parentheses handling', () => {
+      it('should NOT flag legitimate text with parentheses as dangerous', () => {
+        const legitimateTexts = [
+          'Blockchain consensus mechanisms ensure all nodes agree on the network state. Popular mechanisms include Proof of Work (Bitcoin mining), Proof of Stake (validator selection by stake), and Delegated Proof of Stake (community voting).',
+          'JavaScript functions can be called with parameters (e.g., myFunction(arg1, arg2))',
+          'Regular expressions use parentheses for grouping (pattern matching)',
+          'Mathematical formulas often use parentheses like (a + b) * c',
+          'File paths like /usr/local/bin (read-only directory)',
+          'Function definitions: def calculate_total(items):',
+          'Object properties: user.profile (read-only)',
+          'Version numbers: Python 3.9 (released 2020)',
+        ];
+
+        legitimateTexts.forEach(text => {
+          const result = containsDangerousPatterns(text);
+          expect(result.hasSQLInjection).toBe(false);
+          expect(result.hasXSS).toBe(false);
+          expect(result.hasPathTraversal).toBe(false);
+          expect(result.hasCommandInjection).toBe(false);
+        });
+      });
+
+      it('should still detect actual command injection with parentheses', () => {
+        const dangerousTexts = [
+          '$(rm -rf /)',  // Variable substitution with parentheses
+          '`rm -rf /`',   // Command substitution with parentheses
+          '${USER} & malicious_command', // Variable pattern with command separator
+          'input; DROP TABLE users;', // SQL injection with semicolon
+          'command; (nested_command)', // Command with nested parentheses (semicolon makes it dangerous)
+        ];
+
+        dangerousTexts.forEach(text => {
+          const result = containsDangerousPatterns(text);
+          // At least one dangerous category should be flagged
+          expect(
+            result.hasSQLInjection ||
+            result.hasXSS ||
+            result.hasPathTraversal ||
+            result.hasCommandInjection
+          ).toBe(true);
+        });
+      });
+
+      it('should handle mixed legitimate and dangerous content', () => {
+        const mixedContent = 'Function call: process_data(items, options) | cat /etc/passwd';
+        const result = containsDangerousPatterns(mixedContent);
+        expect(result.hasCommandInjection).toBe(true); // Should catch the pipe
+      });
+    });
   });
 
   describe('generateSecurityHash', () => {

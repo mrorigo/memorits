@@ -61,9 +61,12 @@ export const DANGEROUS_PATTERNS = {
     /%252e/gi,
   ],
   COMMAND_INJECTION: [
-    /[;&|`$\(\){}]/g,
-    /\$\{.*\}/g,
-    /`.*`/g,
+    /[;&|`$]/g,  // Remove command separators and dangerous chars, but not parentheses
+    /\$\{.*\}/g,  // Variable substitution patterns
+    /`.*`/g,      // Command substitution
+    // Context-aware patterns for parentheses (only flag if they look like command injection)
+    /(\$[(\w]+|\w+\s*\([^)]*\)\s*[;&|])/g,  // $VAR( or command(args);&
+    /(\||&|;)\s*\(/g,  // Command separators followed by parentheses
   ],
 } as const;
 
@@ -591,12 +594,58 @@ export function containsDangerousPatterns(input: string): {
   hasXSS: boolean;
   hasPathTraversal: boolean;
   hasCommandInjection: boolean;
+  details?: {
+    sqlMatches?: string[];
+    xssMatches?: string[];
+    pathTraversalMatches?: string[];
+    commandInjectionMatches?: string[];
+  };
 } {
+  const details = {
+    sqlMatches: [] as string[],
+    xssMatches: [] as string[],
+    pathTraversalMatches: [] as string[],
+    commandInjectionMatches: [] as string[],
+  };
+
+  const hasSQLInjection = DANGEROUS_PATTERNS.SQL_INJECTION.some(pattern => {
+    const matches = pattern.test(input);
+    if (matches) {
+      details.sqlMatches.push(`Pattern: ${pattern.source}`);
+    }
+    return matches;
+  });
+
+  const hasXSS = DANGEROUS_PATTERNS.XSS_PATTERNS.some(pattern => {
+    const matches = pattern.test(input);
+    if (matches) {
+      details.xssMatches.push(`Pattern: ${pattern.source}`);
+    }
+    return matches;
+  });
+
+  const hasPathTraversal = DANGEROUS_PATTERNS.PATH_TRAVERSAL.some(pattern => {
+    const matches = pattern.test(input);
+    if (matches) {
+      details.pathTraversalMatches.push(`Pattern: ${pattern.source}`);
+    }
+    return matches;
+  });
+
+  const hasCommandInjection = DANGEROUS_PATTERNS.COMMAND_INJECTION.some(pattern => {
+    const matches = pattern.test(input);
+    if (matches) {
+      details.commandInjectionMatches.push(`Pattern: ${pattern.source}`);
+    }
+    return matches;
+  });
+
   return {
-    hasSQLInjection: DANGEROUS_PATTERNS.SQL_INJECTION.some(pattern => pattern.test(input)),
-    hasXSS: DANGEROUS_PATTERNS.XSS_PATTERNS.some(pattern => pattern.test(input)),
-    hasPathTraversal: DANGEROUS_PATTERNS.PATH_TRAVERSAL.some(pattern => pattern.test(input)),
-    hasCommandInjection: DANGEROUS_PATTERNS.COMMAND_INJECTION.some(pattern => pattern.test(input)),
+    hasSQLInjection,
+    hasXSS,
+    hasPathTraversal,
+    hasCommandInjection,
+    details: hasSQLInjection || hasXSS || hasPathTraversal || hasCommandInjection ? details : undefined,
   };
 }
 
