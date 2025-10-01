@@ -84,6 +84,9 @@ export class Memori {
       component: 'Memori',
       namespace: this.config.namespace,
       sessionId: this.sessionId,
+      autoIngest: this.config.autoIngest,
+      consciousIngest: this.config.consciousIngest,
+      ingestionMode: this.config.autoIngest ? 'auto-ingestion' : (this.config.consciousIngest ? 'conscious-ingestion' : 'no-ingestion'),
     });
   }
 

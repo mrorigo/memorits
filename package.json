@@ -55,9 +55,9 @@
     "example:dual-memory": "tsx examples/dual-memory-mode.ts",
     "example:search-strategy": "tsx examples/search-strategy-usage.ts",
     "example:performance-dashboard": "tsx examples/performance-dashboard.ts",
-    "index:health": "tsx -e \"import('./dist').then(m => { const memori = new m.Memori(); return memori.enable().then(() => memori.getIndexHealthReport()).then(report => { console.log('Index Health Report:'); console.log(JSON.stringify(report, null, 2)); return memori; }).finally(() => memori.close()); })\"",
-    "index:optimize": "tsx -e \"import('./dist').then(m => { const memori = new m.Memori(); return memori.enable().then(() => memori.optimizeIndex()).then(result => { console.log('Index Optimization Result:'); console.log(JSON.stringify(result, null, 2)); return memori; }).finally(() => memori.close()); })\"",
-    "index:backup": "tsx -e \"import('./dist').then(m => { const memori = new m.Memori(); return memori.enable().then(() => memori.createIndexBackup()).then(backup => { console.log('Index Backup Created:'); console.log(JSON.stringify(backup, null, 2)); return memori; }).finally(() => memori.close()); })\""
+    "index:health": "tsx examples/scripts/index-health.ts",
+    "index:optimize": "tsx examples/scripts/index-optimize.ts",
+    "index:backup": "tsx examples/scripts/index-backup.ts"
   },
   "devDependencies": {
     "@babel/core": "^7.28.4",

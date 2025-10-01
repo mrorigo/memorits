@@ -24,9 +24,12 @@ async function memorySearchExample(): Promise<void> {
       model: config.model,
     });
 
-    // Initialize Memori instance
-    memori = new Memori(config);
-    logInfo('✅ Memori instance created', { component: 'memory-search-example' });
+    // Initialize Memori instance with auto-ingestion enabled
+    memori = new Memori({
+      ...config,
+      autoIngest: true, // Enable auto-ingestion to process conversations into searchable memories
+    });
+    logInfo('✅ Memori instance created with auto-ingestion enabled', { component: 'memory-search-example' });
 
     // Enable Memori (initializes database schema)
     await memori.enable();

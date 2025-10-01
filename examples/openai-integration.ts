@@ -42,9 +42,12 @@ async function openaiIntegrationExample(): Promise<void> {
       });
     }
 
-    // Initialize Memori instance
-    memori = new Memori(config);
-    logInfo('✅ Memori instance created with OpenAI backend', { component: 'openai-integration-example' });
+    // Initialize Memori instance with auto-ingestion enabled
+    memori = new Memori({
+      ...config,
+      autoIngest: true, // Enable auto-ingestion to process conversations into searchable memories
+    });
+    logInfo('✅ Memori instance created with OpenAI backend and auto-ingestion enabled', { component: 'openai-integration-example' });
 
     // Enable Memori (initializes database schema)
     await memori.enable();
