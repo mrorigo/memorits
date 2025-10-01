@@ -65,8 +65,22 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
     }
 
     try {
-      return this.databaseManager.isFTSEnabled();
-    } catch {
+      const ftsEnabled = this.databaseManager.isFTSEnabled();
+      if (!ftsEnabled) {
+        logWarn('FTS5 not available - SQLite was not compiled with FTS5 support', {
+          component: 'SQLiteFTSStrategy',
+          operation: 'canHandle',
+          query: query.text?.substring(0, 100)
+        });
+      }
+      return ftsEnabled;
+    } catch (error) {
+      logWarn('FTS5 availability check failed', {
+        component: 'SQLiteFTSStrategy',
+        operation: 'canHandle',
+        query: query.text?.substring(0, 100),
+        error: error instanceof Error ? error.message : String(error)
+      });
       return false;
     }
   }

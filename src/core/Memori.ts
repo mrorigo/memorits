@@ -306,9 +306,34 @@ export class Memori {
   }
 
   async close(): Promise<void> {
-    // Stop background monitoring before closing
-    this.stopBackgroundMonitoring();
-    await this.dbManager.close();
+    try {
+      // Stop background monitoring before closing
+      this.stopBackgroundMonitoring();
+
+      // Clean up search service to stop background timers
+      try {
+        const searchService = await this.dbManager.getSearchService();
+        if (searchService && typeof searchService.cleanup === 'function') {
+          searchService.cleanup();
+        }
+      } catch (error) {
+        // Don't fail the close process if search service cleanup fails
+        logInfo('Search service cleanup failed during Memori close (non-critical)', {
+          component: 'Memori',
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      // Close database manager
+      await this.dbManager.close();
+    } catch (error) {
+      logError('Error during Memori close', {
+        component: 'Memori',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
   }
 
   getSessionId(): string {

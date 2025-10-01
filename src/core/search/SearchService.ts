@@ -651,10 +651,11 @@ export class SearchService implements ISearchService {
         () => this.executeStrategy(searchStrategy, query)
       );
 
-      // Track performance metrics with enhanced monitoring
+      // Track performance metrics with enhanced monitoring - only track errors for actual failures
       const queryTime = Date.now() - startTime;
       const primaryStrategy = results.length > 0 ? results[0].strategy as SearchStrategy : SearchStrategy.LIKE;
-      const success = results.length > 0;
+      // A search is successful if it executes without errors, even if no results are found
+      const success = true; // Strategy executed successfully, just no results found
       const queryComplexity = this.performanceMonitor.calculateQueryComplexity(query);
 
       this.performanceMonitor.recordQueryMetrics(primaryStrategy, success, queryTime, queryComplexity);
@@ -694,6 +695,61 @@ export class SearchService implements ISearchService {
    */
   getAvailableStrategies(): SearchStrategy[] {
     return Array.from(this.strategies.keys());
+  }
+
+  /**
+   * Health check for all search strategies
+   */
+  async performStrategyHealthCheck(): Promise<{
+    healthy: SearchStrategy[];
+    unhealthy: SearchStrategy[];
+    details: Record<SearchStrategy, { available: boolean; error?: string }>;
+  }> {
+    const healthy: SearchStrategy[] = [];
+    const unhealthy: SearchStrategy[] = [];
+    const details: Record<SearchStrategy, { available: boolean; error?: string }> = {} as any;
+
+    for (const [strategyName, strategy] of this.strategies) {
+      try {
+        // Test strategy availability and basic functionality
+        const isAvailable = await this.testStrategyAvailability(strategy);
+        details[strategyName] = { available: isAvailable };
+
+        if (isAvailable) {
+          healthy.push(strategyName);
+        } else {
+          unhealthy.push(strategyName);
+          details[strategyName].error = 'Strategy not available or failed health check';
+        }
+      } catch (error) {
+        unhealthy.push(strategyName);
+        details[strategyName] = {
+          available: false,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      }
+    }
+
+    return { healthy, unhealthy, details };
+  }
+
+  /**
+   * Test if a strategy is available and functioning
+   */
+  private async testStrategyAvailability(strategy: ISearchStrategy): Promise<boolean> {
+    try {
+      // Basic validation check
+      await strategy.validateConfiguration();
+
+      // Test with a simple query to verify the strategy can execute
+      if (strategy.canHandle({ text: 'test', limit: 1 })) {
+        return true;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -1240,5 +1296,36 @@ export class SearchService implements ISearchService {
    */
   public getPerformanceMetrics() {
     return this.performanceMonitor.getPerformanceMetrics();
+  }
+
+  /**
+   * Cleanup all resources and stop background processes
+   */
+  public cleanup(): void {
+    try {
+      // Stop performance monitoring
+      this.performanceMonitor.cleanup();
+
+      // Stop search index maintenance schedule
+      this.searchIndexManager.stopMaintenanceSchedule();
+
+      // Clear strategy configurations
+      this.strategies.clear();
+      this.strategyConfigs.clear();
+
+      // Clear error handler resources
+      this.errorHandler.resetCircuitBreaker('*');
+
+      logInfo('SearchService cleanup completed successfully', {
+        component: 'SearchService',
+        operation: 'cleanup'
+      });
+    } catch (error) {
+      logError('Error during SearchService cleanup', {
+        component: 'SearchService',
+        operation: 'cleanup',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
 }

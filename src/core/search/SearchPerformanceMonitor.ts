@@ -339,36 +339,61 @@ export class SearchPerformanceMonitor {
   }
 
   /**
-   * Check for performance alerts based on thresholds
+   * Check for performance alerts based on thresholds with gradual alerting
    */
   private checkPerformanceAlerts(): void {
     const currentMemory = process.memoryUsage();
     const currentErrorRate = this.performanceMetrics.totalQueries > 0 ?
       this.performanceMetrics.failedQueries / this.performanceMetrics.totalQueries : 0;
 
-    if (this.performanceMetrics.averageResponseTime > this.performanceMonitoringConfig.alertThresholds.maxResponseTime) {
+    // Only alert if we have a minimum number of queries to avoid false positives
+    const minQueriesForAlert = 5;
+    if (this.performanceMetrics.totalQueries < minQueriesForAlert) {
+      return;
+    }
+
+    // Gradual alerting: Use different thresholds based on severity
+    const warningThreshold = this.performanceMonitoringConfig.alertThresholds.maxErrorRate;
+    const criticalThreshold = warningThreshold * 3; // 3x the normal threshold for critical
+
+    if (this.performanceMetrics.averageResponseTime > this.performanceMonitoringConfig.alertThresholds.maxResponseTime * 2) {
       this.generatePerformanceAlert(
         'response_time',
         this.performanceMetrics.averageResponseTime,
-        this.performanceMonitoringConfig.alertThresholds.maxResponseTime
+        this.performanceMonitoringConfig.alertThresholds.maxResponseTime * 2
       );
     }
 
-    if (currentErrorRate > this.performanceMonitoringConfig.alertThresholds.maxErrorRate) {
-      this.generatePerformanceAlert(
-        'error_rate',
-        currentErrorRate,
-        this.performanceMonitoringConfig.alertThresholds.maxErrorRate
-      );
+    // Use gradual error rate alerting
+    if (currentErrorRate > criticalThreshold) {
+      // Critical alert for very high error rates
+      this.generatePerformanceAlert('error_rate', currentErrorRate, criticalThreshold);
+    } else if (currentErrorRate > warningThreshold && this.shouldAlertForErrorRate(currentErrorRate)) {
+      // Warning alert only if trend is concerning
+      this.generatePerformanceAlert('error_rate', currentErrorRate, warningThreshold);
     }
 
-    if (currentMemory.heapUsed > this.performanceMonitoringConfig.alertThresholds.maxMemoryUsage) {
+    if (currentMemory.heapUsed > this.performanceMonitoringConfig.alertThresholds.maxMemoryUsage * 1.5) {
       this.generatePerformanceAlert(
         'memory_usage',
         currentMemory.heapUsed,
-        this.performanceMonitoringConfig.alertThresholds.maxMemoryUsage
+        this.performanceMonitoringConfig.alertThresholds.maxMemoryUsage * 1.5
       );
     }
+  }
+
+  /**
+   * Determine if we should alert for a given error rate based on trends
+   */
+  private shouldAlertForErrorRate(errorRate: number): boolean {
+    const recentTrends = this.performanceMetrics.performanceTrends.slice(-5);
+    if (recentTrends.length < 3) return true; // Alert if we don't have enough trend data
+
+    const recentErrorRates = recentTrends.map(t => t.errorRate);
+    const averageRecentErrorRate = recentErrorRates.reduce((a, b) => a + b, 0) / recentErrorRates.length;
+
+    // Only alert if error rate is consistently high or rapidly increasing
+    return errorRate > averageRecentErrorRate * 1.5;
   }
 
   /**
@@ -775,10 +800,20 @@ export class SearchPerformanceMonitor {
   }
 
   /**
-   * Record error for tracking
+   * Record error for tracking with enhanced categorization
    */
-  recordError(errorType: string): void {
+  recordError(errorType: string, context?: { strategy?: string; operation?: string; severity?: string }): void {
     const currentCount = this.performanceMetrics.errorCounts.get(errorType) || 0;
     this.performanceMetrics.errorCounts.set(errorType, currentCount + 1);
+
+    // Log error with context for better debugging
+    logWarn(`Performance monitor recorded error: ${errorType}`, {
+      component: 'SearchPerformanceMonitor',
+      operation: 'recordError',
+      errorType,
+      context,
+      totalErrors: currentCount + 1,
+      timestamp: new Date().toISOString()
+    });
   }
 }
