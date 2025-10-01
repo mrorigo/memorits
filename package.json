@@ -4,9 +4,15 @@
   "description": "A type-safe memory engine for AI conversations with OpenAI integration. TypeScript port of the original Memori project by GibsonAI, created by mrorigo with AI assistance from Roo Code (code-supernova model).",
   "license": "Apache-2.0",
   "author": "mrorigo",
-  "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "require": "./dist/src/index.js",
+      "import": "./dist/src/index.js"
+    }
+  },
   "files": [
     "dist/",
     "README.md",
@@ -55,6 +61,7 @@
     "example:dual-memory": "tsx examples/dual-memory-mode.ts",
     "example:search-strategy": "tsx examples/search-strategy-usage.ts",
     "example:performance-dashboard": "tsx examples/performance-dashboard.ts",
+    "example:advanced-search": "tsx examples/advanced-memory-search.ts",
     "index:health": "tsx examples/scripts/index-health.ts",
     "index:optimize": "tsx examples/scripts/index-optimize.ts",
     "index:backup": "tsx examples/scripts/index-backup.ts"
