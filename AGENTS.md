@@ -9,11 +9,10 @@ This file provides guidance to agents when working with code in this repository.
 - Database commands: `npm run prisma:push` followed by `npm run prisma:generate` (required sequence)
 - Example scripts: Use `npm run example:*` (tsx-based execution, not standard node)
 - Search index management: `npm run index:health`, `npm run index:optimize`, `npm run index:backup` for advanced search features
-- Memory consolidation testing: `npm run test:consolidation` for duplicate detection and merging validation
 
 ## Code Style Guidelines
 
-- Import strategy: Use relative imports only (e.g., `../../../src/core/agents/MemoryAgent`)
+- Import strategy: Use relative imports only (e.g., `../types/schemas`, `../utils/Logger`)
 - Error handling: Always use structured logging with component context (see src/core/utils/Logger.ts patterns)
 - Type definitions: Use comprehensive interface system (src/core/types/models.ts) for clean APIs + Zod schemas for runtime validation
 - Interface-first: All public APIs should use clean interfaces from models.ts for better IDE support
