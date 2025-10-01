@@ -27,10 +27,13 @@ export async function initializeSearchSchema(prisma: PrismaClient): Promise<bool
 
      // Test that FTS5 functionality works
      try {
+       // Use a unique rowid that doesn't conflict with existing data
+       const testRowId = Date.now(); // Use timestamp as unique rowid
+
        await prisma.$executeRaw`
-         INSERT INTO memory_fts(rowid, content, metadata) VALUES (1, 'test content', '{}');
+         INSERT INTO memory_fts(rowid, content, metadata) VALUES (${testRowId}, 'test content', '{}');
        `;
-       await prisma.$executeRaw`DELETE FROM memory_fts WHERE rowid = 1;`;
+       await prisma.$executeRaw`DELETE FROM memory_fts WHERE rowid = ${testRowId};`;
        logInfo('FTS5 table created and tested successfully', { component: 'DatabaseInit' });
      } catch (testError) {
        logError('FTS5 table created but functionality test failed', {
@@ -67,25 +70,38 @@ export async function initializeSearchSchema(prisma: PrismaClient): Promise<bool
      // Create indexes for performance optimization (FTS5 virtual tables cannot be indexed)
      // We create indexes on the main tables for better query performance
      try {
-       await prisma.$executeRaw`
-         CREATE INDEX IF NOT EXISTS idx_long_term_memory_namespace
-         ON long_term_memory(namespace);
-       `;
+       // Verify main tables exist before creating indexes
+       const longTermTableCheck = await prisma.$queryRaw`
+         SELECT name FROM sqlite_master WHERE type='table' AND name='long_term_memory';
+       ` as any[];
 
-       await prisma.$executeRaw`
-         CREATE INDEX IF NOT EXISTS idx_short_term_memory_namespace
-         ON short_term_memory(namespace);
-       `;
+       const shortTermTableCheck = await prisma.$queryRaw`
+         SELECT name FROM sqlite_master WHERE type='table' AND name='short_term_memory';
+       ` as any[];
 
-       await prisma.$executeRaw`
-         CREATE INDEX IF NOT EXISTS idx_long_term_memory_importance
-         ON long_term_memory(importanceScore DESC);
-       `;
+       if (longTermTableCheck && longTermTableCheck.length > 0) {
+         await prisma.$executeRaw`
+           CREATE INDEX IF NOT EXISTS idx_long_term_memory_namespace
+           ON long_term_memory(namespace);
+         `;
 
-       await prisma.$executeRaw`
-         CREATE INDEX IF NOT EXISTS idx_short_term_memory_importance
-         ON short_term_memory(importanceScore DESC);
-       `;
+         await prisma.$executeRaw`
+           CREATE INDEX IF NOT EXISTS idx_long_term_memory_importance
+           ON long_term_memory(importanceScore DESC);
+         `;
+       }
+
+       if (shortTermTableCheck && shortTermTableCheck.length > 0) {
+         await prisma.$executeRaw`
+           CREATE INDEX IF NOT EXISTS idx_short_term_memory_namespace
+           ON short_term_memory(namespace);
+         `;
+
+         await prisma.$executeRaw`
+           CREATE INDEX IF NOT EXISTS idx_short_term_memory_importance
+           ON short_term_memory(importanceScore DESC);
+         `;
+       }
 
        logInfo('Created performance indexes on main tables', { component: 'DatabaseInit' });
      } catch (error) {
@@ -243,11 +259,35 @@ export async function verifyFTSSchema(prisma: PrismaClient): Promise<{
 
     // Test BM25 function availability
     try {
-      await prisma.$executeRaw`
-         SELECT bm25(memory_fts) FROM memory_fts LIMIT 1;
-       `;
-    } catch {
-      issues.push('BM25 function not available - FTS5 may not be properly configured');
+      // First check if table has any data, if not insert a test record
+      const countResult = await prisma.$queryRaw`
+        SELECT COUNT(*) as count FROM memory_fts;
+      ` as any[];
+
+      if (countResult[0]?.count === 0) {
+        // Insert a temporary test record for BM25 testing
+        const testRowId = Date.now() + 1; // Use timestamp + 1 as unique rowid
+        await prisma.$executeRaw`
+          INSERT INTO memory_fts(rowid, content, metadata) VALUES (${testRowId}, 'test content for bm25', '{}');
+        `;
+
+        // Test BM25 function
+        await prisma.$queryRaw`
+          SELECT bm25(memory_fts) FROM memory_fts WHERE rowid = ${testRowId};
+        ` as any[];
+
+        // Clean up test record
+        await prisma.$executeRaw`
+          DELETE FROM memory_fts WHERE rowid = ${testRowId};
+        `;
+      } else {
+        // Test BM25 function with existing data
+        await prisma.$queryRaw`
+          SELECT bm25(memory_fts) FROM memory_fts LIMIT 1;
+        ` as any[];
+      }
+    } catch (error) {
+      issues.push(`BM25 function test failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     return {

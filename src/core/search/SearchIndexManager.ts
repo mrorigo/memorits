@@ -386,18 +386,29 @@ export class SearchIndexManager {
   }
 
   /**
-   * Restore index from backup
-   */
-  public async restoreFromBackup(backupId: string): Promise<boolean> {
-    try {
-      logInfo(`Restoring index from backup: ${backupId}`, {
-        component: 'SearchIndexManager',
-      });
+    * Restore index from backup
+    */
+   public async restoreFromBackup(backupId: string): Promise<boolean> {
+     try {
+       logInfo(`Restoring index from backup: ${backupId}`, {
+         component: 'SearchIndexManager',
+       });
 
-      // Get backup data
-      const backupData = await this.dbManager.getPrismaClient().$queryRaw`
-        SELECT * FROM search_index_backups WHERE id = ${backupId};
-      ` as any[];
+       // Ensure backup table exists
+       await this.dbManager.getPrismaClient().$executeRaw`
+         CREATE TABLE IF NOT EXISTS search_index_backups (
+           id TEXT PRIMARY KEY,
+           timestamp TEXT NOT NULL,
+           version TEXT NOT NULL,
+           data BLOB NOT NULL,
+           metadata TEXT NOT NULL
+         );
+       `;
+
+       // Get backup data
+       const backupData = await this.dbManager.getPrismaClient().$queryRaw`
+         SELECT * FROM search_index_backups WHERE id = ${backupId};
+       ` as any[];
 
       if (backupData.length === 0) {
         throw new Error(`Backup not found: ${backupId}`);
@@ -559,14 +570,14 @@ export class SearchIndexManager {
         SELECT COUNT(*) as totalDocuments FROM memory_fts;
       ` as any[];
 
-      const totalDocuments = indexInfo[0]?.totalDocuments || 0;
+      const totalDocuments = Number(indexInfo[0]?.totalDocuments) || 0;
 
       // Get index size information
       const sizeInfo = await this.dbManager.getPrismaClient().$queryRaw`
         SELECT page_count * page_size as totalSize FROM pragma_page_count(), pragma_page_size();
       ` as any[];
 
-      const totalSize = sizeInfo[0]?.totalSize || 0;
+      const totalSize = Number(sizeInfo[0]?.totalSize) || 0;
       const averageDocumentSize = totalDocuments > 0 ? totalSize / totalDocuments : 0;
 
       // Get fragmentation information
@@ -574,7 +585,7 @@ export class SearchIndexManager {
         SELECT COUNT(*) as fragmentedPages FROM pragma_freelist_count();
       ` as any[];
 
-      const fragmentedPages = fragmentationInfo[0]?.fragmentedPages || 0;
+      const fragmentedPages = Number(fragmentationInfo[0]?.fragmentedPages) || 0;
       const fragmentationLevel = totalSize > 0 ? fragmentedPages / (totalSize / 4096) : 0;
 
       // Check for corruption
@@ -882,6 +893,24 @@ export class SearchIndexManager {
    */
   private async getLastOptimizationTime(): Promise<Date | null> {
     try {
+      // Check if backup table exists first
+      const tableCheck = await this.dbManager.getPrismaClient().$queryRaw`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='search_index_backups';
+      ` as any[];
+
+      if (!tableCheck || tableCheck.length === 0) {
+        // Table doesn't exist yet, create it
+        await this.dbManager.getPrismaClient().$executeRaw`
+          CREATE TABLE IF NOT EXISTS search_index_backups (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            version TEXT NOT NULL,
+            data BLOB NOT NULL,
+            metadata TEXT NOT NULL
+          );
+        `;
+      }
+
       // Check for optimization tracking in backup metadata
       const lastBackup = await this.dbManager.getPrismaClient().$queryRaw`
         SELECT timestamp FROM search_index_backups ORDER BY timestamp DESC LIMIT 1;
@@ -892,7 +921,12 @@ export class SearchIndexManager {
       }
 
       return null;
-    } catch {
+    } catch (error) {
+      // Log error but don't fail - this is not critical for health checks
+      logError('Failed to get last optimization time', {
+        component: 'SearchIndexManager',
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }

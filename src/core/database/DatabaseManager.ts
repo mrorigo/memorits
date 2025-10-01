@@ -17,7 +17,7 @@ import { TransactionCoordinator } from './TransactionCoordinator';
 import { ChatHistoryData, ConsciousMemoryData, ShortTermMemoryData, RelationshipQuery, DatabaseOperationMetrics, DatabasePerformanceConfig } from './types';
 import { SearchService } from '../search/SearchService';
 import { SearchIndexManager } from '../search/SearchIndexManager';
-import { verifyFTSSchema } from './init-search-schema';
+import { verifyFTSSchema, initializeSearchSchema } from './init-search-schema';
 import { MemoryStateTransition, MemoryProcessingState } from '../memory/MemoryProcessingStateManager';
 import { PerformanceMetrics, PerformanceTrend } from '../types/base';
 import { createHash } from 'crypto';
@@ -244,8 +244,13 @@ export class DatabaseManager {
       defaultNamespace: 'default',
     });
 
-    // Initialize FTSManager for search coordination (needs PrismaClient, not DatabaseContext)
+    // Initialize Prisma client first
     this.prisma = this.databaseContext.getPrismaClient();
+
+    // Initialize FTS schema before creating any managers that depend on it
+    this.initializeFTSSchema();
+
+    // Initialize FTSManager after FTS schema is ready
     this.ftsManager = new FTSManager(this.prisma);
 
     this.searchManager = new SearchManager(this.ftsManager);
@@ -301,6 +306,10 @@ export class DatabaseManager {
    */
   public getSearchIndexManager(): SearchIndexManager {
     if (!this.searchIndexManager) {
+      // Ensure FTS is ready before creating SearchIndexManager
+      if (!this.ftsEnabled) {
+        this.initializeFTSSchema();
+      }
       this.searchIndexManager = new SearchIndexManager(this);
     }
     return this.searchIndexManager;
@@ -1053,25 +1062,63 @@ export class DatabaseManager {
   }
 
   /**
-   * Ensure FTS support is properly initialized
+   * Initialize FTS schema during DatabaseManager construction
+   */
+  private async initializeFTSSchema(): Promise<void> {
+    try {
+      logInfo('Initializing FTS schema during DatabaseManager startup...', {
+        component: 'DatabaseManager',
+      });
+
+      // First try to initialize the schema
+      const initialized = await initializeSearchSchema(this.prisma);
+
+      if (initialized) {
+        logInfo('FTS schema initialized successfully', {
+          component: 'DatabaseManager',
+        });
+        this.ftsEnabled = true;
+      } else {
+        logError('FTS schema initialization returned false - may need manual intervention', {
+          component: 'DatabaseManager',
+        });
+        this.ftsEnabled = false;
+      }
+
+    } catch (error) {
+      logError('Failed to initialize FTS schema during startup', {
+        component: 'DatabaseManager',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      this.ftsEnabled = false;
+      // Don't throw here - let the system continue even if FTS fails
+    }
+  }
+
+  /**
+   * Ensure FTS support is properly initialized (only when needed)
    */
   private async ensureFTSSupport(): Promise<void> {
     if (this.ftsEnabled) return;
 
     try {
-      const verification = await verifyFTSSchema(this.prisma);
-      this.ftsEnabled = verification.isValid;
-
+      // Only verify if we haven't already initialized successfully
       if (!this.ftsEnabled) {
-        logError('FTS support verification failed', {
-          component: 'DatabaseManager',
-          issues: verification.issues,
-        });
-      } else {
-        logInfo('FTS support verified and enabled', {
-          component: 'DatabaseManager',
-          stats: verification.stats,
-        });
+        const verification = await verifyFTSSchema(this.prisma);
+        this.ftsEnabled = verification.isValid;
+
+        if (!this.ftsEnabled) {
+          logError('FTS support verification failed', {
+            component: 'DatabaseManager',
+            issues: verification.issues,
+          });
+        } else {
+          logInfo('FTS support verified and enabled', {
+            component: 'DatabaseManager',
+            stats: verification.stats,
+          });
+        }
       }
     } catch (error) {
       logError('Failed to verify FTS support', {
