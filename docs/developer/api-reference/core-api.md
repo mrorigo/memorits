@@ -39,10 +39,13 @@ Creates a new Memori instance with optional configuration.
 **Example:**
 ```typescript
 const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-openai-api-key',
+  model: 'gpt-4o-mini',
   autoIngest: true,
   consciousIngest: false,
-  namespace: 'my-app',
-  databaseUrl: 'sqlite:./memories.db'
+  enableRelationshipExtraction: true
 });
 ```
 
@@ -144,17 +147,13 @@ interface MemoriConfig {
   autoIngest?: boolean;
   consciousIngest?: boolean;
   namespace?: string;
+  enableRelationshipExtraction?: boolean;
 
   // Database configuration
   databaseUrl?: string;
   apiKey?: string;
   model?: string;
   baseUrl?: string;
-
-  // Memory processing
-  minImportanceLevel?: MemoryImportanceFilter;
-  maxMemoryAge?: number;
-  backgroundInterval?: number;
 
   // User context
   userContext?: {
@@ -178,10 +177,8 @@ interface MemoriConfig {
 - `model` (string, default: 'gpt-4o-mini'): Model for memory processing
 - `baseUrl` (string): Custom API base URL
 
-#### Memory Processing
-- `minImportanceLevel`: Minimum importance level for processing
-- `maxMemoryAge` (number): Maximum age of memories in days
-- `backgroundInterval` (number): Background processing interval in milliseconds
+#### Relationship Extraction
+- `enableRelationshipExtraction` (boolean, default: true): Enable relationship extraction during memory processing
 
 ## Search API
 
@@ -503,13 +500,13 @@ const customConfig = ConfigManager.mergeConfig(config, {
 ```typescript
 // Recommended configuration for production
 const productionConfig = {
+  databaseUrl: process.env.DATABASE_URL || 'sqlite:./memories.db',
+  namespace: process.env.MEMORI_NAMESPACE || 'default',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4o-mini',
   autoIngest: true,
   consciousIngest: false,
-  namespace: process.env.MEMORI_NAMESPACE || 'default',
-  databaseUrl: process.env.DATABASE_URL || 'sqlite:./memories.db',
-  minImportanceLevel: 'medium',
-  maxMemoryAge: 90, // Keep memories for 90 days
-  backgroundInterval: 30000 // Check every 30 seconds
+  enableRelationshipExtraction: true
 };
 ```
 

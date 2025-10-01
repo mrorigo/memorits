@@ -76,31 +76,28 @@ OPENAI_API_KEY=your-openai-api-key-here
 OPENAI_BASE_URL=https://api.openai.com/v1
 
 # Memory Configuration
-MEMORI_DATABASE_URL=sqlite:./memories.db
+DATABASE_URL=sqlite:./memories.db
 MEMORI_NAMESPACE=default
-MEMORI_MODEL=gpt-4o-mini
-
-# Memory Modes
 MEMORI_AUTO_INGEST=true
 MEMORI_CONSCIOUS_INGEST=false
 MEMORI_ENABLE_RELATIONSHIP_EXTRACTION=true
+MEMORI_MODEL=gpt-4o-mini
 ```
 
 ### Programmatic Configuration
 
 ```typescript
-import { MemoriConfigSchema } from 'memorits';
+import { Memori } from 'memorits';
 
-const config = MemoriConfigSchema.parse({
+const memori = new Memori({
   databaseUrl: 'sqlite:./my-memories.db',
   namespace: 'my-app',
+  apiKey: 'your-openai-api-key',
   model: 'gpt-4o-mini',
   autoIngest: true,
   consciousIngest: false,
   enableRelationshipExtraction: true
 });
-
-const memori = new Memori(config);
 ```
 
 ## Memory Modes Explained
@@ -202,11 +199,18 @@ setTimeout(async () => {
 Check that memories are being stored:
 
 ```bash
-# View database with Prisma Studio (if installed globally)
-npx prisma studio --schema=./node_modules/memorits/prisma/schema.prisma
+# View database with Prisma Studio (recommended)
+npx prisma studio --schema=./prisma/schema.prisma
 
 # Or check the SQLite database directly
+sqlite3 ./memories.db "SELECT COUNT(*) FROM chat_history;"
 sqlite3 ./memories.db "SELECT COUNT(*) FROM long_term_memory;"
+
+# View recent conversations
+sqlite3 ./memories.db "SELECT userInput, aiOutput, createdAt FROM chat_history ORDER BY createdAt DESC LIMIT 5;"
+
+# View processed memories
+sqlite3 ./memories.db "SELECT summary, classification, importanceScore FROM long_term_memory ORDER BY createdAt DESC LIMIT 5;"
 ```
 
 ## Common Issues and Solutions

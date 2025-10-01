@@ -254,7 +254,7 @@ getBackgroundUpdateInterval(): number
 
 **Returns:** Update interval in milliseconds
 
-### GAPS1 Advanced Methods
+### Advanced Methods
 
 #### `consolidateDuplicateMemories()`
 

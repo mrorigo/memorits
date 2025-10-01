@@ -41,10 +41,10 @@ const memories = await client.memory.searchMemories('important information');
 ### Pattern 1: Simple Constructor (Most Common)
 
 ```typescript
-import { MemoriOpenAI } from 'memorits';
+import { MemoriOpenAIClient } from 'memorits';
 
 // Simple replacement - existing code works unchanged
-const client = new MemoriOpenAI('your-api-key', {
+const client = new MemoriOpenAIClient('your-api-key', {
   enableChatMemory: true,
   autoInitialize: true
 });
@@ -59,49 +59,16 @@ const response = await client.chat.completions.create({
 const memories = await client.memory.searchMemories('Hello');
 ```
 
-### Pattern 2: Environment Configuration
+### Pattern 2: Configuration Object Constructor
 
 ```typescript
-// Configure via environment variables
-const client = await MemoriOpenAIFromEnv('your-api-key', {
+// Alternative constructor with configuration object
+const client = new MemoriOpenAIClient({
+  apiKey: 'your-api-key',
+  baseURL: 'https://api.openai.com/v1',
   enableChatMemory: true,
-  memoryProcessingMode: 'conscious'
-});
-
-// Environment variables:
-// OPENAI_API_KEY=your-key
-// MEMORI_DATABASE_URL=sqlite:./memories.db
-// MEMORI_PROCESSING_MODE=conscious
-```
-
-### Pattern 3: Database URL
-
-```typescript
-// Direct database specification
-const client = await MemoriOpenAIFromDatabase(
-  'your-api-key',
-  'postgresql://localhost/memories',
-  {
-    enableChatMemory: true,
-    enableEmbeddingMemory: false
-  }
-);
-```
-
-### Pattern 4: Advanced Configuration
-
-```typescript
-const client = await MemoriOpenAIFromConfig('your-api-key', {
-  enableChatMemory: true,
-  enableEmbeddingMemory: true,
-  memoryProcessingMode: 'conscious',
-  databaseUrl: 'sqlite:./advanced.db',
-  namespace: 'my-session',
-  minImportanceLevel: 'medium',
-  autoIngest: false,
-  consciousIngest: true,
-  bufferTimeout: 30000,
-  maxBufferSize: 50000
+  autoInitialize: true,
+  namespace: 'my-app'
 });
 ```
 
@@ -234,21 +201,14 @@ interface MemoriOpenAIConfig {
   // Core functionality
   enableChatMemory?: boolean;           // Enable chat memory recording
   enableEmbeddingMemory?: boolean;      // Enable embedding memory recording
-  memoryProcessingMode?: 'auto' | 'conscious' | 'none';
 
   // Initialization
   autoInitialize?: boolean;             // Auto-create Memori instance
-  databaseConfig?: DatabaseConfig;      // Database configuration
   namespace?: string;                   // Memory namespace
 
-  // Memory filtering
-  minImportanceLevel?: MemoryImportanceFilter;
-  maxMemoryAge?: number;                // Days to keep memories
+  // Memory modes
   autoIngest?: boolean;                 // Auto vs conscious ingestion
-
-  // Performance tuning
-  bufferTimeout?: number;               // Streaming buffer timeout (ms)
-  maxBufferSize?: number;               // Max streaming buffer size (chars)
+  consciousIngest?: boolean;            // Enable conscious processing
 
   // OpenAI client options (passed through)
   apiKey?: string;                      // Override API key
@@ -257,6 +217,7 @@ interface MemoriOpenAIConfig {
   project?: string;                     // Project ID
   timeout?: number;                     // Request timeout
   maxRetries?: number;                  // Maximum retries
+  defaultHeaders?: Record<string, string>; // Default headers
 }
 ```
 
@@ -266,22 +227,14 @@ interface MemoriOpenAIConfig {
 # OpenAI Configuration
 OPENAI_API_KEY=your-api-key
 OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_ORGANIZATION=your-org-id
-OPENAI_PROJECT=your-project-id
 
 # Memory Configuration
-MEMORI_DATABASE_URL=sqlite:./memories.db
+DATABASE_URL=sqlite:./memories.db
 MEMORI_NAMESPACE=default
-MEMORI_PROCESSING_MODE=auto
 MEMORI_AUTO_INGEST=true
 MEMORI_CONSCIOUS_INGEST=false
-MEMORI_MIN_IMPORTANCE=low
-MEMORI_MAX_AGE=30
-
-# Performance Configuration
-MEMORI_BUFFER_TIMEOUT=30000
-MEMORI_MAX_BUFFER_SIZE=50000
-MEMORI_BACKGROUND_INTERVAL=30000
+MEMORI_ENABLE_RELATIONSHIP_EXTRACTION=true
+MEMORI_MODEL=gpt-4o-mini
 ```
 
 ## Memory Modes in OpenAI Integration

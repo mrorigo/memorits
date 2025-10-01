@@ -4,37 +4,141 @@ This document explains the **actual implemented** database schema design for Mem
 
 ## Core Database Schema Architecture
 
-Memorits uses a **simplified 3-table architecture** with JSON-based metadata storage for maximum flexibility and extensibility. This approach provides rich functionality without the complexity of multiple specialized tables.
+Memorits uses **Prisma ORM** with a **3-table architecture** for optimal performance and maintainability. The schema is defined in Prisma schema format and uses JSON-based metadata storage for maximum flexibility and extensibility.
 
 ### Design Philosophy
 
-**JSON-Based Metadata Storage**: Instead of rigid table structures, Memorits stores complex data (relationships, processing states, consolidation info) as JSON in the main tables. This provides:
-- **Schema Flexibility**: No migrations needed for new metadata fields
-- **Rich Relationships**: Complex nested data structures supported
-- **Extensibility**: Easy addition of new tracking fields
-- **Performance**: Fewer table joins, faster queries
+**Prisma-Based Architecture**: Memorits uses Prisma ORM for type-safe database operations with:
+- **Type Safety**: Full TypeScript integration with compile-time validation
+- **Schema Flexibility**: Prisma migrations for schema evolution
+- **Rich Relationships**: Native foreign key relationships where appropriate
+- **Performance**: Optimized queries with proper indexing
+- **JSON Metadata Storage**: Complex data stored as JSON for extensibility
 
-### ChatHistory Table
+### Database Models (Prisma Schema)
 
-Stores raw conversation data before processing into memories.
+```prisma
+// Core database models defined in Prisma schema
+model ChatHistory {
+  id        String   @id @default(cuid())
+  userInput String
+  aiOutput  String
+  model     String?
+  timestamp DateTime @default(now())
+  sessionId String
+  namespace String   @default("default")
+  tokensUsed Int     @default(0)
+  metadata  Json?
 
-```sql
-CREATE TABLE ChatHistory (
-  id          VARCHAR(255) PRIMARY KEY,  -- CUID unique identifier
-  userInput   TEXT NOT NULL,             -- User's message content
-  aiOutput    TEXT NOT NULL,             -- AI's response content
-  model       VARCHAR(100),              -- LLM model used
-  timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
-  sessionId   VARCHAR(255),              -- Conversation session ID
-  namespace   VARCHAR(255) DEFAULT 'default', -- Multi-tenant isolation
-  tokensUsed  INTEGER DEFAULT 0,         -- Token consumption tracking
-  metadata    JSON,                      -- Additional conversation metadata
+  shortTermMemories ShortTermMemory[]
+  longTermMemories  LongTermMemory[]
 
-  -- Indexes for performance
-  INDEX idx_session_timestamp (sessionId, timestamp),
-  INDEX idx_namespace_timestamp (namespace, timestamp),
-  INDEX idx_timestamp (timestamp)
-);
+  @@map("chat_history")
+  @@index([sessionId, timestamp])
+  @@index([namespace, timestamp])
+  @@index([timestamp])
+}
+
+model LongTermMemory {
+  id                    String   @id @default(cuid())
+  originalChatId        String?
+  processedData         Json?
+  importanceScore       Float    @default(0.5)
+  categoryPrimary       String
+  retentionType         String   @default("long_term")
+  namespace             String   @default("default")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  accessCount           Int      @default(0)
+  lastAccessed          DateTime?
+  searchableContent     String
+  summary               String
+  noveltyScore          Float    @default(0.5)
+  relevanceScore        Float    @default(0.5)
+  actionabilityScore    Float    @default(0.5)
+
+  // Classification Fields
+  classification        String   @default("conversational")
+  memoryImportance      String   @default("medium")
+  topic                 String?
+  entitiesJson          Json?
+  keywordsJson          Json?
+
+  // Memory Management
+  duplicateOf           String?
+  supersedesJson        Json?
+  relatedMemoriesJson   Json?
+
+  // Technical Metadata
+  confidenceScore       Float    @default(0.8)
+  extractionTimestamp   DateTime @default(now())
+  classificationReason  String?
+
+  // Conscious Processing
+  consciousProcessed    Boolean  @default(false)
+
+  chat ChatHistory? @relation(fields: [originalChatId], references: [id], onDelete: SetNull)
+
+  @@map("long_term_memory")
+  @@index([namespace, createdAt])
+  @@index([categoryPrimary, importanceScore])
+  @@index([searchableContent])
+  @@index([topic])
+  @@index([classification])
+}
+
+model ShortTermMemory {
+  id               String   @id @default(cuid())
+  chatId           String?
+  processedData    Json?
+  importanceScore  Float    @default(0.5)
+  categoryPrimary  String
+  retentionType    String   @default("short_term")
+  namespace        String   @default("default")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  expiresAt        DateTime?
+  accessCount      Int      @default(0)
+  lastAccessed     DateTime?
+  searchableContent String
+  summary          String
+  isPermanentContext Boolean @default(false)
+
+  chat ChatHistory? @relation(fields: [chatId], references: [id], onDelete: SetNull)
+
+  @@map("short_term_memory")
+  @@index([namespace, expiresAt])
+  @@index([namespace, isPermanentContext])
+  @@index([accessCount])
+}
+```
+
+### Actual Database Table Names
+
+The Prisma models above map to these physical database tables:
+
+| Prisma Model | Database Table | Description |
+|-------------|---------------|-------------|
+| `ChatHistory` | `chat_history` | Raw conversation storage |
+| `LongTermMemory` | `long_term_memory` | Processed, searchable memories |
+| `ShortTermMemory` | `short_term_memory` | Temporary working context |
+
+### Database Operations
+
+```bash
+# Check actual table names in SQLite
+sqlite3 ./memories.db ".tables"
+
+# Query actual tables (note: snake_case table names)
+sqlite3 ./memories.db "SELECT COUNT(*) FROM chat_history;"
+sqlite3 ./memories.db "SELECT COUNT(*) FROM long_term_memory;"
+sqlite3 ./memories.db "SELECT COUNT(*) FROM short_term_memory;"
+
+# View recent conversations from actual table
+sqlite3 ./memories.db "SELECT userInput, aiOutput, createdAt FROM chat_history ORDER BY createdAt DESC LIMIT 5;"
+
+# View processed memories from actual table
+sqlite3 ./memories.db "SELECT summary, classification, importanceScore FROM long_term_memory ORDER BY createdAt DESC LIMIT 5;"
 ```
 
 ### LongTermMemory Table
@@ -42,7 +146,8 @@ CREATE TABLE ChatHistory (
 Stores processed, searchable memory data with comprehensive JSON-based metadata.
 
 ```sql
-CREATE TABLE LongTermMemory (
+-- Actual database table (matches Prisma @@map("long_term_memory"))
+CREATE TABLE long_term_memory (
   id                    VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
   originalChatId        VARCHAR(255),                -- Reference to source conversation
   processedData         JSON NOT NULL,               -- Rich structured memory data (includes relationships, consolidation info, state tracking)
@@ -51,6 +156,7 @@ CREATE TABLE LongTermMemory (
   retentionType         VARCHAR(50) DEFAULT 'long_term',
   namespace             VARCHAR(255) DEFAULT 'default',
   createdAt             DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt             DATETIME DEFAULT CURRENT_TIMESTAMP,
   accessCount           INTEGER DEFAULT 0,           -- Usage tracking
   lastAccessed          DATETIME,                     -- Last access timestamp
   searchableContent     TEXT NOT NULL,               -- Full-text search content
@@ -65,12 +171,11 @@ CREATE TABLE LongTermMemory (
   topic                 VARCHAR(255),                -- Main topic/keyword
   entitiesJson          JSON,                        -- Extracted entities (also in processedData)
   keywordsJson          JSON,                        -- Key terms/phrases (also in processedData)
-
-  -- Memory relationships (stored in processedData.relatedMemoriesJson/supersedesJson)
-  relatedMemoriesJson   JSON,                        -- Related memory references
+  duplicateOf           VARCHAR(255),                -- Duplicate memory reference
   supersedesJson        JSON,                        -- Superseded memories
+  relatedMemoriesJson   JSON,                        -- Related memory references
 
-  -- Processing metadata (stored in processedData)
+  -- Technical Metadata
   confidenceScore       FLOAT DEFAULT 0.8,            -- Processing confidence
   extractionTimestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
   classificationReason  TEXT,                        -- Why classified this way
@@ -90,7 +195,8 @@ CREATE TABLE LongTermMemory (
 Stores temporary, immediately accessible memories for working context.
 
 ```sql
-CREATE TABLE ShortTermMemory (
+-- Actual database table (matches Prisma @@map("short_term_memory"))
+CREATE TABLE short_term_memory (
   id               VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
   chatId           VARCHAR(255),                -- Associated chat
   processedData    JSON NOT NULL,               -- Structured memory data
@@ -99,6 +205,7 @@ CREATE TABLE ShortTermMemory (
   retentionType    VARCHAR(50) DEFAULT 'short_term',
   namespace        VARCHAR(255) DEFAULT 'default',
   createdAt        DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt        DATETIME DEFAULT CURRENT_TIMESTAMP,
   expiresAt        DATETIME,                     -- Expiration timestamp
   accessCount      INTEGER DEFAULT 0,           -- Usage tracking
   lastAccessed     DATETIME,                     -- Last access timestamp
@@ -119,7 +226,7 @@ CREATE TABLE ShortTermMemory (
 
 **Implementation:** In-Memory State Management with JSON Metadata Storage
 
-Instead of a dedicated table, Memorits implements comprehensive workflow state management through the `MemoryProcessingStateManager` class with metadata stored in `LongTermMemory.processedData`:
+Instead of a dedicated table, Memorits implements comprehensive workflow state management through the `MemoryProcessingStateManager` class with metadata stored in `long_term_memory.processedData`:
 
 ```typescript
 // Features implemented:
@@ -172,7 +279,7 @@ CREATE TABLE search_index_backups (
 
 ### Memory Relationship Storage
 
-**Implementation:** JSON-Based Relationship Storage in LongTermMemory
+**Implementation:** JSON-Based Relationship Storage in long_term_memory
 
 Memory relationships are stored as JSON in the `relatedMemoriesJson` and `supersedesJson` fields:
 
@@ -211,7 +318,7 @@ Memory relationships are stored as JSON in the `relatedMemoriesJson` and `supers
 
 **Implementation:** JSON-Based Audit Trail in processedData
 
-Consolidation operations are tracked within the `LongTermMemory.processedData` field:
+Consolidation operations are tracked within the `long_term_memory.processedData` field:
 
 ```json
 {
@@ -261,7 +368,7 @@ CREATE VIRTUAL TABLE memory_fts_enhanced USING fts5(
  processing_state,           -- Current processing state
 
  -- Content and metadata storage
- content=LongTermMemory,
+ content=long_term_memory,
  content_rowid=id,
 
  -- Advanced tokenization options
@@ -312,7 +419,7 @@ CREATE TABLE MemoryConsolidationLog (
  INDEX idx_consolidation_status (status, consolidationDate),
 
  -- Foreign key constraint
- FOREIGN KEY (primaryMemoryId) REFERENCES LongTermMemory(id) ON DELETE CASCADE
+ FOREIGN KEY (primaryMemoryId) REFERENCES long_term_memory(id) ON DELETE CASCADE
 );
 );
 ```
@@ -342,19 +449,19 @@ CREATE TABLE MemoryConsolidationLog (
 ### Entity Relationship Diagram
 
 ```
-ChatHistory ───┬─── LongTermMemory (1:N)
-               ├─── ShortTermMemory (1:N)
+chat_history ───┬─── long_term_memory (1:N)
+                ├─── short_term_memory (1:N)
 
-LongTermMemory ───┬─── RelatedMemories (N:N via JSON)
-                  ├─── SupersededMemories (1:N)
-                  └─── DuplicateTracking (N:1)
+long_term_memory ───┬─── RelatedMemories (N:N via JSON)
+                    ├─── SupersededMemories (1:N)
+                    └─── DuplicateTracking (N:1)
 ```
 
 ### Memory Processing Flow
 
-1. **Conversation Recording**: Raw data stored in `ChatHistory`
-2. **Memory Processing**: LLM analysis creates `LongTermMemory` entries
-3. **Conscious Processing**: Important memories copied to `ShortTermMemory`
+1. **Conversation Recording**: Raw data stored in `chat_history`
+2. **Memory Processing**: LLM analysis creates `long_term_memory` entries
+3. **Conscious Processing**: Important memories copied to `short_term_memory`
 4. **Memory Relationships**: Links established between related memories
 5. **Duplicate Management**: Duplicate detection and consolidation
 
@@ -364,21 +471,21 @@ LongTermMemory ───┬─── RelatedMemories (N:N via JSON)
 
 ```sql
 -- Core search performance indexes
-CREATE INDEX idx_memory_search ON LongTermMemory(searchableContent);
-CREATE INDEX idx_memory_importance ON LongTermMemory(namespace, importanceScore DESC);
-CREATE INDEX idx_memory_category ON LongTermMemory(namespace, categoryPrimary, importanceScore DESC);
-CREATE INDEX idx_memory_timestamp ON LongTermMemory(namespace, createdAt DESC);
+CREATE INDEX idx_memory_search ON long_term_memory(searchableContent);
+CREATE INDEX idx_memory_importance ON long_term_memory(namespace, importanceScore DESC);
+CREATE INDEX idx_memory_category ON long_term_memory(namespace, categoryPrimary, importanceScore DESC);
+CREATE INDEX idx_memory_timestamp ON long_term_memory(namespace, createdAt DESC);
 
 -- Temporal search optimization
-CREATE INDEX idx_memory_temporal ON LongTermMemory(namespace, createdAt, importanceScore);
+CREATE INDEX idx_memory_temporal ON long_term_memory(namespace, createdAt, importanceScore);
 
 -- Metadata search optimization
-CREATE INDEX idx_memory_topic ON LongTermMemory(namespace, topic);
-CREATE INDEX idx_memory_entities ON LongTermMemory(namespace, classification);
+CREATE INDEX idx_memory_topic ON long_term_memory(namespace, topic);
+CREATE INDEX idx_memory_entities ON long_term_memory(namespace, classification);
 
 -- Conscious processing optimization
-CREATE INDEX idx_conscious_eligible ON LongTermMemory(promotionEligible, importanceScore DESC);
-CREATE INDEX idx_conscious_processed ON LongTermMemory(consciousProcessed, namespace);
+CREATE INDEX idx_conscious_eligible ON long_term_memory(importanceScore DESC);
+CREATE INDEX idx_conscious_processed ON long_term_memory(consciousProcessed, namespace);
 ```
 
 ### Full-Text Search Setup
@@ -389,7 +496,7 @@ CREATE VIRTUAL TABLE memory_fts USING fts5(
   searchableContent,
   summary,
   topic,
-  content=LongTermMemory,
+  content=long_term_memory,
   content_rowid=id,
   tokenize='porter ascii'
 );
@@ -410,11 +517,11 @@ CREATE INDEX idx_fts_topic ON memory_fts(topic);
 
 ```sql
 -- Namespace-based queries
-SELECT * FROM LongTermMemory WHERE namespace = 'tenant_1';
+SELECT * FROM long_term_memory WHERE namespace = 'tenant_1';
 
 -- Cross-namespace aggregation
 SELECT namespace, COUNT(*) as memory_count
-FROM LongTermMemory
+FROM long_term_memory
 GROUP BY namespace;
 ```
 
@@ -448,7 +555,7 @@ SELECT
   COUNT(DISTINCT namespace) as active_namespaces,
   AVG(importanceScore) as avg_importance,
   SUM(accessCount) as total_accesses
-FROM LongTermMemory;
+FROM long_term_memory;
 
 -- Storage usage by category
 SELECT
@@ -457,7 +564,7 @@ SELECT
   AVG(importanceScore) as avg_importance,
   MIN(createdAt) as oldest_memory,
   MAX(createdAt) as newest_memory
-FROM LongTermMemory
+FROM long_term_memory
 GROUP BY categoryPrimary
 ORDER BY count DESC;
 ```

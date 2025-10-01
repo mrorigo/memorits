@@ -28,7 +28,7 @@ interface SearchOptions {
   timeout?: number;                      // Search timeout (ms)
   enableCache?: boolean;                 // Enable result caching
 
-  // GAPS1 Advanced Features
+  // Advanced Features
   filterExpression?: string;             // Advanced filter expression with boolean logic
   includeRelatedMemories?: boolean;      // Include related memories in results
   maxRelationshipDepth?: number;         // Maximum depth for relationship traversal
@@ -47,8 +47,8 @@ enum SearchStrategy {
   CATEGORY_FILTER = 'category_filter',    // Classification-based filtering
   TEMPORAL_FILTER = 'temporal_filter',    // Time-based filtering
   METADATA_FILTER = 'metadata_filter',    // Advanced metadata filtering
-  RELATIONSHIP = 'relationship',   // Relationship-based search (GAPS1)
-  ADVANCED_FILTER = 'advanced_filter'     // Advanced filter expressions (GAPS1)
+  RELATIONSHIP = 'relationship',   // Relationship-based search
+  ADVANCED_FILTER = 'advanced_filter'     // Advanced filter expressions
 }
 ```
 
@@ -126,25 +126,25 @@ const filteredMemories = await memori.searchMemories('configuration', {
   limit: 10
 });
 
-// Advanced Filter Expressions (GAPS1)
+// Advanced Filter Expressions
 const advancedFilterResults = await memori.searchMemories('', {
   filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
   limit: 20
 });
 
-// Complex boolean filter expressions (GAPS1)
+// Complex boolean filter expressions
 const complexFilterResults = await memori.searchMemories('', {
   filterExpression: '(category = "essential" OR category = "contextual") AND importance_score >= 0.6 AND created_at BETWEEN "2024-01-01" AND "2024-12-31"',
   limit: 50
 });
 
-// Filter templates with parameters (GAPS1)
+// Filter templates with parameters
 const templateSearch = await memori.searchMemories('', {
   filterExpression: 'recent_important: { days_ago: "7" }',
   limit: 10
 });
 
-// Relationship-based search (GAPS1)
+// Relationship-based search
 const relationshipResults = await memori.searchMemories('related to project setup', {
   includeRelatedMemories: true,
   maxRelationshipDepth: 3,
@@ -152,7 +152,7 @@ const relationshipResults = await memori.searchMemories('related to project setu
 });
 ```
 
-### GAPS1 Filter Expression Syntax
+### Filter Expression Syntax
 
 Advanced filter expressions support complex boolean logic with field comparisons and operators:
 

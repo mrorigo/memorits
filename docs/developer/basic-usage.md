@@ -7,13 +7,17 @@ This guide covers the essential usage patterns for Memorits, from simple memory 
 ### 1. Initialize Memorits
 
 ```typescript
-import { Memori, ConfigManager } from 'memorits';
+import { Memori } from 'memorits';
 
-// Load configuration (from environment or defaults)
-const config = ConfigManager.loadConfig();
-
-// Create Memori instance
-const memori = new Memori(config);
+// Create Memori instance with configuration
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-openai-api-key',
+  model: 'gpt-4o-mini',
+  autoIngest: true,
+  consciousIngest: false
+});
 
 // Enable memory processing
 await memori.enable();

@@ -486,7 +486,6 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 - **[Advanced Features](docs/developer/advanced-features/)** - Temporal filtering, metadata processing, conscious memory, memory relationships, and consolidation
 - **[API Reference](docs/developer/api-reference/)** - Detailed interface documentation and usage examples
 - **[Integration Guides](docs/developer/integrations/)** - OpenAI integration patterns and custom provider development
-- **[GAPS1 Implementation Guide](docs/features/GAPS1.md)** - Detailed documentation of advanced search, filtering, relationships, and optimization features
 
 ---
 

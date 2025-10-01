@@ -66,7 +66,7 @@ class RecentSearchStrategy implements ISearchStrategy {
           WHEN createdAt > datetime('now', '-1 week') THEN 0.6
           ELSE 0.4
         END as recency_score
-      FROM LongTermMemory
+      FROM long_term_memory
       WHERE namespace = ?
       ORDER BY recency_score DESC, importanceScore DESC
       LIMIT ?
@@ -99,7 +99,7 @@ class CategoryFilterStrategy implements ISearchStrategy {
           WHEN 'reference' THEN importanceScore * 1.0
           ELSE importanceScore * 0.8
         END as category_boost
-      FROM LongTermMemory
+      FROM long_term_memory
       WHERE namespace = ?
         AND categoryPrimary IN (${categoryQuery.categories.map(() => '?').join(',')})
         AND importanceScore >= ?
@@ -145,7 +145,7 @@ class TemporalFilterStrategy implements ISearchStrategy {
           WHEN createdAt BETWEEN ? AND ? THEN 0.8  -- Secondary range
           ELSE 0.5
         END as temporal_relevance
-      FROM LongTermMemory
+      FROM long_term_memory
       WHERE namespace = ?
         AND (${rangeConditions})
       ORDER BY temporal_relevance DESC, importanceScore DESC
@@ -182,7 +182,7 @@ class MetadataFilterStrategy implements ISearchStrategy {
     const sql = `
       SELECT *,
         ${this.buildMetadataRelevanceCalculation(metadataQuery)} as metadata_relevance
-      FROM LongTermMemory
+      FROM long_term_memory
       WHERE namespace = ?
         AND (${metadataConditions.join(' AND ')})
       ORDER BY metadata_relevance DESC, importanceScore DESC
@@ -197,7 +197,7 @@ class MetadataFilterStrategy implements ISearchStrategy {
 }
 ```
 
-### 6. Relationship Search Strategy (GAPS1)
+### 6. Relationship Search Strategy
 
 **Memory relationship-based search with graph traversal capabilities.**
 
@@ -221,7 +221,7 @@ class RelationshipSearchStrategy implements ISearchStrategy {
                1.0 as relationship_strength,
                mr.relationshipType,
                mr.confidence as relationship_confidence
-        FROM LongTermMemory m
+        FROM long_term_memory m
         WHERE m.namespace = ?
         AND json_extract(m.processedData, '$.relatedMemoriesJson') IS NOT NULL
           AND MATCH(memory_fts, ?)
@@ -235,7 +235,7 @@ class RelationshipSearchStrategy implements ISearchStrategy {
                rm.relationship_strength * mr.strength,
                mr.relationshipType,
                mr.confidence
-        FROM LongTermMemory m
+        FROM long_term_memory m
         WHERE json_extract(m.processedData, '$.relatedMemoriesJson') LIKE ?
         WHERE rm.depth < ?
           AND (rm.relationship_strength * mr.strength) >= ?
@@ -261,7 +261,7 @@ class RelationshipSearchStrategy implements ISearchStrategy {
 }
 ```
 
-### 7. Advanced Filter Engine (GAPS1)
+### 7. Advanced Filter Engine
 
 **Sophisticated filter expression processing with boolean logic and template system.**
 
@@ -629,7 +629,7 @@ async searchWithDegradation(query: SearchQuery): Promise<SearchResult[]> {
 }
 ```
 
-## GAPS1 Advanced Features
+## Advanced Features
 
 ### Search Strategy Configuration Management
 
