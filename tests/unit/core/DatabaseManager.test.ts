@@ -1,4 +1,5 @@
-import { DatabaseManager, ChatHistoryData } from '../../../src/core/database/DatabaseManager';
+import { ChatHistoryData } from '@/core/database/types';
+import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
 import { MemoryClassification, MemoryImportanceLevel } from '../../../src/core/types/schemas';
 import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';
@@ -108,6 +109,13 @@ describe('DatabaseManager', () => {
         console.log('Closing DatabaseManager...');
         await dbManager.close();
         console.log('DatabaseManager closed successfully');
+
+        // Force cleanup of any remaining timers in DatabaseContext
+        const databaseContext = (dbManager as any).databaseContext;
+        if (databaseContext && typeof databaseContext.forceCleanupHealthMonitoring === 'function') {
+          databaseContext.forceCleanupHealthMonitoring();
+          console.log('Force cleaned up DatabaseContext health monitoring');
+        }
       } catch (error) {
         // Ignore close errors in cleanup but log them with more detail
         console.warn('Cleanup error:', error);
@@ -165,7 +173,7 @@ describe('DatabaseManager', () => {
     });
 
     it('should reject invalid FTS query parameters', async () => {
-      const maliciousQuery = "'; DROP TABLE memory_fts; --";
+      const maliciousQuery = '\'; DROP TABLE memory_fts; --';
       const options = {
         limit: -1, // Invalid limit
         namespace: 'test',
@@ -249,7 +257,7 @@ describe('DatabaseManager', () => {
         // Use reflection to access the private method for testing
         const ftsMethod = (dbManager as any).searchMemoriesFTS;
         await ftsMethod.call(dbManager, 'test', options);
-        fail('Expected validation error for long namespace');
+        throw new Error('Expected validation error for long namespace');
       } catch (error: any) {
         // Accept either the old error message or the new validation error message
         expect(error.message).toMatch(/(Invalid FTS query|Namespace exceeds maximum length)/);
