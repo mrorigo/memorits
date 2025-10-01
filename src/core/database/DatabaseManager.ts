@@ -247,10 +247,7 @@ export class DatabaseManager {
     // Initialize Prisma client first
     this.prisma = this.databaseContext.getPrismaClient();
 
-    // Initialize FTS schema before creating any managers that depend on it
-    this.initializeFTSSchema();
-
-    // Initialize FTSManager after FTS schema is ready
+    // Initialize FTSManager - schema will be initialized lazily when needed
     this.ftsManager = new FTSManager(this.prisma);
 
     this.searchManager = new SearchManager(this.ftsManager);
