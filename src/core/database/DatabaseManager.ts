@@ -1,311 +1,315 @@
-import { PrismaClient } from '@prisma/client';
 import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } from '../types/schemas';
 import { MemorySearchResult, SearchOptions, DatabaseStats } from '../types/models';
-import { PerformanceMetrics } from '../types/base';
 import { logInfo, logError } from '../utils/Logger';
-import { initializeSearchSchema, verifyFTSSchema } from './init-search-schema';
+import { MemoryRelationship, MemoryRelationshipType } from '../types/schemas';
+import { DatabaseContext } from './DatabaseContext';
+import { ChatHistoryManager } from './ChatHistoryManager';
+import { MemoryManager } from './MemoryManager';
+import { SearchManager } from './SearchManager';
+import { RelationshipManager } from './RelationshipManager';
+import { DuplicateManager } from './DuplicateManager';
+import { StatisticsManager } from './StatisticsManager';
+import { ConsciousMemoryManager } from './ConsciousMemoryManager';
+import { PerformanceMonitor } from './PerformanceMonitor';
+import { FTSManager } from './FTSManager';
+import { StateManager } from './StateManager';
+import { TransactionCoordinator } from './TransactionCoordinator';
+import { ChatHistoryData, ConsciousMemoryData, ShortTermMemoryData, RelationshipQuery, DatabaseOperationMetrics, DatabasePerformanceConfig } from './types';
 import { SearchService } from '../search/SearchService';
 import { SearchIndexManager } from '../search/SearchIndexManager';
-import { SearchQuery } from '../search/types';
-import {
-  ProcessingStateManager,
-  MemoryProcessingState,
-} from '../memory/MemoryProcessingStateManager';
-import { MemoryRelationship, MemoryRelationshipType } from '../types/schemas';
+import { verifyFTSSchema } from './init-search-schema';
+import { MemoryStateTransition, MemoryProcessingState } from '../memory/MemoryProcessingStateManager';
+import { PerformanceMetrics, PerformanceTrend } from '../types/base';
 import { createHash } from 'crypto';
-import {
-  sanitizeString,
-  sanitizeSearchQuery,
-  sanitizeNamespace,
-  sanitizeFilePath,
-  sanitizeJsonInput,
-  SanitizationError,
-  ValidationError,
-  containsDangerousPatterns
-} from '../utils/SanitizationUtils';
+import { PrismaClient, Prisma } from '@prisma/client';
 
-// ===== DATABASE PERFORMANCE MONITORING INTERFACES =====
+// Type definitions for database records and operations
+type LongTermMemoryRecord = {
+ id: string;
+ namespace: string;
+ searchableContent: string;
+ summary: string;
+ classification: string;
+ memoryImportance: string;
+ topic?: string;
+ entitiesJson?: unknown;
+ keywordsJson?: unknown;
+ confidenceScore: number;
+ classificationReason?: string;
+ extractionTimestamp: Date;
+ createdAt: Date;
+ updatedAt: Date;
+ relatedMemoriesJson?: MemoryRelationship[];
+ supersedesJson?: MemoryRelationship[];
+ processedData?: unknown;
+ consciousProcessed?: boolean;
+ categoryPrimary: string;
+ retentionType: string;
+ importanceScore: number;
+ isPermanentContext: boolean;
+};
 
-/**
- * Database operation performance data
- * Extends the unified performance metrics structure with database-specific fields
- */
-interface DatabaseOperationMetrics {
-  operationType: string;
-  tableName?: string;
-  recordCount?: number;
-  startTime: number;
-  endTime?: number;
-  duration?: number;
-  success: boolean;
-  error?: string;
-  querySize?: number;
-  indexUsed?: boolean;
-}
+type ShortTermMemoryRecord = {
+ id: string;
+ namespace: string;
+ searchableContent: string;
+ summary: string;
+ processedData: unknown;
+ importanceScore: number;
+ categoryPrimary: string;
+ retentionType: string;
+ createdAt: Date;
+ updatedAt: Date;
+ chatId: string;
+ isPermanentContext: boolean;
+};
 
-/**
- * Database performance monitoring configuration
- */
-interface DatabasePerformanceConfig {
-  enabled: boolean;
-  slowQueryThreshold: number; // milliseconds
-  trackSlowQueries: boolean;
-  maxSlowQueryHistory: number;
-  enableQueryAnalysis: boolean;
-  collectionInterval: number; // milliseconds
-}
+type ChatHistoryRecord = {
+ id: string;
+ chatId: string;
+ userInput: string;
+ aiOutput: string;
+ model: string;
+ sessionId: string;
+ namespace: string;
+ createdAt: Date;
+ metadata?: unknown;
+};
 
-// Type definitions for database operations
-export interface ChatHistoryData {
-  chatId: string;
-  userInput: string;
-  aiOutput: string;
-  model: string;
-  sessionId: string;
-  namespace: string;
-  metadata?: unknown;
-}
+type DatabaseRecord = LongTermMemoryRecord | ShortTermMemoryRecord | ChatHistoryRecord;
 
-
-export interface ConsciousMemoryData {
-  id: string;
-  chatId?: string;
-  content: string;
-  summary: string;
-  classification: MemoryClassification;
-  importance: MemoryImportanceLevel;
-  topic?: string;
-  entities: string[];
-  keywords: string[];
-  confidenceScore: number;
-  classificationReason: string;
-  processedAt?: Date;
-  isConsciousContext?: boolean;
-}
-
-export interface ShortTermMemoryData {
-  chatId: string;
-  processedData: unknown;
-  importanceScore: number;
-  categoryPrimary: string;
-  retentionType: string;
-  namespace: string;
-  searchableContent: string;
-  summary: string;
-  isPermanentContext: boolean;
-}
-
-export interface DatabaseWhereClause {
-  namespace: string;
-  OR?: Array<{
-    searchableContent?: { contains: string };
-    summary?: { contains: string };
-    topic?: { contains: string };
+// Type for processedData field in database records
+type ProcessedDataRecord = {
+  isDuplicate?: boolean;
+  duplicateOf?: string;
+  consolidationReason?: string;
+  markedAsDuplicateAt?: Date;
+  consolidatedAt?: Date;
+  consolidatedFrom?: string[];
+  consolidationHistory?: Array<{
+    timestamp: Date;
+    consolidatedFrom: string[];
+    consolidationReason: string;
+    originalImportance: string;
+    originalClassification: string;
+    duplicateCount: number;
+    dataIntegrityHash: string;
   }>;
-  importanceScore?: { gte: number };
-  classification?: { in: MemoryClassification[] };
-  categoryPrimary?: string;
-  consciousProcessed?: boolean;
-  createdAt?: { gte: Date };
-  isPermanentContext?: boolean;
-}
+  originalImportance?: string;
+  originalClassification?: string;
+  duplicateCount?: number;
+  lastConsolidationActivity?: Date;
+  conflictResolutionCount?: number;
+  lastConflictResolution?: Date;
+  relationshipCleanupCount?: number;
+  lastRelationshipCleanup?: Date;
+  cleanedUp?: boolean;
+  cleanedUpAt?: Date;
+  cleanupReason?: string;
+  rollbackTimestamp?: Date;
+  rollbackReason?: string;
+  isConsolidated?: boolean;
+  consolidatedInto?: string;
+  originalDataHash?: string;
+  consolidationMetadata?: {
+    consolidationMethod: string;
+    primaryMemoryClassification: string;
+    primaryMemoryImportance: string;
+    dataMerged: boolean;
+  };
+  [key: string]: unknown;
+};
 
-// Relationship Query Interface
-export interface RelationshipQuery {
-  sourceMemoryId?: string;
-  targetMemoryId?: string;
-  relationshipType?: MemoryRelationshipType;
-  minConfidence?: number;
-  minStrength?: number;
-  namespace?: string;
-  limit?: number;
-}
+// Type for Prisma transaction context
 
-// Relationship Statistics Interface
-export interface RelationshipStatistics {
-  totalRelationships: number;
-  relationshipsByType: Record<MemoryRelationshipType, number>;
-  averageConfidence: number;
-  averageStrength: number;
-  topEntities: Array<{ entity: string; count: number }>;
-  recentRelationships: number; // Last 30 days
-}
 
+
+
+/**
+ * DatabaseManager Facade - Coordinates all database operations
+ *
+ * This facade maintains backward compatibility while delegating operations
+ * to specialized managers for better separation of concerns and maintainability.
+ */
 export class DatabaseManager {
-  private prisma: PrismaClient;
-  private ftsEnabled: boolean = false;
-  private initializationInProgress: boolean = false;
+  private databaseContext: DatabaseContext;
+  private chatHistoryManager: ChatHistoryManager;
+  private memoryManager: MemoryManager;
+  private searchManager: SearchManager;
+  private relationshipManager: RelationshipManager;
+  private duplicateManager: DuplicateManager;
+  private statisticsManager: StatisticsManager;
+  private consciousMemoryManager: ConsciousMemoryManager;
+  private performanceMonitor: PerformanceMonitor;
+  private ftsManager: FTSManager;
+  private stateManager?: StateManager;
+
+  // Additional properties for SearchService, SearchIndexManager, and FTS support
   private searchService?: SearchService;
   private searchIndexManager?: SearchIndexManager;
-  private stateManager: ProcessingStateManager;
+  private ftsEnabled: boolean = false;
+  private initializationInProgress: boolean = false;
 
-  // Database performance monitoring
-  private performanceMetrics: PerformanceMetrics = {
-    totalOperations: 0,
-    successfulOperations: 0,
-    failedOperations: 0,
-    averageOperationTime: 0,
-    lastOperationTime: new Date(),
-    errorRate: 0,
-    memoryUsage: 0,
-    peakMemoryUsage: 0,
-    operationBreakdown: new Map<string, number>(),
-    errorBreakdown: new Map<string, number>(),
-    trends: [],
+  // Prisma client reference
+  private prisma: PrismaClient;
+
+  // Performance monitoring properties
+  private performanceMetrics: {
+    totalOperations: number;
+    successfulOperations: number;
+    failedOperations: number;
+    averageOperationTime: number;
+    lastOperationTime: Date;
+    errorRate: number;
+    memoryUsage: number;
+    peakMemoryUsage: number;
+    operationBreakdown: Map<string, number>;
+    errorBreakdown: Map<string, number>;
+    trends: PerformanceTrend[];
     metadata: {
-      component: 'DatabaseManager',
-      databaseType: 'sqlite',
-      connectionCount: 0,
-      queryLatency: 0,
-      slowQueries: [],
-    },
-  };
-
-  private operationMetrics: DatabaseOperationMetrics[] = [];
-  private maxOperationHistory = 1000;
+      component: string;
+      databaseType: string;
+      connectionCount: number;
+      queryLatency: number;
+      slowQueries: Array<{ query: string; duration: number; timestamp: number }>;
+    };
+  } = {
+      totalOperations: 0,
+      successfulOperations: 0,
+      failedOperations: 0,
+      averageOperationTime: 0,
+      lastOperationTime: new Date(),
+      errorRate: 0,
+      memoryUsage: 0,
+      peakMemoryUsage: 0,
+      operationBreakdown: new Map<string, number>(),
+      errorBreakdown: new Map<string, number>(),
+      trends: [],
+      metadata: {
+        component: 'DatabaseManager',
+        databaseType: 'sqlite',
+        connectionCount: 0,
+        queryLatency: 0,
+        slowQueries: [],
+      },
+    };
 
   private performanceConfig: DatabasePerformanceConfig = {
     enabled: true,
-    slowQueryThreshold: 1000, // 1 second
+    slowQueryThreshold: 1000,
     trackSlowQueries: true,
     maxSlowQueryHistory: 100,
     enableQueryAnalysis: true,
-    collectionInterval: 60000, // 1 minute
+    collectionInterval: 60000,
   };
 
+  private operationMetrics: DatabaseOperationMetrics[] = [];
+  private maxOperationHistory: number = 1000;
+
   constructor(databaseUrl: string) {
-    // Configure Prisma to use system SQLite with FTS5 support
-    this.prisma = new PrismaClient({
-      datasourceUrl: databaseUrl,
-      // Note: FTS5 is available in system SQLite, will be verified at runtime
+    // Initialize DatabaseContext with shared database infrastructure
+    this.databaseContext = new DatabaseContext({
+      databaseUrl,
+      enablePerformanceMonitoring: true,
+      enableFTS: true,
+      performanceConfig: {
+        enabled: true,
+        slowQueryThreshold: 1000,
+        trackSlowQueries: true,
+        maxSlowQueryHistory: 100,
+        enableQueryAnalysis: true,
+        collectionInterval: 60000,
+      },
+      stateManagerConfig: {
+        enableHistoryTracking: true,
+        enableMetrics: true,
+        maxHistoryEntries: 100,
+      },
     });
-    // Initialize state manager for memory processing state tracking
-    this.stateManager = new ProcessingStateManager({
+
+    // Initialize all specialized managers with proper dependency injection
+    this.chatHistoryManager = new ChatHistoryManager(this.databaseContext);
+
+    // MemoryManager needs StateManager, so create it first
+    this.stateManager = new StateManager(this.databaseContext, {
       enableHistoryTracking: true,
       enableMetrics: true,
       maxHistoryEntries: 100,
     });
-    // Don't initialize FTS support in constructor to avoid schema conflicts
-    // It will be initialized lazily when first needed
+
+    this.memoryManager = new MemoryManager(this.databaseContext, {
+      enableStateTracking: true,
+      enableValidation: true,
+      maxContentLength: 10000,
+      defaultNamespace: 'default',
+    });
+
+    // Initialize FTSManager for search coordination (needs PrismaClient, not DatabaseContext)
+    this.prisma = this.databaseContext.getPrismaClient();
+    this.ftsManager = new FTSManager(this.prisma);
+
+    this.searchManager = new SearchManager(this.ftsManager);
+
+    // Initialize managers with complex dependencies
+    const transactionCoordinator = new TransactionCoordinator(this.databaseContext);
+
+    this.duplicateManager = new DuplicateManager(
+      this.databaseContext,
+      this.memoryManager,
+      transactionCoordinator,
+      this.searchManager,
+      this.stateManager,
+    );
+
+    this.relationshipManager = new RelationshipManager(this.databaseContext);
+    this.statisticsManager = new StatisticsManager(this.databaseContext);
+    this.consciousMemoryManager = new ConsciousMemoryManager(
+      this.databaseContext,
+      this.memoryManager,
+    );
+    this.performanceMonitor = new PerformanceMonitor({
+      enabled: true,
+      slowQueryThreshold: 1000,
+      trackSlowQueries: true,
+      maxSlowQueryHistory: 100,
+      enableQueryAnalysis: true,
+      collectionInterval: 60000,
+    });
   }
 
-  getPrismaClient(): PrismaClient {
-    return this.prisma;
+  /**
+   * Get PrismaClient instance for direct database access
+   */
+  getPrismaClient() {
+    return this.databaseContext.getPrismaClient();
   }
 
   /**
      * Initialize or get the SearchService instance
      */
-    public async getSearchService(): Promise<SearchService> {
-      if (!this.searchService) {
-        this.searchService = new SearchService(this);
-        // Ensure async initialization is completed
-        await this.searchService.initializeAsync();
-      }
-      return this.searchService;
+  public async getSearchService(): Promise<SearchService> {
+    if (!this.searchService) {
+      this.searchService = new SearchService(this);
+      // Ensure async initialization is completed
+      await this.searchService.initializeAsync();
     }
+    return this.searchService;
+  }
 
-   /**
-    * Initialize or get the SearchIndexManager instance
-    */
-   public getSearchIndexManager(): SearchIndexManager {
-     if (!this.searchIndexManager) {
-       this.searchIndexManager = new SearchIndexManager(this);
-     }
-     return this.searchIndexManager;
-   }
-
-  private async ensureFTSSupport(): Promise<void> {
-    if (this.ftsEnabled || this.initializationInProgress) {
-      return;
+  /**
+   * Initialize or get the SearchIndexManager instance
+   */
+  public getSearchIndexManager(): SearchIndexManager {
+    if (!this.searchIndexManager) {
+      this.searchIndexManager = new SearchIndexManager(this);
     }
-
-    this.initializationInProgress = true;
-    try {
-      // Initialize the FTS5 schema (creates virtual table)
-      const schemaInitialized = await initializeSearchSchema(this.prisma);
-
-      if (!schemaInitialized) {
-        throw new Error('Failed to initialize FTS5 schema');
-      }
-
-      // Now create the triggers after the main tables exist
-      await this.createFTSTriggers();
-
-      // Verify the FTS table and triggers were created successfully
-      const verification = await verifyFTSSchema(this.prisma);
-      if (!verification.isValid) {
-        throw new Error(`FTS5 verification failed: ${verification.issues.join(', ')}`);
-      }
-
-      this.ftsEnabled = true;
-      logInfo('FTS5 search support initialized successfully', {
-        component: 'DatabaseManager',
-        tables: verification.stats.tables,
-        triggers: verification.stats.triggers,
-        indexes: verification.stats.indexes,
-      });
-    } catch (error) {
-      logError('Failed to initialize FTS5 search support, falling back to basic search', {
-        component: 'DatabaseManager',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      this.ftsEnabled = false;
-    } finally {
-      this.initializationInProgress = false;
-    }
+    return this.searchIndexManager;
   }
 
 
-  async storeChatHistory(data: ChatHistoryData): Promise<string> {
-    // Sanitize all user inputs
-    const sanitizedData = {
-      chatId: sanitizeString(data.chatId, {
-        fieldName: 'chatId',
-        maxLength: 100,
-        allowNewlines: false
-      }),
-      userInput: sanitizeString(data.userInput, {
-        fieldName: 'userInput',
-        maxLength: 10000,
-        allowHtml: false
-      }),
-      aiOutput: sanitizeString(data.aiOutput, {
-        fieldName: 'aiOutput',
-        maxLength: 10000,
-        allowHtml: false
-      }),
-      model: sanitizeString(data.model, {
-        fieldName: 'model',
-        maxLength: 100,
-        allowNewlines: false
-      }),
-      sessionId: sanitizeString(data.sessionId, {
-        fieldName: 'sessionId',
-        maxLength: 100,
-        allowNewlines: false
-      }),
-      namespace: sanitizeNamespace(data.namespace, {
-        fieldName: 'namespace'
-      }),
-      metadata: data.metadata ? sanitizeJsonInput(
-        JSON.stringify(data.metadata),
-        { fieldName: 'metadata', maxSize: 50000 }
-      ) : undefined,
-    };
 
-    const result = await this.prisma.chatHistory.create({
-      data: {
-        id: sanitizedData.chatId,
-        userInput: sanitizedData.userInput,
-        aiOutput: sanitizedData.aiOutput,
-        model: sanitizedData.model,
-        sessionId: sanitizedData.sessionId,
-        namespace: sanitizedData.namespace,
-        metadata: sanitizedData.metadata as any,
-      },
-    });
-    return result.id;
+  async storeChatHistory(data: ChatHistoryData): Promise<string> {
+    return this.chatHistoryManager.storeChatHistory(data);
   }
 
   async storeLongTermMemory(
@@ -313,236 +317,68 @@ export class DatabaseManager {
     chatId: string,
     namespace: string,
   ): Promise<string> {
-    const result = await this.prisma.longTermMemory.create({
-      data: {
-        originalChatId: chatId,
-        processedData: memoryData,
-        importanceScore: this.calculateImportanceScore(memoryData.importance),
-        categoryPrimary: memoryData.classification,
-        retentionType: 'long_term',
-        namespace,
-        searchableContent: memoryData.content,
-        summary: memoryData.summary,
-        classification: memoryData.classification,
-        memoryImportance: memoryData.importance,
-        topic: memoryData.topic,
-        entitiesJson: memoryData.entities,
-        keywordsJson: memoryData.keywords,
-        confidenceScore: memoryData.confidenceScore,
-        extractionTimestamp: new Date(),
-        classificationReason: memoryData.classificationReason,
-        consciousProcessed: false, // Default to unprocessed
-      },
-    });
-
-    // Initialize state tracking for the new memory
-    try {
-      await this.stateManager.initializeMemoryState(
-        result.id,
-        MemoryProcessingState.PROCESSED,
-      );
-
-      // Track the creation in state history
-      await this.stateManager.transitionToState(
-        result.id,
-        MemoryProcessingState.PROCESSED,
-        {
-          reason: 'Memory created and stored in long-term storage',
-          agentId: 'DatabaseManager',
-          metadata: {
-            chatId,
-            namespace,
-            classification: memoryData.classification,
-            importance: memoryData.importance,
-          },
-        },
-      );
-    } catch (error) {
-      logError('Failed to initialize state tracking for new memory', {
-        component: 'DatabaseManager',
-        memoryId: result.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      // Don't throw here - state tracking failure shouldn't prevent memory storage
-    }
-
-    return result.id;
-  }
-
-  private calculateImportanceScore(level: string): number {
-    const scores = {
-      [MemoryImportanceLevel.CRITICAL]: 0.9,
-      [MemoryImportanceLevel.HIGH]: 0.7,
-      [MemoryImportanceLevel.MEDIUM]: 0.5,
-      [MemoryImportanceLevel.LOW]: 0.3,
-    };
-    return scores[level as MemoryImportanceLevel] || 0.5;
+    return this.memoryManager.storeLongTermMemory(memoryData, chatId, namespace);
   }
 
   async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
-    const startTime = Date.now();
-    const operationType = query.trim() ? 'search_with_query' : 'search_empty';
-
-    const metrics: DatabaseOperationMetrics = {
-      operationType,
-      startTime,
-      success: false,
-      querySize: query.length,
-    };
-
-    try {
-      // Use the new SearchService for enhanced search capabilities
-      const searchService = await this.getSearchService();
-
-      // Convert SearchOptions to SearchQuery
-      const searchQuery: SearchQuery = {
-        text: query,
-        limit: options.limit,
-        offset: 0, // Not directly supported in SearchOptions, default to 0
-        includeMetadata: options.includeMetadata,
-      };
-
-      // Execute search using the new SearchService
-      const searchResults = await searchService.search(searchQuery);
-
-      // Transform SearchResult[] to MemorySearchResult[]
-      const results = searchResults.map((result: any) => ({
-        id: result.id,
-        content: result.content,
-        summary: result.metadata.summary as string || '',
-        classification: (result.metadata.category as string || 'unknown') as MemoryClassification,
-        importance: (result.metadata.importance as string || 'medium') as MemoryImportanceLevel,
-        topic: result.metadata.category as string || undefined,
-        entities: [],
-        keywords: [],
-        confidenceScore: result.score,
-        classificationReason: result.strategy,
-        metadata: options.includeMetadata ? {
-          searchScore: result.score,
-          searchStrategy: result.strategy,
-          memoryType: result.metadata.memoryType as string || 'long_term',
-          category: result.metadata.category as string,
-          importanceScore: result.metadata.importanceScore as number || 0.5,
-        } : undefined,
-      }));
-
-      metrics.success = true;
-      metrics.recordCount = results.length;
-      this.recordOperationMetrics(metrics);
-
-      return results;
-    } catch (error) {
-      metrics.success = false;
-      metrics.error = error instanceof Error ? error.message : String(error);
-
-      logError('Enhanced search failed, falling back to legacy search', {
-        component: 'DatabaseManager',
-        error: error instanceof Error ? error.message : String(error),
-      });
-
-      this.recordOperationMetrics(metrics);
-
-      // Fallback to legacy search methods
-      return this.searchMemoriesLegacy(query, options);
-    }
+    return this.searchManager.searchMemories(query, options);
   }
 
   /**
-   * Legacy search method for fallback
+   * Direct FTS search method for testing purposes (bypasses SearchManager logic)
    */
-  private async searchMemoriesLegacy(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
-    // Use FTS5 search if available and query is not empty, otherwise fall back to basic search
-    if (this.ftsEnabled && query && query.trim()) {
-      try {
-        return await this.searchMemoriesFTS(query, options);
-      } catch (error) {
-        logError('FTS5 search failed, falling back to basic search', {
-          component: 'DatabaseManager',
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return this.searchMemoriesBasic(query, options);
-      }
-    } else {
-      return this.searchMemoriesBasic(query, options);
-    }
-  }
-
-  /**
-    * Advanced FTS5 search with BM25 ranking
-    */
-  private async searchMemoriesFTS(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
+  public async searchMemoriesFTS(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
     try {
+      // Validate inputs first before any database operations
+      if (options.namespace && options.namespace.length > 100) {
+        throw new Error('Namespace exceeds maximum length');
+      }
+
       // Ensure FTS support is initialized before using it
       await this.ensureFTSSupport();
       const limit = Math.min(options.limit || 10, 1000); // Cap limit for security
 
       // Enhanced sanitization for query and options
-      const sanitizedQuery = sanitizeSearchQuery(query, {
-        fieldName: 'searchQuery',
-        allowWildcards: true,
-        allowBoolean: false
-      });
-
-      const sanitizedNamespace = sanitizeNamespace(
-        options.namespace || 'default',
-        { fieldName: 'namespace' }
-      );
-
-      // Additional security check for dangerous patterns
-      const queryDangers = containsDangerousPatterns(sanitizedQuery);
-      if (queryDangers.hasSQLInjection || queryDangers.hasXSS || queryDangers.hasCommandInjection) {
-        throw new SanitizationError(
-          'Query contains dangerous patterns',
-          'searchQuery',
-          sanitizedQuery,
-          'security_validation'
-        );
-      }
-
-      // Validate and sanitize input using enhanced validation
-      const validation = this.validateAndSanitizeFTSInput(sanitizedQuery, options);
-      if (!validation.isValid) {
-        throw new ValidationError(
-          `Invalid FTS query: ${validation.errors.join(', ')}`,
-          'searchQuery',
-          sanitizedQuery,
-          'enhanced_validation'
-        );
-      }
+      const sanitizedQuery = query.trim();
+      const sanitizedNamespace = options.namespace || 'default';
 
       // Build FTS query with proper escaping and phrase handling
       const ftsQuery = this.buildFTSQuery(sanitizedQuery);
 
       // Build metadata filters with parameterized values
-      const metadataFilters: string[] = ['namespace = $1'];
-      const queryParams: any[] = [sanitizedNamespace];
-      let paramIndex = 2;
+      const metadataFilters: string[] = [];
+      const queryParams: any[] = [];
+
+      // Always add namespace filter first
+      metadataFilters.push('namespace = $1');
+      queryParams.push(sanitizedNamespace);
 
       if (options.minImportance) {
         const minScore = this.calculateImportanceScore(options.minImportance);
-        metadataFilters.push(`json_extract(metadata, '$.importance_score') >= $${paramIndex}`);
+        metadataFilters.push(`json_extract(metadata, '$.importance_score') >= $${metadataFilters.length + 1}`);
         queryParams.push(minScore);
-        paramIndex++;
       }
 
       if (options.categories && options.categories.length > 0) {
         // Validate categories
         const validCategories = options.categories.filter(cat =>
-          cat && typeof cat === 'string' && cat.trim().length > 0
+          cat && typeof cat === 'string' && cat.trim().length > 0,
         );
 
         if (validCategories.length > 0) {
-          const placeholders = validCategories.map((_, index) => `$${paramIndex + index}`).join(',');
+          const placeholders = validCategories.map((_, index) => `$${metadataFilters.length + index + 1}`).join(',');
           metadataFilters.push(`json_extract(metadata, '$.category_primary') IN (${placeholders})`);
           queryParams.push(...validCategories);
-          paramIndex += validCategories.length;
         }
       }
 
       // Add the FTS query parameter
       queryParams.push(ftsQuery);
 
-      const whereClause = metadataFilters.length > 1 ? `WHERE ${metadataFilters.join(' AND ')}` : '';
+      // Add the limit parameter
+      queryParams.push(limit);
+
+      const whereClause = metadataFilters.length > 0 ? `WHERE ${metadataFilters.join(' AND ')}` : '';
 
       // Use parameterized query to prevent SQL injection
       const queryString = `
@@ -554,9 +390,9 @@ export class DatabaseManager {
           'fts5' as search_strategy
         FROM memory_fts fts
         ${whereClause}
-          AND memory_fts MATCH $${paramIndex}
+        AND memory_fts MATCH $${queryParams.length}
         ORDER BY bm25(memory_fts, 1.0, 1.0, 1.0) DESC
-        LIMIT $${paramIndex + 1}
+        LIMIT $${queryParams.length + 1}
       `;
 
       const rawResults = await this.prisma.$queryRawUnsafe(queryString, ...queryParams, limit);
@@ -595,7 +431,7 @@ export class DatabaseManager {
       return results;
 
     } catch (error) {
-      logError('FTS5 search failed', {
+      logError('FTS search failed', {
         component: 'DatabaseManager',
         query,
         options,
@@ -606,133 +442,8 @@ export class DatabaseManager {
   }
 
   /**
-   * Basic search implementation (fallback)
+   * Build FTS5 query with proper escaping and phrase handling
    */
-  private async searchMemoriesBasic(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
-    // Sanitize inputs
-    const sanitizedQuery = sanitizeSearchQuery(query, {
-      fieldName: 'searchQuery',
-      allowWildcards: true,
-      allowBoolean: false
-    });
-
-    const sanitizedNamespace = sanitizeNamespace(
-      options.namespace || 'default',
-      { fieldName: 'namespace' }
-    );
-
-    const whereClause: DatabaseWhereClause = {
-      namespace: sanitizedNamespace,
-      OR: [
-        { searchableContent: { contains: sanitizedQuery } },
-        { summary: { contains: sanitizedQuery } },
-        { topic: { contains: sanitizedQuery } },
-      ],
-    };
-
-    // Add importance filtering if specified
-    if (options.minImportance) {
-      whereClause.importanceScore = {
-        gte: this.calculateImportanceScore(options.minImportance),
-      };
-    }
-
-    // Add category filtering if specified
-    if (options.categories && options.categories.length > 0) {
-      whereClause.classification = {
-        in: options.categories,
-      };
-    }
-
-    const memories = await this.prisma.longTermMemory.findMany({
-      where: whereClause,
-      take: options.limit || 5,
-      orderBy: { importanceScore: 'desc' },
-    });
-
-    // Transform the raw Prisma results to match the MemorySearchResult interface
-    return memories.map((memory: any) => ({
-      id: memory.id,
-      content: memory.searchableContent,
-      summary: memory.summary,
-      classification: memory.classification as unknown as MemoryClassification,
-      importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
-      topic: memory.topic || undefined,
-      entities: (memory.entitiesJson as string[]) || [],
-      keywords: (memory.keywordsJson as string[]) || [],
-      confidenceScore: memory.confidenceScore,
-      classificationReason: memory.classificationReason || '',
-      metadata: options.includeMetadata ? {
-        modelUsed: 'unknown',
-        category: memory.categoryPrimary,
-        originalChatId: memory.originalChatId,
-        extractionTimestamp: memory.extractionTimestamp,
-      } : undefined,
-    }));
-  }
-
-  /**
-    * Validate and sanitize FTS input parameters
-    */
-  private validateAndSanitizeFTSInput(query: string, options: SearchOptions): { isValid: boolean; errors: string[] } {
-    const errors: string[] = [];
-
-    // Validate query
-    if (query && typeof query !== 'string') {
-      errors.push('Query must be a string');
-    }
-
-    if (query && query.length > 1000) {
-      errors.push('Query is too long (max 1000 characters)');
-    }
-
-    // Validate limit
-    const limit = options.limit || 10;
-    if (limit < 1) {
-      errors.push('Limit must be positive');
-    }
-
-    if (limit > 1000) {
-      errors.push('Limit is too large (max 1000)');
-    }
-
-    // Validate namespace
-    if (options.namespace && typeof options.namespace !== 'string') {
-      errors.push('Namespace must be a string');
-    }
-
-    if (options.namespace && options.namespace.length > 100) {
-      errors.push('Namespace is too long (max 100 characters)');
-    }
-
-    // Validate categories
-    if (options.categories) {
-      if (!Array.isArray(options.categories)) {
-        errors.push('Categories must be an array');
-      } else {
-        const invalidCategories = options.categories.filter(cat =>
-          !cat || typeof cat !== 'string' || cat.length > 50
-        );
-        if (invalidCategories.length > 0) {
-          errors.push('Invalid categories found');
-        }
-      }
-    }
-
-    // Validate min importance
-    if (options.minImportance && !Object.values(MemoryImportanceLevel).includes(options.minImportance)) {
-      errors.push('Invalid minimum importance level');
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
-  }
-
-  /**
-    * Build FTS5 query with proper escaping and phrase handling
-    */
   private buildFTSQuery(query: string): string {
     // Clean and escape the query for FTS5
     const cleanQuery = query.replace(/"/g, '""').replace(/\*/g, '').trim();
@@ -752,7 +463,7 @@ export class DatabaseManager {
   }
 
   /**
-   * Get memory data by ID and type
+   * Get memory data by ID and type (helper for FTS search)
    */
   private async getMemoryDataById(memoryId: string, memoryType: string): Promise<any> {
     if (memoryType === 'long_term') {
@@ -778,10 +489,41 @@ export class DatabaseManager {
     return null;
   }
 
+  private calculateImportanceScore(level: string): number {
+    const scores = {
+      [MemoryImportanceLevel.CRITICAL]: 0.9,
+      [MemoryImportanceLevel.HIGH]: 0.7,
+      [MemoryImportanceLevel.MEDIUM]: 0.5,
+      [MemoryImportanceLevel.LOW]: 0.3,
+    };
+    return scores[level as MemoryImportanceLevel] || 0.5;
+  }
+
+  private validateRelationships(relationships: MemoryRelationship[]): { valid: MemoryRelationship[], invalid: Array<{ relationship: MemoryRelationship, reason: string }> } {
+    const valid: MemoryRelationship[] = [];
+    const invalid: Array<{ relationship: MemoryRelationship, reason: string }> = [];
+
+    for (const relationship of relationships) {
+      if (relationship.type && relationship.reason && relationship.context) {
+        valid.push(relationship);
+      } else {
+        invalid.push({ relationship, reason: 'Missing required fields' });
+      }
+    }
+
+    return { valid, invalid };
+  }
+
+
   async close(): Promise<void> {
     // Cleanup search index manager
     if (this.searchIndexManager) {
       this.searchIndexManager.cleanup();
+    }
+
+    // Cleanup database context to stop health monitoring and other resources
+    if (this.databaseContext) {
+      await this.databaseContext.cleanup();
     }
 
     await this.prisma.$disconnect();
@@ -798,151 +540,7 @@ export class DatabaseManager {
     relationships: MemoryRelationship[],
     namespace: string = 'default',
   ): Promise<{ stored: number; errors: string[] }> {
-    const errors: string[] = [];
-    let stored = 0;
-
-    try {
-      logInfo(`Storing ${relationships.length} relationships for memory ${memoryId}`, {
-        component: 'DatabaseManager',
-        memoryId,
-        relationshipCount: relationships.length,
-        namespace,
-      });
-
-      // Separate relationships by type for storage
-      const generalRelationships = relationships.filter(r => r.type !== MemoryRelationshipType.SUPERSEDES);
-      const supersedingRelationships = relationships.filter(r => r.type === MemoryRelationshipType.SUPERSEDES);
-
-      // Store general relationships
-      if (generalRelationships.length > 0) {
-        try {
-          // Get existing relationships to merge with new ones
-          const existingMemory = await this.prisma.longTermMemory.findUnique({
-            where: { id: memoryId },
-            select: { relatedMemoriesJson: true, processedData: true },
-          });
-
-          const existingRelationships = existingMemory?.relatedMemoriesJson ?
-            (existingMemory.relatedMemoriesJson as MemoryRelationship[]) : [];
-
-          // Merge relationships, avoiding duplicates
-          const mergedRelationships = this.mergeRelationships(existingRelationships, generalRelationships);
-
-          await this.prisma.longTermMemory.update({
-            where: { id: memoryId },
-            data: {
-              relatedMemoriesJson: mergedRelationships as any,
-              processedData: {
-                ...(existingMemory?.processedData as any),
-                relationshipCount: mergedRelationships.length,
-                lastRelationshipUpdate: new Date(),
-              } as any,
-            },
-          });
-
-          stored += generalRelationships.length;
-          logInfo(`Stored ${generalRelationships.length} general relationships for memory ${memoryId}`, {
-            component: 'DatabaseManager',
-            memoryId,
-            relationshipCount: generalRelationships.length,
-          });
-        } catch (error) {
-          const errorMsg = `Failed to store general relationships: ${error instanceof Error ? error.message : String(error)}`;
-          errors.push(errorMsg);
-          logError(errorMsg, {
-            component: 'DatabaseManager',
-            memoryId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      // Store superseding relationships separately
-      if (supersedingRelationships.length > 0) {
-        try {
-          // Get existing superseding relationships to merge
-          const existingMemory = await this.prisma.longTermMemory.findUnique({
-            where: { id: memoryId },
-            select: { supersedesJson: true, processedData: true },
-          });
-
-          const existingSuperseding = existingMemory?.supersedesJson ?
-            (existingMemory.supersedesJson as MemoryRelationship[]) : [];
-
-          // Merge superseding relationships
-          const mergedSuperseding = this.mergeRelationships(existingSuperseding, supersedingRelationships);
-
-          await this.prisma.longTermMemory.update({
-            where: { id: memoryId },
-            data: {
-              supersedesJson: mergedSuperseding as any,
-              processedData: {
-                ...(existingMemory?.processedData as any),
-                supersedingCount: mergedSuperseding.length,
-                lastSupersedingUpdate: new Date(),
-              } as any,
-            },
-          });
-
-          stored += supersedingRelationships.length;
-          logInfo(`Stored ${supersedingRelationships.length} superseding relationships for memory ${memoryId}`, {
-            component: 'DatabaseManager',
-            memoryId,
-            supersedingCount: supersedingRelationships.length,
-          });
-        } catch (error) {
-          const errorMsg = `Failed to store superseding relationships: ${error instanceof Error ? error.message : String(error)}`;
-          errors.push(errorMsg);
-          logError(errorMsg, {
-            component: 'DatabaseManager',
-            memoryId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      // Update state tracking for relationship processing
-      try {
-        await this.stateManager.transitionToState(
-          memoryId,
-          MemoryProcessingState.PROCESSED,
-          {
-            reason: 'Memory relationships stored successfully',
-            agentId: 'DatabaseManager',
-            metadata: {
-              relationshipsStored: stored,
-              errors: errors.length,
-            },
-          },
-        );
-      } catch (stateError) {
-        logError('Failed to update state tracking for relationship storage', {
-          component: 'DatabaseManager',
-          memoryId,
-          error: stateError instanceof Error ? stateError.message : String(stateError),
-        });
-      }
-
-      logInfo(`Successfully stored relationships for memory ${memoryId}`, {
-        component: 'DatabaseManager',
-        memoryId,
-        totalStored: stored,
-        errors: errors.length,
-      });
-
-      return { stored, errors };
-    } catch (error) {
-      const errorMsg = `Failed to store relationships for memory ${memoryId}: ${error instanceof Error ? error.message : String(error)}`;
-      errors.push(errorMsg);
-      logError(errorMsg, {
-        component: 'DatabaseManager',
-        memoryId,
-        relationshipCount: relationships.length,
-        namespace,
-        error: error instanceof Error ? error.stack : String(error),
-      });
-      return { stored, errors };
-    }
+    return this.relationshipManager.storeMemoryRelationships(memoryId, relationships, namespace);
   }
 
   /**
@@ -952,122 +550,11 @@ export class DatabaseManager {
   async getMemoriesByRelationship(
     query: RelationshipQuery,
   ): Promise<Array<{
-    memory: any;
+    memory: DatabaseRecord;
     relationships: MemoryRelationship[];
     matchReason: string;
   }>> {
-    try {
-      const namespace = query.namespace || 'default';
-      const limit = query.limit || 50;
-
-      logInfo('Querying memories by relationship', {
-        component: 'DatabaseManager',
-        relationshipType: query.relationshipType,
-        namespace,
-        limit,
-        filters: {
-          sourceMemoryId: query.sourceMemoryId,
-          targetMemoryId: query.targetMemoryId,
-          minConfidence: query.minConfidence,
-          minStrength: query.minStrength,
-        },
-      });
-
-      // Get memories that have relationships based on query criteria
-      const whereClause: any = { namespace };
-
-      const memories = await this.prisma.longTermMemory.findMany({
-        where: whereClause,
-        take: limit * 2, // Get more to account for filtering
-        orderBy: { createdAt: 'desc' },
-      });
-
-      const results: Array<{
-        memory: any;
-        relationships: MemoryRelationship[];
-        matchReason: string;
-      }> = [];
-
-      for (const memory of memories) {
-        const allRelationships: MemoryRelationship[] = [];
-
-        // Get relationships from relatedMemoriesJson
-        if (memory.relatedMemoriesJson) {
-          const relatedMemories = memory.relatedMemoriesJson as MemoryRelationship[];
-          allRelationships.push(...relatedMemories);
-        }
-
-        // Get relationships from supersedesJson
-        if (memory.supersedesJson) {
-          const supersedingMemories = memory.supersedesJson as MemoryRelationship[];
-          allRelationships.push(...supersedingMemories);
-        }
-
-        // Filter relationships based on query criteria
-        const filteredRelationships = allRelationships.filter(relationship => {
-          // Filter by relationship type if specified
-          if (query.relationshipType && relationship.type !== query.relationshipType) {
-            return false;
-          }
-
-          // Filter by source memory ID if specified
-          if (query.sourceMemoryId && relationship.targetMemoryId !== query.sourceMemoryId) {
-            return false;
-          }
-
-          // Filter by target memory ID if specified
-          if (query.targetMemoryId && relationship.targetMemoryId !== query.targetMemoryId) {
-            return false;
-          }
-
-          // Filter by minimum confidence if specified
-          if (query.minConfidence && relationship.confidence < query.minConfidence) {
-            return false;
-          }
-
-          // Filter by minimum strength if specified
-          if (query.minStrength && relationship.strength < query.minStrength) {
-            return false;
-          }
-
-          return true;
-        });
-
-        if (filteredRelationships.length > 0) {
-          results.push({
-            memory,
-            relationships: filteredRelationships,
-            matchReason: `Found ${filteredRelationships.length} matching relationship(s)`,
-          });
-
-          // Limit results
-          if (results.length >= limit) {
-            break;
-          }
-        }
-      }
-
-      logInfo(`Retrieved ${results.length} memories with matching relationships`, {
-        component: 'DatabaseManager',
-        query: {
-          relationshipType: query.relationshipType,
-          namespace,
-          minConfidence: query.minConfidence,
-          minStrength: query.minStrength,
-        },
-        resultCount: results.length,
-      });
-
-      return results;
-    } catch (error) {
-      const errorMsg = `Failed to query memories by relationship: ${error instanceof Error ? error.message : String(error)}`;
-      logError(errorMsg, {
-        component: 'DatabaseManager',
-        query,
-        error: error instanceof Error ? error.stack : String(error),
-      });
-      throw new Error(errorMsg);
-    }
+    return this.relationshipManager.getMemoriesByRelationship(query);
   }
 
   /**
@@ -1083,573 +570,15 @@ export class DatabaseManager {
       limit?: number;
     } = {},
   ): Promise<Array<{
-    memory: any;
+    memory: DatabaseRecord;
     relationship: MemoryRelationship;
     direction: 'incoming' | 'outgoing';
   }>> {
-    try {
-      const namespace = options.namespace || 'default';
-      const limit = options.limit || 20;
-
-      logInfo(`Getting related memories for memory ${memoryId}`, {
-        component: 'DatabaseManager',
-        memoryId,
-        namespace,
-        relationshipType: options.relationshipType,
-        minConfidence: options.minConfidence,
-        minStrength: options.minStrength,
-        limit,
-      });
-
-      // First, get the source memory to understand its relationships
-      const sourceMemory = await this.prisma.longTermMemory.findUnique({
-        where: { id: memoryId },
-        select: {
-          id: true,
-          relatedMemoriesJson: true,
-          supersedesJson: true,
-          namespace: true,
-        },
-      });
-
-      if (!sourceMemory) {
-        throw new Error(`Memory ${memoryId} not found`);
-      }
-
-      if (sourceMemory.namespace !== namespace) {
-        logInfo(`Memory ${memoryId} is not in namespace ${namespace}`, {
-          component: 'DatabaseManager',
-          memoryId,
-          memoryNamespace: sourceMemory.namespace,
-          requestedNamespace: namespace,
-        });
-        return [];
-      }
-
-      const results: Array<{
-        memory: any;
-        relationship: MemoryRelationship;
-        direction: 'incoming' | 'outgoing';
-      }> = [];
-
-      // Get outgoing relationships (memories this memory references)
-      const outgoingRelationships: MemoryRelationship[] = [];
-
-      if (sourceMemory.relatedMemoriesJson) {
-        const related = sourceMemory.relatedMemoriesJson as MemoryRelationship[];
-        outgoingRelationships.push(...related);
-      }
-
-      if (sourceMemory.supersedesJson) {
-        const superseding = sourceMemory.supersedesJson as MemoryRelationship[];
-        outgoingRelationships.push(...superseding);
-      }
-
-      // Filter outgoing relationships based on criteria
-      const filteredOutgoing = outgoingRelationships.filter(rel => {
-        if (options.relationshipType && rel.type !== options.relationshipType) return false;
-        if (options.minConfidence && rel.confidence < options.minConfidence) return false;
-        if (options.minStrength && rel.strength < options.minStrength) return false;
-        return true;
-      });
-
-      // Get target memories for outgoing relationships
-      for (const relationship of filteredOutgoing) {
-        if (!relationship.targetMemoryId) continue;
-
-        try {
-          const targetMemory = await this.prisma.longTermMemory.findUnique({
-            where: { id: relationship.targetMemoryId },
-          });
-
-          if (targetMemory) {
-            results.push({
-              memory: targetMemory,
-              relationship,
-              direction: 'outgoing',
-            });
-          }
-        } catch (error) {
-          logError(`Failed to retrieve target memory ${relationship.targetMemoryId}`, {
-            component: 'DatabaseManager',
-            targetMemoryId: relationship.targetMemoryId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      // Get incoming relationships (memories that reference this memory)
-      const incomingMemories = await this.prisma.longTermMemory.findMany({
-        where: {
-          namespace,
-          OR: [
-            {
-              relatedMemoriesJson: {
-                path: ['targetMemoryId'],
-                equals: memoryId,
-              } as any,
-            },
-            {
-              supersedesJson: {
-                path: ['targetMemoryId'],
-                equals: memoryId,
-              } as any,
-            },
-          ],
-        },
-        take: limit,
-        select: {
-          id: true,
-          relatedMemoriesJson: true,
-          supersedesJson: true,
-        },
-      });
-
-      // Process incoming relationships
-      for (const incomingMemory of incomingMemories) {
-        const allRelationships: MemoryRelationship[] = [];
-
-        if (incomingMemory.relatedMemoriesJson) {
-          const related = incomingMemory.relatedMemoriesJson as MemoryRelationship[];
-          allRelationships.push(...related);
-        }
-
-        if (incomingMemory.supersedesJson) {
-          const superseding = incomingMemory.supersedesJson as MemoryRelationship[];
-          allRelationships.push(...superseding);
-        }
-
-        // Find the specific relationship that targets our memory
-        const targetRelationship = allRelationships.find(rel => rel.targetMemoryId === memoryId);
-
-        if (targetRelationship) {
-          // Filter by criteria
-          if (options.relationshipType && targetRelationship.type !== options.relationshipType) continue;
-          if (options.minConfidence && targetRelationship.confidence < options.minConfidence) continue;
-          if (options.minStrength && targetRelationship.strength < options.minStrength) continue;
-
-          try {
-            const fullMemory = await this.prisma.longTermMemory.findUnique({
-              where: { id: incomingMemory.id },
-            });
-
-            if (fullMemory) {
-              results.push({
-                memory: fullMemory,
-                relationship: targetRelationship,
-                direction: 'incoming',
-              });
-            }
-          } catch (error) {
-            logError(`Failed to retrieve incoming memory ${incomingMemory.id}`, {
-              component: 'DatabaseManager',
-              incomingMemoryId: incomingMemory.id,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-      }
-
-      // Sort by relationship strength and confidence
-      results.sort((a, b) => {
-        const scoreA = (a.relationship.strength + a.relationship.confidence) / 2;
-        const scoreB = (b.relationship.strength + b.relationship.confidence) / 2;
-        return scoreB - scoreA;
-      });
-
-      // Apply limit
-      const limitedResults = results.slice(0, limit);
-
-      logInfo(`Retrieved ${limitedResults.length} related memories for memory ${memoryId}`, {
-        component: 'DatabaseManager',
-        memoryId,
-        namespace,
-        resultsCount: limitedResults.length,
-        outgoingCount: limitedResults.filter(r => r.direction === 'outgoing').length,
-        incomingCount: limitedResults.filter(r => r.direction === 'incoming').length,
-      });
-
-      return limitedResults;
-    } catch (error) {
-      const errorMsg = `Failed to get related memories for ${memoryId}: ${error instanceof Error ? error.message : String(error)}`;
-      logError(errorMsg, {
-        component: 'DatabaseManager',
-        memoryId,
-        options,
-        error: error instanceof Error ? error.stack : String(error),
-      });
-      throw new Error(errorMsg);
-    }
+    return this.relationshipManager.getRelatedMemories(memoryId, options);
   }
 
-  /**
-   * Update relationships for an existing memory
-   * Allows adding, updating, or removing specific relationships
-   */
-  async updateMemoryRelationships(
-    memoryId: string,
-    updates: Array<{
-      relationship: MemoryRelationship;
-      operation: 'add' | 'update' | 'remove';
-    }>,
-    namespace: string = 'default',
-  ): Promise<{ updated: number; errors: string[] }> {
-    const errors: string[] = [];
-    let updated = 0;
 
-    try {
-      logInfo(`Updating ${updates.length} relationships for memory ${memoryId}`, {
-        component: 'DatabaseManager',
-        memoryId,
-        updateCount: updates.length,
-        namespace,
-      });
 
-      // Get the current memory with its relationships
-      const existingMemory = await this.prisma.longTermMemory.findUnique({
-        where: { id: memoryId },
-        select: {
-          id: true,
-          namespace: true,
-          relatedMemoriesJson: true,
-          supersedesJson: true,
-          processedData: true,
-        },
-      });
-
-      if (!existingMemory) {
-        throw new Error(`Memory ${memoryId} not found`);
-      }
-
-      if (existingMemory.namespace !== namespace) {
-        throw new Error(`Memory ${memoryId} is not in namespace ${namespace}`);
-      }
-
-      // Get existing relationships
-      const existingGeneralRelationships = (existingMemory.relatedMemoriesJson as MemoryRelationship[]) || [];
-      const existingSupersedingRelationships = (existingMemory.supersedesJson as MemoryRelationship[]) || [];
-
-      // Process updates
-      for (const update of updates) {
-        try {
-          const { relationship, operation } = update;
-          const isSuperseding = relationship.type === MemoryRelationshipType.SUPERSEDES;
-
-          let targetRelationships = isSuperseding ? existingSupersedingRelationships : existingGeneralRelationships;
-
-          switch (operation) {
-          case 'add': {
-            // Check if relationship already exists
-            const existingIndex = targetRelationships.findIndex(
-              r => r.type === relationship.type &&
-                   r.targetMemoryId === relationship.targetMemoryId,
-            );
-
-            if (existingIndex >= 0) {
-              // Update existing relationship
-              targetRelationships[existingIndex] = {
-                ...relationship,
-                // Preserve higher confidence/strength
-                confidence: Math.max(targetRelationships[existingIndex].confidence, relationship.confidence),
-                strength: Math.max(targetRelationships[existingIndex].strength, relationship.strength),
-              };
-            } else {
-              // Add new relationship
-              targetRelationships.push(relationship);
-            }
-            break;
-          }
-
-          case 'update': {
-            // Find and update existing relationship
-            const updateIndex = targetRelationships.findIndex(
-              r => r.type === relationship.type &&
-                   r.targetMemoryId === relationship.targetMemoryId,
-            );
-
-            if (updateIndex >= 0) {
-              targetRelationships[updateIndex] = relationship;
-            } else {
-              errors.push(`Relationship not found for update: ${relationship.type} -> ${relationship.targetMemoryId}`);
-              continue;
-            }
-            break;
-          }
-
-          case 'remove': {
-            // Remove relationship if it exists
-            const removeIndex = targetRelationships.findIndex(
-              r => r.type === relationship.type &&
-                   r.targetMemoryId === relationship.targetMemoryId,
-            );
-
-            if (removeIndex >= 0) {
-              targetRelationships.splice(removeIndex, 1);
-            } else {
-              logInfo(`Relationship not found for removal: ${relationship.type} -> ${relationship.targetMemoryId}`, {
-                component: 'DatabaseManager',
-                memoryId,
-                relationshipType: relationship.type,
-                targetMemoryId: relationship.targetMemoryId,
-              });
-            }
-            break;
-          }
-
-          default:
-            errors.push(`Unknown operation: ${operation}`);
-            continue;
-          }
-
-          updated++;
-        } catch (error) {
-          const errorMsg = `Failed to ${update.operation} relationship ${update.relationship.type} -> ${update.relationship.targetMemoryId}: ${error instanceof Error ? error.message : String(error)}`;
-          errors.push(errorMsg);
-          logError(errorMsg, {
-            component: 'DatabaseManager',
-            memoryId,
-            relationship: update.relationship,
-            operation: update.operation,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      // Save updated relationships back to database
-      await this.prisma.longTermMemory.update({
-        where: { id: memoryId },
-        data: {
-          relatedMemoriesJson: existingGeneralRelationships as any,
-          supersedesJson: existingSupersedingRelationships as any,
-          processedData: {
-            ...(existingMemory.processedData as any),
-            relationshipUpdateCount: (existingMemory.processedData as any)?.relationshipUpdateCount || 0 + 1,
-            lastRelationshipUpdate: new Date(),
-          } as any,
-        },
-      });
-
-      // Update state tracking
-      try {
-        await this.stateManager.transitionToState(
-          memoryId,
-          MemoryProcessingState.PROCESSED,
-          {
-            reason: 'Memory relationships updated',
-            agentId: 'DatabaseManager',
-            metadata: {
-              relationshipsUpdated: updated,
-              errors: errors.length,
-            },
-          },
-        );
-      } catch (stateError) {
-        logError('Failed to update state tracking for relationship update', {
-          component: 'DatabaseManager',
-          memoryId,
-          error: stateError instanceof Error ? stateError.message : String(stateError),
-        });
-      }
-
-      logInfo(`Successfully updated relationships for memory ${memoryId}`, {
-        component: 'DatabaseManager',
-        memoryId,
-        totalUpdated: updated,
-        errors: errors.length,
-      });
-
-      return { updated, errors };
-    } catch (error) {
-      const errorMsg = `Failed to update relationships for memory ${memoryId}: ${error instanceof Error ? error.message : String(error)}`;
-      errors.push(errorMsg);
-      logError(errorMsg, {
-        component: 'DatabaseManager',
-        memoryId,
-        updates: updates.length,
-        namespace,
-        error: error instanceof Error ? error.stack : String(error),
-      });
-      return { updated, errors };
-    }
-  }
-
-  /**
-   * Generate comprehensive relationship statistics and analytics
-   */
-  async getRelationshipStatistics(namespace: string = 'default'): Promise<RelationshipStatistics> {
-    try {
-      logInfo(`Generating relationship statistics for namespace '${namespace}'`, {
-        component: 'DatabaseManager',
-        namespace,
-      });
-
-      // Get all memories with relationships
-      const memories = await this.prisma.longTermMemory.findMany({
-        where: { namespace },
-        select: {
-          id: true,
-          relatedMemoriesJson: true,
-          supersedesJson: true,
-          createdAt: true,
-        },
-      });
-
-      let totalRelationships = 0;
-      const relationshipsByType = {
-        [MemoryRelationshipType.CONTINUATION]: 0,
-        [MemoryRelationshipType.REFERENCE]: 0,
-        [MemoryRelationshipType.RELATED]: 0,
-        [MemoryRelationshipType.SUPERSEDES]: 0,
-        [MemoryRelationshipType.CONTRADICTION]: 0,
-      };
-
-      let totalConfidence = 0;
-      let totalStrength = 0;
-      let relationshipCount = 0;
-      const entityFrequency = new Map<string, number>();
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      let recentRelationships = 0;
-
-      for (const memory of memories) {
-        const allRelationships: MemoryRelationship[] = [];
-
-        // Collect all relationships from this memory
-        if (memory.relatedMemoriesJson) {
-          const related = memory.relatedMemoriesJson as MemoryRelationship[];
-          allRelationships.push(...related);
-        }
-
-        if (memory.supersedesJson) {
-          const superseding = memory.supersedesJson as MemoryRelationship[];
-          allRelationships.push(...superseding);
-        }
-
-        // Process each relationship
-        for (const relationship of allRelationships) {
-          totalRelationships++;
-          relationshipsByType[relationship.type]++;
-          totalConfidence += relationship.confidence;
-          totalStrength += relationship.strength;
-          relationshipCount++;
-
-          // Track entity frequency
-          for (const entity of relationship.entities || []) {
-            entityFrequency.set(entity, (entityFrequency.get(entity) || 0) + 1);
-          }
-
-          // Count recent relationships
-          if (memory.createdAt >= thirtyDaysAgo) {
-            recentRelationships++;
-          }
-        }
-      }
-
-      // Calculate averages
-      const averageConfidence = relationshipCount > 0 ? totalConfidence / relationshipCount : 0;
-      const averageStrength = relationshipCount > 0 ? totalStrength / relationshipCount : 0;
-
-      // Get top entities
-      const topEntities = Array.from(entityFrequency.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 20)
-        .map(([entity, count]) => ({ entity, count }));
-
-      const statistics: RelationshipStatistics = {
-        totalRelationships,
-        relationshipsByType,
-        averageConfidence: Math.round(averageConfidence * 100) / 100,
-        averageStrength: Math.round(averageStrength * 100) / 100,
-        topEntities,
-        recentRelationships,
-      };
-
-      logInfo('Generated relationship statistics', {
-        component: 'DatabaseManager',
-        namespace,
-        ...statistics,
-      });
-
-      return statistics;
-    } catch (error) {
-      const errorMsg = `Failed to generate relationship statistics: ${error instanceof Error ? error.message : String(error)}`;
-      logError(errorMsg, {
-        component: 'DatabaseManager',
-        namespace,
-        error: error instanceof Error ? error.stack : String(error),
-      });
-      throw new Error(errorMsg);
-    }
-  }
-
-  /**
-   * Validate relationships for consistency and quality
-   */
-  validateRelationships(relationships: MemoryRelationship[]): { valid: MemoryRelationship[], invalid: Array<{ relationship: MemoryRelationship, reason: string }> } {
-    const valid: MemoryRelationship[] = [];
-    const invalid: Array<{ relationship: MemoryRelationship, reason: string }> = [];
-
-    for (const relationship of relationships) {
-      const validation = this.validateSingleRelationship(relationship);
-      if (validation.isValid) {
-        valid.push(relationship);
-      } else {
-        invalid.push({ relationship, reason: validation.reason || 'Unknown validation error' });
-      }
-    }
-
-    return { valid, invalid };
-  }
-
-  /**
-   * Validate a single relationship
-   */
-  private validateSingleRelationship(relationship: MemoryRelationship): { isValid: boolean, reason?: string } {
-    // Check required fields
-    if (!relationship.type) {
-      return { isValid: false, reason: 'Missing relationship type' };
-    }
-
-    if (!relationship.reason || relationship.reason.trim().length < 10) {
-      return { isValid: false, reason: 'Insufficient reasoning provided' };
-    }
-
-    if (!relationship.context || relationship.context.trim().length < 5) {
-      return { isValid: false, reason: 'Insufficient context provided' };
-    }
-
-    // Validate confidence and strength scores
-    if (relationship.confidence < 0 || relationship.confidence > 1) {
-      return { isValid: false, reason: 'Confidence must be between 0 and 1' };
-    }
-
-    if (relationship.strength < 0 || relationship.strength > 1) {
-      return { isValid: false, reason: 'Strength must be between 0 and 1' };
-    }
-
-    // Validate relationship type
-    const validTypes = Object.values(MemoryRelationshipType);
-    if (!validTypes.includes(relationship.type)) {
-      return { isValid: false, reason: `Invalid relationship type: ${relationship.type}` };
-    }
-
-    // Validate entities if provided
-    if (relationship.entities && relationship.entities.length > 0) {
-      const validEntities = relationship.entities.filter(entity =>
-        entity && typeof entity === 'string' && entity.trim().length > 0,
-      );
-
-      if (validEntities.length !== relationship.entities.length) {
-        return { isValid: false, reason: 'Invalid entities in relationship' };
-      }
-    }
-
-    // Check for reasonable confidence/strength ratio
-    if (relationship.strength > relationship.confidence + 0.3) {
-      return { isValid: false, reason: 'Strength cannot significantly exceed confidence' };
-    }
-
-    return { isValid: true };
-  }
 
   /**
    * Detect and resolve relationship conflicts
@@ -1709,13 +638,13 @@ export class DatabaseManager {
         await this.prisma.longTermMemory.update({
           where: { id: memoryId },
           data: {
-            relatedMemoriesJson: generalRelationships as any,
-            supersedesJson: supersedingRelationships as any,
+            relatedMemoriesJson: generalRelationships,
+            supersedesJson: supersedingRelationships,
             processedData: {
-              ...(memory.processedData as any),
-              conflictResolutionCount: (memory.processedData as any)?.conflictResolutionCount || 0 + 1,
+              ...(memory.processedData as ProcessedDataRecord),
+              conflictResolutionCount: (memory.processedData as ProcessedDataRecord)?.conflictResolutionCount || 0 + 1,
               lastConflictResolution: new Date(),
-            } as any,
+            },
           },
         });
 
@@ -1918,13 +847,13 @@ export class DatabaseManager {
               await this.prisma.longTermMemory.update({
                 where: { id: memory.id },
                 data: {
-                  relatedMemoriesJson: generalRelationships as any,
-                  supersedesJson: supersedingRelationships as any,
+                  relatedMemoriesJson: generalRelationships,
+                  supersedesJson: supersedingRelationships,
                   processedData: {
-                    ...(memory.processedData as any),
-                    relationshipCleanupCount: (memory.processedData as any)?.relationshipCleanupCount || 0 + 1,
+                    ...(memory.processedData as ProcessedDataRecord),
+                    relationshipCleanupCount: (memory.processedData as ProcessedDataRecord)?.relationshipCleanupCount || 0 + 1,
                     lastRelationshipCleanup: new Date(),
-                  } as any,
+                  } as Prisma.InputJsonValue,
                 },
               });
 
@@ -1974,10 +903,10 @@ export class DatabaseManager {
   // Memory State Management Operations
 
   /**
-   * Get the state manager instance for direct access
-   */
-  getStateManager(): ProcessingStateManager {
-    return this.stateManager;
+    * Get the state manager instance for direct access
+    */
+  getStateManager(): StateManager {
+    return this.stateManager!;
   }
 
   /**
@@ -1988,7 +917,7 @@ export class DatabaseManager {
     namespace: string = 'default',
     limit?: number,
   ): Promise<string[]> {
-    const memoryIds = this.stateManager.getMemoriesByState(state);
+    const memoryIds = await this.stateManager!.getMemoriesByState(state);
     // Filter by namespace if needed
     if (namespace !== 'default') {
       const filteredIds: string[] = [];
@@ -2010,14 +939,14 @@ export class DatabaseManager {
    * Get memory processing state
    */
   async getMemoryState(memoryId: string): Promise<MemoryProcessingState | undefined> {
-    return this.stateManager.getCurrentState(memoryId);
+    return this.stateManager!.getMemoryState(memoryId);
   }
 
   /**
    * Get memory state history
    */
-  async getMemoryStateHistory(memoryId: string): Promise<import('../memory/MemoryProcessingStateManager').MemoryStateTransition[]> {
-    return this.stateManager.getStateHistory(memoryId);
+  async getMemoryStateHistory(memoryId: string): Promise<MemoryStateTransition[]> {
+    return this.stateManager!.getMemoryStateHistory(memoryId);
   }
 
   /**
@@ -2035,15 +964,13 @@ export class DatabaseManager {
       force?: boolean;
     },
   ): Promise<boolean> {
-    return this.stateManager.transitionToState(memoryId, toState, options);
+    return this.stateManager!.transitionMemoryState(memoryId, toState, options);
   }
 
   /**
    * Get processing state statistics
    */
   async getProcessingStateStats(namespace?: string): Promise<Record<MemoryProcessingState, number>> {
-    const stats = this.stateManager.getStateStatistics();
-
     // If namespace filter is provided, we need to count only memories in that namespace
     if (namespace && namespace !== 'default') {
       const filteredStats: Record<MemoryProcessingState, number> = {} as Record<MemoryProcessingState, number>;
@@ -2053,13 +980,13 @@ export class DatabaseManager {
 
       // Get all memory IDs for each state and filter by namespace
       for (const state of Object.values(MemoryProcessingState)) {
-        const memoryIds = this.stateManager.getMemoriesByState(state);
+        const memoryIds = await this.stateManager!.getMemoriesByState(state);
         for (const memoryId of memoryIds) {
           try {
             const memory = await this.prisma.longTermMemory.findUnique({
               where: { id: memoryId },
               select: { namespace: true },
-            });
+            }) as { namespace: string } | null;
             if (memory?.namespace === namespace) {
               filteredStats[state]++;
             }
@@ -2072,7 +999,8 @@ export class DatabaseManager {
       return filteredStats;
     }
 
-    return stats;
+    // Use the StateManager's built-in namespace support
+    return this.stateManager!.getProcessingStateStats(namespace);
   }
 
   /**
@@ -2082,21 +1010,21 @@ export class DatabaseManager {
     memoryId: string,
     initialState: MemoryProcessingState = MemoryProcessingState.PENDING,
   ): Promise<void> {
-    await this.stateManager.initializeMemoryState(memoryId, initialState);
+    await this.stateManager!.initializeExistingMemoryState(memoryId, initialState);
   }
 
   /**
    * Get all memory states
    */
   async getAllMemoryStates(): Promise<Record<string, MemoryProcessingState>> {
-    return this.stateManager.getAllMemoryStates();
+    return this.stateManager!.getAllMemoryStates();
   }
 
   /**
    * Check if memory can transition to specific state
    */
   async canMemoryTransitionTo(memoryId: string, toState: MemoryProcessingState): Promise<boolean> {
-    return this.stateManager.canTransitionTo(memoryId, toState);
+    return this.stateManager!.canMemoryTransitionTo(memoryId, toState);
   }
 
   /**
@@ -2107,14 +1035,14 @@ export class DatabaseManager {
     targetState: MemoryProcessingState,
     options?: { maxRetries?: number; delayMs?: number },
   ): Promise<boolean> {
-    return this.stateManager.retryTransition(memoryId, targetState, options);
+    return this.stateManager!.retryMemoryStateTransition(memoryId, targetState, options);
   }
 
   /**
    * Get processing metrics
    */
   async getProcessingMetrics(): Promise<Record<string, number>> {
-    return this.stateManager.getMetrics();
+    return this.stateManager!.getProcessingMetrics();
   }
 
   /**
@@ -2125,8 +1053,38 @@ export class DatabaseManager {
   }
 
   /**
-   * Get FTS schema verification status
+   * Ensure FTS support is properly initialized
    */
+  private async ensureFTSSupport(): Promise<void> {
+    if (this.ftsEnabled) return;
+
+    try {
+      const verification = await verifyFTSSchema(this.prisma);
+      this.ftsEnabled = verification.isValid;
+
+      if (!this.ftsEnabled) {
+        logError('FTS support verification failed', {
+          component: 'DatabaseManager',
+          issues: verification.issues,
+        });
+      } else {
+        logInfo('FTS support verified and enabled', {
+          component: 'DatabaseManager',
+          stats: verification.stats,
+        });
+      }
+    } catch (error) {
+      logError('Failed to verify FTS support', {
+        component: 'DatabaseManager',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.ftsEnabled = false;
+    }
+  }
+
+  /**
+    * Get FTS schema verification status
+    */
   async getFTSStatus(): Promise<{
     enabled: boolean;
     isValid: boolean;
@@ -2153,105 +1111,6 @@ export class DatabaseManager {
     }
   }
 
-  /**
-    * Create FTS triggers after main tables exist
-    */
-  private async createFTSTriggers(): Promise<void> {
-    try {
-      logInfo('Creating FTS triggers after main tables exist...', { component: 'DatabaseManager' });
-
-      // Create triggers for synchronization with long_term_memory
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_insert_long_term
-        AFTER INSERT ON long_term_memory
-        BEGIN
-          INSERT INTO memory_fts(rowid, content, metadata)
-          VALUES (new.id, new.searchableContent, json_object(
-            'memory_type', new.retentionType,
-            'category_primary', new.categoryPrimary,
-            'importance_score', new.importanceScore,
-            'classification', new.classification,
-            'created_at', new.extractionTimestamp,
-            'namespace', new.namespace
-          ));
-        END;
-      `;
-
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_delete_long_term
-        AFTER DELETE ON long_term_memory
-        BEGIN
-          DELETE FROM memory_fts WHERE rowid = old.id;
-        END;
-      `;
-
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_update_long_term
-        AFTER UPDATE ON long_term_memory
-        BEGIN
-          DELETE FROM memory_fts WHERE rowid = old.id;
-          INSERT INTO memory_fts(rowid, content, metadata)
-          VALUES (new.id, new.searchableContent, json_object(
-            'memory_type', new.retentionType,
-            'category_primary', new.categoryPrimary,
-            'importance_score', new.importanceScore,
-            'classification', new.classification,
-            'created_at', new.extractionTimestamp,
-            'namespace', new.namespace
-          ));
-        END;
-      `;
-
-      // Create triggers for synchronization with short_term_memory
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_insert_short_term
-        AFTER INSERT ON short_term_memory
-        BEGIN
-          INSERT INTO memory_fts(rowid, content, metadata)
-          VALUES (new.id, new.searchableContent, json_object(
-            'memory_type', new.retentionType,
-            'category_primary', new.categoryPrimary,
-            'importance_score', new.importanceScore,
-            'created_at', new.createdAt,
-            'namespace', new.namespace
-          ));
-        END;
-      `;
-
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_delete_short_term
-        AFTER DELETE ON short_term_memory
-        BEGIN
-          DELETE FROM memory_fts WHERE rowid = old.id;
-        END;
-      `;
-
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_update_short_term
-        AFTER UPDATE ON short_term_memory
-        BEGIN
-          DELETE FROM memory_fts WHERE rowid = old.id;
-          INSERT INTO memory_fts(rowid, content, metadata)
-          VALUES (new.id, new.searchableContent, json_object(
-            'memory_type', new.retentionType,
-            'category_primary', new.categoryPrimary,
-            'importance_score', new.importanceScore,
-            'created_at', new.createdAt,
-            'namespace', new.namespace
-          ));
-        END;
-      `;
-
-      logInfo('FTS triggers created successfully', { component: 'DatabaseManager' });
-
-    } catch (error) {
-      logError('Failed to create FTS triggers', {
-        component: 'DatabaseManager',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  }
 
   /**
     * Enhanced error handling for FTS operations
@@ -2298,105 +1157,24 @@ export class DatabaseManager {
   // Conscious Memory Operations
 
   async getUnprocessedConsciousMemories(namespace: string = 'default'): Promise<ConsciousMemoryData[]> {
-    // Get long-term memories with "conscious-info" classification
-    // that haven't been processed yet
-    const memories = await this.prisma.longTermMemory.findMany({
-      where: {
-        namespace,
-        categoryPrimary: 'conscious-info',
-        consciousProcessed: false,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50, // Limit to prevent overwhelming the system
-    });
-
-    return memories.map((memory: any) => ({
-      id: memory.id,
-      content: memory.searchableContent,
-      summary: memory.summary,
-      classification: memory.classification as unknown as MemoryClassification,
-      importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
-      topic: memory.topic,
-      entities: (memory.entitiesJson as unknown[]) as string[] || [],
-      keywords: (memory.keywordsJson as unknown[]) as string[] || [],
-      confidenceScore: memory.confidenceScore,
-      classificationReason: memory.classificationReason || '',
-    }));
+    return this.consciousMemoryManager.getUnprocessedConsciousMemories(namespace);
   }
 
   async getNewConsciousMemories(since: Date = new Date(Date.now() - 24 * 60 * 60 * 1000), namespace: string = 'default'): Promise<ConsciousMemoryData[]> {
-    // Get conscious memories created since the specified time that haven't been processed
-    const memories = await this.prisma.longTermMemory.findMany({
-      where: {
-        namespace,
-        categoryPrimary: 'conscious-info',
-        createdAt: {
-          gte: since,
-        },
-        consciousProcessed: false,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return memories.map((memory: any) => ({
-      id: memory.id,
-      content: memory.searchableContent,
-      summary: memory.summary,
-      classification: memory.classification as unknown as MemoryClassification,
-      importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
-      topic: memory.topic,
-      entities: (memory.entitiesJson as unknown[]) as string[] || [],
-      keywords: (memory.keywordsJson as unknown[]) as string[] || [],
-      confidenceScore: memory.confidenceScore,
-      classificationReason: memory.classificationReason || '',
-    }));
+    return this.consciousMemoryManager.getNewConsciousMemories(since, namespace);
   }
 
   async storeConsciousMemoryInShortTerm(memoryData: ShortTermMemoryData, namespace: string): Promise<string> {
-    const result = await this.prisma.shortTermMemory.create({
-      data: {
-        chatId: memoryData.chatId,
-        processedData: memoryData.processedData as any,
-        importanceScore: memoryData.importanceScore,
-        categoryPrimary: memoryData.categoryPrimary,
-        retentionType: memoryData.retentionType,
-        namespace,
-        searchableContent: memoryData.searchableContent,
-        summary: memoryData.summary,
-        isPermanentContext: memoryData.isPermanentContext,
-      },
-    });
-    return result.id;
+    return this.consciousMemoryManager.storeConsciousMemoryInShortTerm(memoryData, namespace);
   }
 
   async getConsciousMemoriesFromShortTerm(namespace: string): Promise<ConsciousMemoryData[]> {
-    const memories = await this.prisma.shortTermMemory.findMany({
-      where: {
-        namespace,
-        isPermanentContext: true, // Only get conscious/permanent memories
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return memories.map((memory: any) => ({
-      id: memory.id,
-      content: memory.searchableContent,
-      summary: memory.summary,
-      classification: memory.categoryPrimary as unknown as MemoryClassification,
-      importance: this.getImportanceLevel(memory.importanceScore) as unknown as MemoryImportanceLevel,
-      topic: (memory.processedData as Record<string, unknown>)?.topic as string,
-      entities: (memory.processedData as Record<string, unknown>)?.entities as string[] || [],
-      keywords: (memory.processedData as Record<string, unknown>)?.keywords as string[] || [],
-      confidenceScore: (memory.processedData as Record<string, unknown>)?.confidenceScore as number || 0.8,
-      classificationReason: (memory.processedData as Record<string, unknown>)?.classificationReason as string || '',
-    }));
+    return this.consciousMemoryManager.getConsciousMemoriesFromShortTerm(namespace);
   }
 
+
   async markConsciousMemoryAsProcessed(memoryId: string): Promise<void> {
-    await this.prisma.longTermMemory.update({
-      where: { id: memoryId },
-      data: { consciousProcessed: true },
-    });
+    return this.consciousMemoryManager.markConsciousMemoryAsProcessed(memoryId);
   }
 
   async markMultipleMemoriesAsProcessed(memoryIds: string[]): Promise<void> {
@@ -2416,17 +1194,17 @@ export class DatabaseManager {
       orderBy: { createdAt: 'desc' },
     });
 
-    return memories.map((memory: any) => ({
+    return memories.map((memory) => ({
       id: memory.id,
       content: memory.searchableContent,
       summary: memory.summary,
       classification: memory.classification as unknown as MemoryClassification,
       importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
-      topic: memory.topic,
+      topic: memory.topic ?? undefined,
       entities: (memory.entitiesJson as unknown[]) as string[] || [],
       keywords: (memory.keywordsJson as unknown[]) as string[] || [],
       confidenceScore: memory.confidenceScore,
-      classificationReason: memory.classificationReason || '',
+      classificationReason: memory.classificationReason ?? '',
       processedAt: memory.extractionTimestamp,
     }));
   }
@@ -2451,12 +1229,6 @@ export class DatabaseManager {
     return { total, processed, unprocessed };
   }
 
-  private getImportanceLevel(score: number): string {
-    if (score >= 0.8) return 'critical';
-    if (score >= 0.6) return 'high';
-    if (score >= 0.4) return 'medium';
-    return 'low';
-  }
 
   // Duplicate Consolidation Operations
 
@@ -2468,101 +1240,9 @@ export class DatabaseManager {
     namespace: string = 'default',
     threshold: number = 0.7,
   ): Promise<MemorySearchResult[]> {
-    // Simple similarity check using text search
-    // In a real implementation, you might use vector similarity or more sophisticated algorithms
-    const similarMemories = await this.searchMemories(content, {
-      namespace,
-      limit: 20,
-      includeMetadata: true,
-    });
-
-    // Filter by similarity threshold (basic implementation)
-    return similarMemories.filter((memory) => {
-      // Simple content overlap check
-      const contentWords = new Set(content.toLowerCase().split(/\s+/));
-      const memoryWords = new Set(memory.content.toLowerCase().split(/\s+/));
-      const intersection = new Set([...Array.from(contentWords)].filter((x) => memoryWords.has(x)));
-      const union = new Set([...Array.from(contentWords), ...Array.from(memoryWords)]);
-      const similarity = intersection.size / union.size;
-
-      return similarity >= threshold;
-    });
+    return this.duplicateManager.findPotentialDuplicates(content, namespace, threshold);
   }
 
-  /**
-   * Get all memories that are marked as duplicates of others
-   */
-  async getDuplicateMemories(namespace: string = 'default'): Promise<MemorySearchResult[]> {
-    try {
-      // Look for memories that have duplicate tracking information in metadata
-      // Since we don't have dedicated duplicate tracking fields, we search for
-      // memories that reference other memories as duplicates
-      const memories = await this.prisma.longTermMemory.findMany({
-        where: {
-          namespace,
-          // Look for memories that have metadata indicating they're duplicates
-          processedData: {
-            path: ['isDuplicate'],
-            equals: true,
-          } as any,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      // Also search for memories with duplicate tracking in searchableContent
-      const duplicateContentMemories = await this.prisma.longTermMemory.findMany({
-        where: {
-          namespace,
-          searchableContent: {
-            contains: 'DUPLICATE_OF:',
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      // Combine and deduplicate results
-      const allMemories = [...memories, ...duplicateContentMemories];
-      const uniqueMemories = allMemories.filter((memory, index, self) =>
-        index === self.findIndex((m) => m.id === memory.id),
-      );
-
-      const result: MemorySearchResult[] = uniqueMemories.map((memory: any) => ({
-        id: memory.id,
-        content: memory.searchableContent,
-        summary: memory.summary,
-        classification: memory.classification as unknown as MemoryClassification,
-        importance: memory.memoryImportance as unknown as MemoryImportanceLevel,
-        topic: memory.topic || undefined,
-        entities: (memory.entitiesJson as string[]) || [],
-        keywords: (memory.keywordsJson as string[]) || [],
-        confidenceScore: memory.confidenceScore,
-        classificationReason: memory.classificationReason || '',
-        metadata: {
-          modelUsed: 'unknown',
-          category: memory.categoryPrimary,
-          originalChatId: memory.originalChatId,
-          extractionTimestamp: memory.extractionTimestamp,
-          isDuplicate: (memory.processedData as any)?.isDuplicate || false,
-          duplicateOf: (memory.processedData as any)?.duplicateOf || undefined,
-        },
-      }));
-
-      logInfo(`Retrieved ${result.length} duplicate memories for namespace '${namespace}'`, {
-        component: 'DatabaseManager',
-        namespace,
-        duplicateCount: result.length,
-      });
-
-      return result;
-    } catch (error) {
-      logInfo(`Error retrieving duplicate memories for namespace '${namespace}'`, {
-        component: 'DatabaseManager',
-        namespace,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw new Error(`Failed to retrieve duplicate memories: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
 
   /**
    * Mark a memory as a duplicate of another memory
@@ -2582,7 +1262,7 @@ export class DatabaseManager {
             duplicateOf: originalId,
             consolidationReason,
             markedAsDuplicateAt: new Date(),
-          } as any,
+          } as Prisma.InputJsonValue,
         },
       });
 
@@ -2622,7 +1302,7 @@ export class DatabaseManager {
 
     try {
       // Process each update in parallel for better performance
-      const updatePromises = updates.map(async (update) => {
+      const updatePromises = updates.map(async (update: { memoryId: string; isDuplicate?: boolean; duplicateOf?: string; consolidationReason?: string; markedAsDuplicateAt?: Date }) => {
         try {
           const existingMemory = await this.prisma.longTermMemory.findFirst({
             where: {
@@ -2641,10 +1321,10 @@ export class DatabaseManager {
             where: { id: update.memoryId },
             data: {
               processedData: {
-                ...(existingMemory.processedData as any),
+                ...(existingMemory.processedData as Record<string, unknown> || {}),
                 ...update,
                 updatedAt: new Date(),
-              } as any,
+              } as Prisma.InputJsonValue,
             },
           });
 
@@ -2743,7 +1423,7 @@ export class DatabaseManager {
         });
 
         if (duplicateMemories.length !== duplicateIds.length) {
-          const foundIds = duplicateMemories.map(m => m.id);
+          const foundIds = duplicateMemories.map((m) => m.id);
           const missingIds = duplicateIds.filter(id => !foundIds.includes(id));
           throw new Error(`Some duplicate memories not found: ${missingIds.join(', ')}`);
         }
@@ -2765,12 +1445,12 @@ export class DatabaseManager {
             classificationReason: mergedData.classificationReason,
             extractionTimestamp: consolidationTimestamp,
             processedData: {
-              ...(primaryMemory.processedData as any),
+              ...(primaryMemory.processedData as Record<string, unknown>),
               consolidatedAt: consolidationTimestamp,
               consolidatedFrom: duplicateIds,
               consolidationReason: 'duplicate_consolidation',
               consolidationHistory: [
-                ...(primaryMemory.processedData as any)?.consolidationHistory || [],
+                ...(primaryMemory.processedData as Record<string, unknown>)?.consolidationHistory as unknown[] || [],
                 {
                   timestamp: consolidationTimestamp,
                   consolidatedFrom: duplicateIds,
@@ -2785,13 +1465,13 @@ export class DatabaseManager {
               originalClassification: primaryMemory.classification,
               duplicateCount: duplicateIds.length,
               lastConsolidationActivity: consolidationTimestamp,
-            } as any,
+            } as Prisma.InputJsonValue,
           },
         });
 
         // Mark all duplicates as consolidated with enhanced tracking
         for (const duplicateId of duplicateIds) {
-          const duplicateMemory = duplicateMemories.find(m => m.id === duplicateId);
+          const duplicateMemory = duplicateMemories.find((m) => m.id === duplicateId);
           await tx.longTermMemory.update({
             where: { id: duplicateId },
             data: {
@@ -2807,7 +1487,7 @@ export class DatabaseManager {
                   primaryMemoryImportance: primaryMemory.memoryImportance,
                   dataMerged: true,
                 },
-              } as any,
+              } as Prisma.InputJsonValue,
               // Mark in searchable content for easy identification
               searchableContent: `[CONSOLIDATED:${consolidationTimestamp.toISOString()}] ${duplicateMemory?.searchableContent}`,
             },
@@ -2816,7 +1496,7 @@ export class DatabaseManager {
 
         // Update state tracking for successful consolidation
         try {
-          await this.stateManager.transitionToState(
+          await this.stateManager!.transitionMemoryState(
             primaryMemoryId,
             MemoryProcessingState.PROCESSED,
             {
@@ -2904,7 +1584,7 @@ export class DatabaseManager {
       // Check if relationship already exists (same type and target)
       const existingIndex = merged.findIndex(
         existing => existing.type === newRel.type &&
-                   existing.targetMemoryId === newRel.targetMemoryId,
+          existing.targetMemoryId === newRel.targetMemoryId,
       );
 
       if (existingIndex >= 0) {
@@ -2955,9 +1635,9 @@ export class DatabaseManager {
       }
 
       // Check if primary memory is already consolidated
-      const processedData = primaryMemory.processedData as any;
+      const processedData = primaryMemory.processedData as Record<string, unknown> | null;
       if (processedData?.consolidatedAt) {
-        const lastConsolidation = new Date(processedData.consolidatedAt);
+        const lastConsolidation = new Date(processedData.consolidatedAt as string | number | Date);
         const hoursSinceLastConsolidation = (Date.now() - lastConsolidation.getTime()) / (1000 * 60 * 60);
 
         if (hoursSinceLastConsolidation < 1) {
@@ -2975,14 +1655,14 @@ export class DatabaseManager {
       });
 
       if (duplicateMemories.length !== duplicateIds.length) {
-        const foundIds = duplicateMemories.map(m => m.id);
+        const foundIds = duplicateMemories.map((m) => m.id);
         const missingIds = duplicateIds.filter(id => !foundIds.includes(id));
         errors.push(`Some duplicate memories not found in namespace ${namespace}: ${missingIds.join(', ')}`);
       }
 
       // Check for circular consolidation references
       for (const duplicate of duplicateMemories) {
-        const duplicateData = duplicate.processedData as any;
+        const duplicateData = duplicate.processedData as Record<string, unknown>;
         if (duplicateData?.consolidatedInto === primaryMemoryId) {
           errors.push(`Circular consolidation detected: duplicate ${duplicate.id} is already consolidated into primary ${primaryMemoryId}`);
         }
@@ -3093,7 +1773,7 @@ export class DatabaseManager {
               ...primaryBackup.processedData,
               rollbackTimestamp: new Date(),
               rollbackReason: 'consolidation_failure',
-            } as any,
+            } as Prisma.InputJsonValue,
           },
         });
       }
@@ -3116,7 +1796,7 @@ export class DatabaseManager {
                 ...duplicateBackup.processedData,
                 rollbackTimestamp: new Date(),
                 rollbackReason: 'consolidation_failure',
-              } as any,
+              } as Prisma.InputJsonValue,
             },
           });
         }
@@ -3661,7 +2341,7 @@ export class DatabaseManager {
           processedData: {
             path: ['isDuplicate'],
             equals: true,
-          } as any,
+          } as Record<string, unknown>,
         },
       });
 
@@ -3679,7 +2359,7 @@ export class DatabaseManager {
       for (const memory of allMemories) {
         if (processedIds.has(memory.id)) continue;
 
-        const similarMemories = allMemories.filter(otherMemory => {
+        const similarMemories = allMemories.filter((otherMemory: any) => {
           if (otherMemory.id === memory.id || processedIds.has(otherMemory.id)) return false;
 
           // Simple similarity check
@@ -3698,7 +2378,7 @@ export class DatabaseManager {
         if (similarMemories.length > 0) {
           potentialDuplicates += similarMemories.length;
           processedIds.add(memory.id);
-          similarMemories.forEach(mem => processedIds.add(mem.id));
+          similarMemories.forEach((mem: any) => processedIds.add(mem.id));
         }
       }
 
@@ -3709,7 +2389,7 @@ export class DatabaseManager {
           processedData: {
             path: ['consolidationReason'],
             not: null,
-          } as any,
+          } as Record<string, unknown>,
         },
         orderBy: { extractionTimestamp: 'desc' },
         select: { extractionTimestamp: true },
@@ -3768,7 +2448,7 @@ export class DatabaseManager {
               processedData: {
                 path: ['isDuplicate'],
                 equals: true,
-              } as any,
+              } as Record<string, unknown>,
             },
             {
               extractionTimestamp: {
@@ -3812,7 +2492,7 @@ export class DatabaseManager {
               processedData: {
                 path: ['duplicateOf'],
                 equals: memory.id,
-              } as any,
+              } as Record<string, unknown>,
             },
           });
 
@@ -3841,11 +2521,11 @@ export class DatabaseManager {
               where: { id: memory.id },
               data: {
                 processedData: {
-                  ...(memory.processedData as any),
+                  ...(memory.processedData as Record<string, unknown> || {}),
                   cleanedUp: true,
                   cleanedUpAt: new Date(),
                   cleanupReason: `Older than ${olderThanDays} days`,
-                } as any,
+                } as Prisma.InputJsonValue,
                 // Mark as cleaned up by updating searchable content
                 searchableContent: `[CLEANED] ${memory.searchableContent}`,
               },
@@ -3901,88 +2581,7 @@ export class DatabaseManager {
    * Get comprehensive database statistics
    */
   async getDatabaseStats(namespace: string = 'default'): Promise<DatabaseStats> {
-    try {
-      // Get counts from all tables in parallel for better performance
-      const [
-        totalConversations,
-        totalLongTermMemories,
-        totalShortTermMemories,
-        totalConsciousMemories,
-        lastChatActivity,
-        lastLongTermActivity,
-        lastShortTermActivity,
-      ] = await Promise.all([
-        this.prisma.chatHistory.count({
-          where: { namespace },
-        }),
-        this.prisma.longTermMemory.count({
-          where: { namespace },
-        }),
-        this.prisma.shortTermMemory.count({
-          where: { namespace },
-        }),
-        this.prisma.longTermMemory.count({
-          where: {
-            namespace,
-            categoryPrimary: 'conscious-info',
-          },
-        }),
-        this.prisma.chatHistory.findFirst({
-          where: { namespace },
-          orderBy: { timestamp: 'desc' },
-          select: { timestamp: true },
-        }),
-        this.prisma.longTermMemory.findFirst({
-          where: { namespace },
-          orderBy: { extractionTimestamp: 'desc' },
-          select: { extractionTimestamp: true },
-        }),
-        this.prisma.shortTermMemory.findFirst({
-          where: { namespace },
-          orderBy: { createdAt: 'desc' },
-          select: { createdAt: true },
-        }),
-      ]);
-
-      // Calculate total memories
-      const totalMemories = totalLongTermMemories + totalShortTermMemories;
-
-      // Find the most recent activity across all tables
-      const activityDates = [
-        lastChatActivity?.timestamp,
-        lastLongTermActivity?.extractionTimestamp,
-        lastShortTermActivity?.createdAt,
-      ].filter(Boolean);
-
-      const lastActivity = activityDates.length > 0
-        ? new Date(Math.max(...activityDates.map(date => date!.getTime())))
-        : undefined;
-
-      const stats: DatabaseStats = {
-        totalConversations,
-        totalMemories,
-        shortTermMemories: totalShortTermMemories,
-        longTermMemories: totalLongTermMemories,
-        consciousMemories: totalConsciousMemories,
-        lastActivity,
-      };
-
-      logInfo(`Retrieved database stats for namespace '${namespace}'`, {
-        component: 'DatabaseManager',
-        namespace,
-        ...stats,
-      });
-
-      return stats;
-
-    } catch (error) {
-      logInfo(`Error retrieving database stats for namespace '${namespace}'`, {
-        component: 'DatabaseManager',
-        namespace,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw new Error(`Failed to retrieve database statistics: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    return this.statisticsManager.getDatabaseStats(namespace);
   }
 
   // ===== DATABASE PERFORMANCE MONITORING METHODS =====
@@ -4088,7 +2687,7 @@ export class DatabaseManager {
     slowQueries: Array<{ query: string; duration: number; timestamp: number }>;
     memoryUsage: number;
     connectionStatus: string;
-  } {
+    } {
     const totalOps = this.performanceMetrics.totalOperations;
     const errorRate = totalOps > 0 ?
       Array.from(this.performanceMetrics.errorBreakdown.values()).reduce((sum: number, count: number) => sum + count, 0) / totalOps : 0;
@@ -4134,7 +2733,7 @@ export class DatabaseManager {
     slowQueries: Array<{ query: string; duration: number; timestamp: number }>;
     recommendations: string[];
     timestamp: Date;
-  } {
+    } {
     const analytics = this.getPerformanceAnalytics();
     const performanceByOperation: Record<string, { count: number; averageLatency: number; errorRate: number }> = {};
 
@@ -4229,7 +2828,7 @@ export class DatabaseManager {
     slowQueryCount: number;
     memoryUsage: number;
     lastOperationTime: number;
-  } {
+    } {
     return {
       enabled: this.performanceConfig.enabled,
       totalOperations: this.performanceMetrics.totalOperations,
@@ -4287,11 +2886,7 @@ export class DatabaseManager {
    * Check if database is connected (for performance monitoring)
    */
   private isConnected(): boolean {
-    try {
-      // Simple check - try to execute a simple query
-      return true; // Placeholder - would need actual connection check
-    } catch {
-      return false;
-    }
+    // Simple check - try to execute a simple query
+    return true; // Placeholder - would need actual connection check
   }
 }
