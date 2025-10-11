@@ -26,15 +26,27 @@ export class MemoryConsolidationService {
     content: string,
     threshold: number = 0.7,
   ): Promise<MemorySearchResult[]> {
-    // This method would implement duplicate finding logic
-    // For now, return empty array as this is extracted functionality
-    logInfo('findPotentialDuplicates called - functionality extracted to MemoryConsolidationService', {
-      component: 'MemoryConsolidationService',
-      contentLength: content.length,
-      threshold,
-      namespace: this.namespace,
-    });
-    return [];
+    try {
+      // Test database connectivity first with a simple query that should work
+      await this.prisma.$queryRaw`SELECT 1 as test`;
+
+      // This method would implement duplicate finding logic
+      // For now, return empty array as this is extracted functionality
+      logInfo('findPotentialDuplicates called - functionality extracted to MemoryConsolidationService', {
+        component: 'MemoryConsolidationService',
+        contentLength: content.length,
+        threshold,
+        namespace: this.namespace,
+      });
+      return [];
+    } catch (error) {
+      logError('Error in findPotentialDuplicates', {
+        component: 'MemoryConsolidationService',
+        namespace: this.namespace,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 
   /**
@@ -1116,7 +1128,7 @@ export class MemoryConsolidationService {
         where: {
           namespace: this.namespace,
           processedData: {
-            path: ['isDuplicate'],
+            path: 'isDuplicate',
             equals: true,
           } as Record<string, unknown>,
         },
@@ -1164,7 +1176,7 @@ export class MemoryConsolidationService {
         where: {
           namespace: this.namespace,
           processedData: {
-            path: ['consolidationReason'],
+            path: 'consolidationReason',
             not: null,
           } as Record<string, unknown>,
         },
@@ -1222,7 +1234,7 @@ export class MemoryConsolidationService {
           AND: [
             {
               processedData: {
-                path: ['isDuplicate'],
+                path: 'isDuplicate',
                 equals: true,
               } as Record<string, unknown>,
             },
@@ -1266,7 +1278,7 @@ export class MemoryConsolidationService {
             where: {
               namespace: this.namespace,
               processedData: {
-                path: ['duplicateOf'],
+                path: 'duplicateOf',
                 equals: memory.id,
               } as Record<string, unknown>,
             },
