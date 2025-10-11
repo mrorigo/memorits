@@ -1,5 +1,5 @@
-import { TimeRangeProcessor } from '../../../src/core/search/filtering/temporal/TimeRangeProcessor';
-import type { TimeRange, TimeRangeQuery } from '../../../src/core/search/filtering/temporal/TimeRangeProcessor';
+import { TimeRangeProcessor } from "@/core/domain/search/filtering";
+import { TimeRange, TimeRangeQuery } from "@/core/domain/search/filtering/temporal/TimeRangeProcessor";
 
 describe('TimeRangeProcessor', () => {
   describe('processTimeRange()', () => {

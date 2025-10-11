@@ -1,11 +1,11 @@
-import { MemoryConsolidationService } from '../../../src/core/database/MemoryConsolidationService';
+import { MemoryConsolidationService } from '../../../src/core/infrastructure/database/MemoryConsolidationService';
 import { MemoryClassification, MemoryImportanceLevel } from '../../../src/core/types/schemas';
 import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
-import { RepositoryFactory } from '../../../src/core/database/factories/RepositoryFactory';
-import { ConsolidationService } from '../../../src/core/database/interfaces/ConsolidationService';
-import { DuplicateCandidate, ConsolidationResult, ConsolidationStats } from '../../../src/core/database/types/consolidation-models';
+import { RepositoryFactory } from '../../../src/core/infrastructure/database/factories/RepositoryFactory';
+import { ConsolidationService } from '../../../src/core/infrastructure/database/interfaces/ConsolidationService';
+import { DuplicateCandidate, ConsolidationResult, ConsolidationStats } from '../../../src/core/infrastructure/database/types/consolidation-models';
 
 describe('MemoryConsolidationService', () => {
   let consolidationService: MemoryConsolidationService;

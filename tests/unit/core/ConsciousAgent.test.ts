@@ -1,9 +1,9 @@
-import { ConsciousAgent } from '../../../src/core/agents/ConsciousAgent';
-import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
-import { logInfo, logError, logDebug } from '../../../src/core/utils/Logger';
+import { ConsciousAgent } from '../../../src/core/domain/memory/ConsciousAgent';
+import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
+import { logInfo, logError, logDebug } from '../../../src/core/infrastructure/config/Logger';
 
 // Mock the Logger module
-jest.mock('../../../src/core/utils/Logger', () => ({
+jest.mock('../../../src/core/infrastructure/config/Logger', () => ({
   logInfo: jest.fn(),
   logError: jest.fn(),
   logDebug: jest.fn(),
@@ -11,7 +11,7 @@ jest.mock('../../../src/core/utils/Logger', () => ({
 }));
 
 // Mock DatabaseManager
-jest.mock('../../../src/core/database/DatabaseManager');
+jest.mock('../../../src/core/infrastructure/database/DatabaseManager');
 
 const MockDatabaseManager = DatabaseManager as jest.MockedClass<typeof DatabaseManager>;
 

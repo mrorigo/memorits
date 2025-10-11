@@ -33,7 +33,7 @@ The consolidation system uses a layered architecture with unified duplicate dete
 
 ### ConsolidationService Interface
 
-**Location**: [`src/core/database/interfaces/ConsolidationService.ts`](src/core/database/interfaces/ConsolidationService.ts)
+**Location**: [`src/core/infrastructure/database/interfaces/ConsolidationService.ts`](src/core/infrastructure/database/interfaces/ConsolidationService.ts)
 
 The `ConsolidationService` interface defines the business-focused contract for memory consolidation operations. It provides high-level consolidation functionality without exposing infrastructure concerns.
 
@@ -46,7 +46,7 @@ The `ConsolidationService` interface defines the business-focused contract for m
 
 ### MemoryConsolidationService
 
-**Location**: [`src/core/database/MemoryConsolidationService.ts`](src/core/database/MemoryConsolidationService.ts)
+**Location**: [`src/core/infrastructure/database/MemoryConsolidationService.ts`](src/core/infrastructure/database/MemoryConsolidationService.ts)
 
 Concrete implementation of the `ConsolidationService` interface, containing pure domain logic for memory consolidation operations.
 
@@ -67,7 +67,7 @@ Concrete implementation of the `ConsolidationService` interface, containing pure
 
 ### IConsolidationRepository Interface
 
-**Location**: [`src/core/database/interfaces/IConsolidationRepository.ts`](src/core/database/interfaces/IConsolidationRepository.ts)
+**Location**: [`src/core/infrastructure/database/interfaces/IConsolidationRepository.ts`](src/core/infrastructure/database/interfaces/IConsolidationRepository.ts)
 
 Data access abstraction layer that defines the repository pattern interface for consolidation data operations.
 
@@ -80,7 +80,7 @@ Data access abstraction layer that defines the repository pattern interface for 
 
 ### PrismaConsolidationRepository
 
-**Location**: [`src/core/database/repositories/PrismaConsolidationRepository.ts`](src/core/database/repositories/PrismaConsolidationRepository.ts)
+**Location**: [`src/core/infrastructure/database/repositories/PrismaConsolidationRepository.ts`](src/core/infrastructure/database/repositories/PrismaConsolidationRepository.ts)
 
 Concrete implementation of `IConsolidationRepository` using Prisma ORM for database operations.
 
@@ -94,7 +94,7 @@ Concrete implementation of `IConsolidationRepository` using Prisma ORM for datab
 
 ### RepositoryFactory
 
-**Location**: [`src/core/database/factories/RepositoryFactory.ts`](src/core/database/factories/RepositoryFactory.ts)
+**Location**: [`src/core/infrastructure/database/factories/RepositoryFactory.ts`](src/core/infrastructure/database/factories/RepositoryFactory.ts)
 
 Centralized factory for creating repository instances, supporting dependency injection and testing scenarios.
 
@@ -106,7 +106,7 @@ Centralized factory for creating repository instances, supporting dependency inj
 
 ### DatabaseManager (Facade)
 
-**Location**: [`src/core/database/DatabaseManager.ts`](src/core/database/DatabaseManager.ts)
+**Location**: [`src/core/infrastructure/database/DatabaseManager.ts`](src/core/infrastructure/database/DatabaseManager.ts)
 
 Uses facade pattern to provide a simplified interface to the consolidation subsystem, delegating operations to the service layer.
 
@@ -128,9 +128,9 @@ Uses facade pattern to provide a simplified interface to the consolidation subsy
 ### Dependency Injection
 
 ```typescript
-import { RepositoryFactory } from './src/core/database/factories/RepositoryFactory';
-import { MemoryConsolidationService } from './src/core/database/MemoryConsolidationService';
-import { DatabaseManager } from './src/core/database/DatabaseManager';
+import { RepositoryFactory } from './src/core/infrastructure/database/factories/RepositoryFactory';
+import { MemoryConsolidationService } from './src/core/infrastructure/database/MemoryConsolidationService';
+import { DatabaseManager } from './src/core/infrastructure/database/DatabaseManager';
 
 // Option 1: Direct service creation with dependency injection
 const repository = RepositoryFactory.createConsolidationRepository();

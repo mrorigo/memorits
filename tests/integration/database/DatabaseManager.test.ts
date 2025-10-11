@@ -1,6 +1,6 @@
-import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
-import { MemoryConsolidationService } from '../../../src/core/database/MemoryConsolidationService';
-import { RepositoryFactory } from '../../../src/core/database/factories/RepositoryFactory';
+import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
+import { MemoryConsolidationService } from '../../../src/core/infrastructure/database/MemoryConsolidationService';
+import { RepositoryFactory } from '../../../src/core/infrastructure/database/factories/RepositoryFactory';
 import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';
 

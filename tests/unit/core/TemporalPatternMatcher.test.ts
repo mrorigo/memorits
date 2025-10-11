@@ -1,4 +1,5 @@
-import { TemporalPatternMatcher, TemporalPattern } from '../../../src/core/search/filtering/temporal/TemporalPatternMatcher';
+import { TemporalPatternMatcher } from "@/core/domain/search/filtering";
+import { TemporalPattern } from "@/core/domain/search/filtering/temporal/TemporalPatternMatcher";
 
 describe('TemporalPatternMatcher', () => {
   describe('analyzeText()', () => {

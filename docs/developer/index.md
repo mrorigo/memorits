@@ -69,9 +69,9 @@ This developer documentation is organized to help you build sophisticated AI age
 - **[Search Strategies](core-concepts/search-strategies.md)** - FTS5, LIKE, recent, semantic, and advanced filtering
 
 ### 🏛️ Architecture
-- **[System Overview](architecture/system-overview.md)** - High-level system design, architecture patterns, and data flow
-- **[Database Schema](architecture/database-schema.md)** - Database design and optimization
-- **[Search Architecture](architecture/search-architecture.md)** - Multi-strategy search implementation
+ - **[System Overview](architecture/system-overview.md)** - High-level system design, Domain-Driven Design patterns, and data flow
+ - **[Database Schema](architecture/database-schema.md)** - Database design and optimization
+ - **[Search Architecture](architecture/search-architecture.md)** - Multi-strategy search implementation
 
 ### 🔧 Advanced Features
 - **[Temporal Filtering](advanced-features/temporal-filtering.md)** - Time-based search and pattern matching
@@ -154,13 +154,36 @@ This documentation is specifically designed for:
 4. **Study [Architecture](architecture/system-overview.md)** to understand system design and data flow
 5. **Dive into [Advanced Features](advanced-features/temporal-filtering.md)** for sophisticated use cases
 6. **Check the [API Reference](api/core-api.md)** for detailed interface documentation
+## 🏗️ Project Architecture & Structure
+
+Memorits follows **Domain-Driven Design (DDD)** principles with a clear separation of concerns:
+
+### **Domain Layer** (`src/core/domain/`)
+- **Memory Domain**: Memory processing, classification, consolidation, and state management
+- **Search Domain**: Search strategies, filtering, relationship processing, and indexing
+- **Conversation Domain**: Chat history and conversation management
+
+### **Infrastructure Layer** (`src/core/infrastructure/`)
+- **Database Layer**: Prisma ORM, SQLite backend, repositories, and data access objects
+- **Provider Layer**: OpenAI SDK integration and external service providers
+- **Configuration Layer**: Winston logging, configuration management, and utilities
+
+### **Integration Layer** (`src/integrations/`)
+- External system integrations (OpenAI drop-in replacement, etc.)
+
+**Benefits of This Structure:**
+- **Clear Separation of Concerns**: Business logic separate from technical implementation
+- **Better Testability**: Domain logic can be tested independently of infrastructure
+- **Easier Maintenance**: Changes in one domain don't affect others
+- **Improved Developer Experience**: Logical organization makes code easier to find and understand
+
 
 ## 📖 Additional Resources
 
-- **[GitHub Repository](https://github.com/mrorigo/memorits)** - Source code and issues
-- **[NPM Package](https://npmjs.com/package/memorits)** - Package installation and versions
-- **[Migration Guide](../MIGRATION.md)** - Migrating from OpenAI to MemoriOpenAI
-- **[Python Version](../../../memori/)** - Original Python implementation
+ - **[GitHub Repository](https://github.com/mrorigo/memorits)** - Source code and issues
+ - **[NPM Package](https://npmjs.com/package/memorits)** - Package installation and versions
+ - **[Migration Guide](../MIGRATION.md)** - Migrating from OpenAI to MemoriOpenAI
+ - **[Python Version](../../../memori/)** - Original Python implementation
 
 ## 🤝 Contributing
 

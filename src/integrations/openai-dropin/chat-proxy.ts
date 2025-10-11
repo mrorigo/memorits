@@ -9,7 +9,7 @@ import type {
   ChatProxyInterface,
 } from './types';
 import type { MemoryManager } from './types';
-import { logInfo, logError } from '../../core/utils/Logger';
+import { logInfo, logError } from '../../core/infrastructure/config/Logger';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

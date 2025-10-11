@@ -3,7 +3,8 @@
  * Provides visualization-friendly data formats and alerting capabilities
  */
 
-import { logError } from '../utils/Logger';
+import { logError } from "../infrastructure/config/Logger";
+
 
 export interface RealTimeMetric {
   timestamp: Date;

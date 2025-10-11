@@ -6,18 +6,11 @@ const mockLogger = {
   debug: jest.fn(),
 };
 
-// Mock the Logger module
-jest.mock('../../../src/core/utils/Logger', () => ({
-  logInfo: mockLogger.info,
-  logError: mockLogger.error,
-  logWarn: mockLogger.warn,
-  logDebug: mockLogger.debug,
-}));
+// Mock the Logger module (duplicate mock removed)
 
-import { RelationshipSearchStrategy } from '../../../src/core/search/strategies/RelationshipSearchStrategy';
-import { SearchStrategy } from '../../../src/core/search/types';
-import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
-import { MemoryRelationshipType } from '../../../src/core/types/schemas';
+import { RelationshipSearchStrategy } from '@/core/domain/search/strategies/RelationshipSearchStrategy';
+import { SearchStrategy } from '@/core/domain/search/types';
+import { MemoryRelationshipType } from '@/core/types/schemas';
 
 // Mock DatabaseManager for testing
 class MockDatabaseManager {
@@ -146,7 +139,7 @@ class MockDatabaseManager {
 
 
 // Mock the Logger module
-jest.mock('../../../src/core/utils/Logger', () => ({
+jest.mock('../../../src/core/infrastructure/config/Logger', () => ({
   logInfo: mockLogger.info,
   logError: mockLogger.error,
   logWarn: mockLogger.warn,

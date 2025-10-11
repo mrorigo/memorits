@@ -1,6 +1,6 @@
-import { SearchService } from '../search/SearchService';
-import { SearchStrategyConfigManager } from '../search/SearchStrategyConfigManager';
-import { DatabaseManager } from '../database/DatabaseManager';
+import { SearchService } from '../domain/search/SearchService';
+import { DatabaseManager } from '../infrastructure/database/DatabaseManager';
+import { SearchStrategyConfigManager } from '../domain/search/SearchStrategyConfigManager';
 
 /**
  * Centralized performance analytics service

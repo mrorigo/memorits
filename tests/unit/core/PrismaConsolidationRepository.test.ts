@@ -1,10 +1,9 @@
-import { PrismaConsolidationRepository } from '../../../src/core/database/repositories/PrismaConsolidationRepository';
-import { MemoryClassification, MemoryImportanceLevel } from '../../../src/core/types/schemas';
 import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
-import { DuplicateDetectionConfig } from '../../../src/core/database/types/consolidation-models';
-import { initializeSearchSchema } from '../../../src/core/database/init-search-schema';
+import { initializeSearchSchema } from '@/core/infrastructure/database/init-search-schema';
+import { DuplicateDetectionConfig } from '@/core/infrastructure/database/types/consolidation-models';
+import { PrismaConsolidationRepository } from '@/core/infrastructure/database/repositories/PrismaConsolidationRepository';
 
 describe('PrismaConsolidationRepository', () => {
   let repository: PrismaConsolidationRepository;
@@ -116,7 +115,19 @@ describe('PrismaConsolidationRepository', () => {
 
     it('should find duplicate candidates based on content similarity', async () => {
        const content = 'TypeScript and JavaScript are both important for web development';
+
+       // Debug: Check what data exists in the database
+       const existingData = await prisma.longTermMemory.findMany({
+         where: { namespace: 'default' },
+         select: { id: true, searchableContent: true, summary: true }
+       });
+
+       console.log('DEBUG: Existing data in database:', existingData);
+
        const candidates = await repository.findDuplicateCandidates(content, 0.5);
+
+       console.log('DEBUG: Search content:', content);
+       console.log('DEBUG: Candidates found:', candidates.length);
 
        expect(Array.isArray(candidates)).toBe(true);
        expect(candidates.length).toBeGreaterThan(0);

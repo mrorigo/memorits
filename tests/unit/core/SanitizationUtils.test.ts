@@ -19,7 +19,7 @@ import {
   ValidationError,
   SANITIZATION_LIMITS,
   DANGEROUS_PATTERNS,
-} from '../../../src/core/utils/SanitizationUtils';
+} from '../../../src/core/infrastructure/config/SanitizationUtils';
 
 describe('SanitizationUtils', () => {
   describe('sanitizeString', () => {

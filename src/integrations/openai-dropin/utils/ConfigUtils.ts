@@ -8,7 +8,7 @@ import type {
   DatabaseType,
   MemoryProcessingMode,
 } from '../types';
-import { logInfo } from '../../../core/utils/Logger';
+import { logInfo } from '../../../core/infrastructure/config/Logger';
 import type { MemoryImportanceLevel } from '../../../core/types/models';
 
 /**

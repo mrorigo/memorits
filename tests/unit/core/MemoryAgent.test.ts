@@ -1,7 +1,7 @@
 // tests/unit/core/MemoryAgent.test.ts
-import { MemoryAgent } from '../../../src/core/agents/MemoryAgent';
+import { MemoryAgent } from '../../../src/core/domain/memory/MemoryAgent';
 import { MemoryClassification, MemoryImportanceLevel } from '../../../src/core/types/schemas';
-import * as Logger from '../../../src/core/utils/Logger';
+import * as Logger from '../../../src/core/infrastructure/config/Logger';
 
 describe('MemoryAgent Static Methods', () => {
   describe('processLLMResponse', () => {

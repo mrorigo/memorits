@@ -267,8 +267,8 @@ const memories = await memori.searchMemories('algorithm implementation', {
 Memorits provides a unified consolidation system for managing duplicate memories:
 
 ```typescript
-import { RepositoryFactory } from '../src/core/database/factories/RepositoryFactory';
-import { MemoryConsolidationService } from '../src/core/database/MemoryConsolidationService';
+import { RepositoryFactory } from '../src/core/infrastructure/database/factories/RepositoryFactory';
+import { MemoryConsolidationService } from '../src/core/infrastructure/database/MemoryConsolidationService';
 
 // Initialize consolidation service
 const repository = RepositoryFactory.createConsolidationRepository();

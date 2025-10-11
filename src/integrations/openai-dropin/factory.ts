@@ -4,7 +4,7 @@
 
 import MemoriOpenAIClient from './client';
 import type { Memori } from '../../core/Memori';
-import { logInfo, logError } from '../../core/utils/Logger';
+import { logInfo, logError } from '../../core/infrastructure/config/Logger';
 import { ConfigUtils } from './utils/ConfigUtils';
 import type {
   MemoriOpenAI,

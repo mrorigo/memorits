@@ -3,15 +3,15 @@
  * Tests core relationship processing logic excluding LLM interactions
  */
 
-import { RelationshipProcessor } from '../../../src/core/search/relationship/RelationshipProcessor';
-import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
-import { OpenAIProvider } from '../../../src/core/providers/OpenAIProvider';
-import { MemoryRelationship, MemoryRelationshipType } from '../../../src/core/types/schemas';
+import { OpenAIProvider } from '@/core/infrastructure/providers/OpenAIProvider';
+import { DatabaseManager } from '@/core/infrastructure/database/DatabaseManager';
+import { MemoryRelationship, MemoryRelationshipType } from '@/core/types/schemas';
+import { RelationshipProcessor } from '@/core/domain/search/relationship/RelationshipProcessor';
 
 // Mock dependencies
-jest.mock('../../../src/core/database/DatabaseManager');
-jest.mock('../../../src/core/providers/OpenAIProvider');
-jest.mock('../../../src/core/search/strategies/RelationshipSearchStrategy');
+jest.mock('@/core/infrastructure/database/DatabaseManager');
+jest.mock('@/core/infrastructure/providers/OpenAIProvider');
+jest.mock('@/core/domain/search/strategies/RelationshipSearchStrategy');
 
 const MockedDatabaseManager = DatabaseManager as jest.MockedClass<typeof DatabaseManager>;
 const MockedOpenAIProvider = OpenAIProvider as jest.MockedClass<typeof OpenAIProvider>;

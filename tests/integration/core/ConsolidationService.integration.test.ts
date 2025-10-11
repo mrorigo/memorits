@@ -1,6 +1,6 @@
-import { MemoryConsolidationService } from '../../../src/core/database/MemoryConsolidationService';
-import { PrismaConsolidationRepository } from '../../../src/core/database/repositories/PrismaConsolidationRepository';
-import { RepositoryFactory } from '../../../src/core/database/factories/RepositoryFactory';
+import { MemoryConsolidationService } from '../../../src/core/infrastructure/database/MemoryConsolidationService';
+import { PrismaConsolidationRepository } from '../../../src/core/infrastructure/database/repositories/PrismaConsolidationRepository';
+import { RepositoryFactory } from '../../../src/core/infrastructure/database/factories/RepositoryFactory';
 import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';
 import { PrismaClient } from '@prisma/client';

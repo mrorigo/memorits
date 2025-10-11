@@ -15,7 +15,7 @@ jest.mock('../../../../src/core/Memori', () => ({
   Memori: jest.fn().mockImplementation(() => mockMemori),
 }));
 
-jest.mock('../../../../src/core/agents/MemoryAgent', () => ({
+jest.mock('../../../../src/core/domain/memory/MemoryAgent', () => ({
   MemoryAgent: jest.fn().mockImplementation(() => ({
     processConversation: jest.fn(),
     getProcessingHistory: jest.fn().mockReturnValue([]),
@@ -23,11 +23,11 @@ jest.mock('../../../../src/core/agents/MemoryAgent', () => ({
   })),
 }));
 
-jest.mock('../../../../src/core/providers/OpenAIProvider', () => ({
+jest.mock('../../../../src/core/infrastructure/providers/OpenAIProvider', () => ({
   OpenAIProvider: jest.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('../../../../src/core/utils/ConfigManager', () => ({
+jest.mock('../../../../src/core/infrastructure/config/ConfigManager', () => ({
   ConfigManager: jest.fn().mockImplementation(() => ({})),
 }));
 
@@ -54,19 +54,19 @@ describe('MemoriOpenAIClient', () => {
     }));
 
     // Mock the MemoryAgent class constructor
-    jest.mock('../../../../src/core/agents/MemoryAgent', () => ({
+    jest.mock('../../../../src/core/domain/memory/MemoryAgent', () => ({
       MemoryAgent: jest.fn().mockImplementation(() => mockMemoryAgent),
     }));
 
     // Mock the OpenAIProvider class
-    jest.mock('../../../../src/core/providers/OpenAIProvider', () => ({
+    jest.mock('../../../../src/core/infrastructure/providers/OpenAIProvider', () => ({
       OpenAIProvider: jest.fn().mockImplementation(() => ({
         // Mock implementation
       })),
     }));
 
     // Mock the ConfigManager class
-    jest.mock('../../../../src/core/utils/ConfigManager', () => ({
+    jest.mock('../../../../src/core/infrastructure/config/ConfigManager', () => ({
       ConfigManager: jest.fn().mockImplementation(() => ({
         // Mock implementation
       })),

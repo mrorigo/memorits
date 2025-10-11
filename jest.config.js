@@ -10,6 +10,9 @@ export default {
   transformIgnorePatterns: [
     'node_modules/(?!(uuid)/)',
   ],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+  },
   collectCoverageFrom: [
     'src/**/*.{ts,js}',
     '!src/**/*.d.ts',

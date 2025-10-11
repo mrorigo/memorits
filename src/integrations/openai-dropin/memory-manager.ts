@@ -3,8 +3,8 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { Memori } from '../../core/Memori';
-import { MemoryAgent } from '../../core/agents/MemoryAgent';
-import { logInfo, logError } from '../../core/utils/Logger';
+import { MemoryAgent } from '../../core/domain/memory/MemoryAgent';
+import { logInfo, logError } from '../../core/infrastructure/config/Logger';
 import { ErrorUtils } from './utils/ErrorUtils';
 import type {
   MemoryManager,

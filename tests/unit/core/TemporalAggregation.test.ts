@@ -1,4 +1,4 @@
-import { TemporalAggregation } from '../../../src/core/search/filtering/temporal/TemporalAggregation';
+import { TemporalAggregation } from "@/core/domain/search/filtering/temporal/TemporalAggregation";
 
 describe('TemporalAggregation', () => {
   describe('aggregateByPeriod()', () => {

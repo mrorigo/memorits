@@ -1,7 +1,7 @@
 // src/index.ts
 // Core exports (backward compatibility)
 export { Memori } from './core/Memori';
-export { ConfigManager } from './core/utils/ConfigManager';
+export { ConfigManager } from './core/infrastructure/config/ConfigManager';
 export { createMemoriOpenAI } from './integrations/openai';
 export { ProcessedLongTermMemorySchema } from './core/types/schemas';
 
@@ -22,7 +22,7 @@ export {
   SearchStrategyMetadata,
   SearchStrategyConfig,
   ValidationResult
-} from './core/search/SearchStrategy';
+} from './core/domain/search/SearchStrategy';
 
 // OpenAI Drop-in Replacement exports
 // Main client and types

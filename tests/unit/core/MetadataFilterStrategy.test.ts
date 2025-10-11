@@ -1,7 +1,6 @@
-import { MetadataFilterStrategy } from '../../../src/core/search/filtering/MetadataFilterStrategy';
-import { SearchQuery } from '../../../src/core/search/types';
-import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
-import type { MetadataField } from '../../../src/core/search/filtering/MetadataFilterStrategy';
+import { MetadataField, MetadataFilterStrategy } from '../../../src/core/domain/search/filtering/MetadataFilterStrategy';
+import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
+import { SearchQuery } from '../../../src/index';
 
 describe('MetadataFilterStrategy', () => {
     let strategy: MetadataFilterStrategy;

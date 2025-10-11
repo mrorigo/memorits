@@ -235,7 +235,7 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 **After:**
 ```typescript
-import MemoriOpenAI from 'memorits/integrations/openai-dropin';
+import { MemoriOpenAI } from 'memorits';
 const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
   enableChatMemory: true,
   autoInitialize: true,
@@ -414,7 +414,7 @@ const client = new MemoriOpenAI('api-key', {
 **Solutions:**
 ```typescript
 // Use correct import path
-import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
+import { MemoriOpenAI } from 'memorits';
 
 // Not this (will cause type errors)
 import MemoriOpenAI from 'memorits';
@@ -512,7 +512,7 @@ console.log('Performance metrics:', {
 Full TypeScript support with exact OpenAI SDK compatibility:
 
 ```typescript
-import type { ChatCompletion, ChatCompletionCreateParams } from 'memorits/integrations/openai-dropin';
+import type { ChatCompletion, ChatCompletionCreateParams } from 'memorits';
 
 const params: ChatCompletionCreateParams = {
   model: 'gpt-4o-mini',

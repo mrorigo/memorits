@@ -1,4 +1,4 @@
-import { Logger, LoggerConfig, DataRedactor, SENSITIVE_FIELDS } from '../../../src/core/utils/Logger';
+import { Logger, LoggerConfig, DataRedactor, SENSITIVE_FIELDS } from '../../../src/core/infrastructure/config/Logger';
 
 describe('Logger', () => {
   let logger: Logger;

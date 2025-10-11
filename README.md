@@ -352,6 +352,77 @@ const client = new MemoriOpenAI(apiKey, { enableChatMemory: true });
 
 ---
 
+## Project Structure & Architecture
+
+Memorits follows **Domain-Driven Design (DDD)** principles with a clear separation of concerns:
+
+### 🏗️ **Architecture Overview**
+
+```
+src/
+├── core/                           # 🏢 Core Business Logic
+│   ├── domain/                     # 🎯 Business Logic Layer (DDD Bounded Contexts)
+│   │   ├── conversation/           # Conversation Management Domain
+│   │   ├── memory/                 # Memory Processing & State Management Domain
+│   │   └── search/                 # Search Strategies & Filtering Domain
+│   ├── infrastructure/             # 🔧 External Concerns Layer
+│   │   ├── config/                 # Configuration & Logging Infrastructure
+│   │   ├── database/               # Database Access & Repository Infrastructure
+│   │   └── providers/              # External Service Provider Infrastructure
+│   ├── types/                      # 📋 Shared Type Definitions
+│   ├── agents/                     # 🤖 Agent Implementations
+│   ├── database/                   # 💾 Database Services (Consolidation, Performance)
+│   ├── memory/                     # 🧠 Memory Services (Consolidation, State)
+│   ├── performance/                # ⚡ Performance Monitoring & Analytics
+│   ├── providers/                  # 🔗 Provider Services (OpenAI, etc.)
+│   └── utils/                      # 🛠️ Core Utilities
+├── integrations/                   # 🔗 External Integrations
+│   └── openai-dropin/              # OpenAI Drop-in Replacement
+└── index.ts                        # 🚪 Main Entry Point
+```
+
+### 🏢 **Domain Layer** (`src/core/domain/`)
+- **Memory Domain**: Memory processing, classification, consolidation, and state management
+- **Search Domain**: Search strategies, filtering, relationship processing, and indexing
+- **Conversation Domain**: Chat history and conversation management
+
+### 🔧 **Infrastructure Layer** (`src/core/infrastructure/`)
+- **Database Layer**: Prisma ORM, SQLite backend, repositories, and data access objects
+- **Provider Layer**: OpenAI SDK integration and external service providers
+- **Configuration Layer**: Winston logging, configuration management, and utilities
+
+### 🔗 **Integration Layer** (`src/integrations/`)
+- External system integrations (OpenAI drop-in replacement, etc.)
+
+### 🎯 **Domain-Driven Design Benefits**
+
+**🏢 Clear Business Focus**
+- **🎯 Domain-Centric Organization**: Business logic organized by bounded contexts (Memory, Search, Conversation)
+- **🔒 Ubiquitous Language**: Consistent terminology between business logic and implementation
+- **📋 Explicit Business Rules**: Domain models enforce business invariants and validation
+
+**🔧 Technical Excellence**
+- **⚡ Enhanced Testability**: Pure domain logic testable without infrastructure dependencies
+- **🔄 Infrastructure Independence**: Business rules isolated from technical implementation details
+- **🧪 Focused Testing**: Each bounded context can be tested in isolation with mocked dependencies
+
+**🚀 Operational Advantages**
+- **🔧 Easier Maintenance**: Changes in one domain don't cascade to unrelated areas
+- **👥 Better Team Organization**: Teams can own specific domains without conflicts
+- **📈 Scalable Architecture**: Each domain can evolve independently as business needs grow
+
+**💻 Developer Experience**
+- **🗺️ Intuitive Navigation**: Logical organization makes code easy to find and understand
+- **🔍 Clear Dependencies**: Explicit interfaces between domains reduce coupling
+- **📚 Self-Documenting**: Domain structure clearly communicates business capabilities
+
+**🏗️ Strategic Benefits**
+- **🔮 Future-Proof Foundation**: Architecture supports complex business requirements evolution
+- **🎛️ Technology Flexibility**: Infrastructure choices can change without affecting business logic
+- **📊 Enterprise Alignment**: Structure mirrors business organization and processes
+
+---
+
 
 ## Key Features
 
@@ -500,10 +571,17 @@ const previousDiscussions = await memori.searchMemories('authentication system',
 
 Memorits is built on a foundation of enterprise-grade technologies designed for production deployment:
 
-### 🏗️ **Core Infrastructure**
+### 🏗️ **Domain-Driven Design Architecture**
+- **Domain Layer** (`src/core/domain/`) - Pure business logic organized by bounded contexts:
+  - **Memory Domain** - Memory processing, classification, and state management
+  - **Search Domain** - Search strategies, filtering, and relationship processing
+  - **Conversation Domain** - Chat history and conversation management
+- **Infrastructure Layer** (`src/core/infrastructure/`) - Technical implementations:
+  - **Database Layer** - Prisma ORM, SQLite backend, and repository implementations
+  - **Provider Layer** - OpenAI SDK integration and external service providers
+  - **Configuration Layer** - Winston logging, configuration management, and utilities
+- **Integration Layer** (`src/integrations/`) - External system integrations
 - **TypeScript 5.9+** - Full type safety with compile-time validation and modern JavaScript features
-- **Prisma ORM** - Type-safe database operations with migration management and query optimization
-- **SQLite** - Embedded database for reliability, with FTS5 full-text search capabilities
 - **Zod** - Runtime type validation with detailed error reporting and schema evolution
 
 ### 🔌 **AI Integration Layer**
@@ -512,7 +590,6 @@ Memorits is built on a foundation of enterprise-grade technologies designed for 
 - **Streaming Support** - Full memory capture for real-time AI interactions
 
 ### 📊 **Enterprise Services**
-- **Winston Logging** - Structured logging with multiple transports and log aggregation
 - **Performance Monitoring** - Real-time metrics collection and alerting
 - **Health Checks** - Comprehensive system diagnostics and status reporting
 - **Configuration Management** - Dynamic configuration with validation and audit trails

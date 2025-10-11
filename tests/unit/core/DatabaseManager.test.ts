@@ -1,5 +1,5 @@
-import { ChatHistoryData } from '@/core/database/types';
-import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
+import { ChatHistoryData } from '../../../src/core/infrastructure/database/types';
+import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
 import { MemoryClassification, MemoryImportanceLevel } from '../../../src/core/types/schemas';
 import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';

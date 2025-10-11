@@ -8,7 +8,7 @@ import {
   MemoriOpenAIFromDatabase,
 } from './index';
 import MemoriOpenAI from './index';
-import { logInfo, logError } from '../../core/utils/Logger';
+import { logInfo, logError } from '../../core/infrastructure/config/Logger';
 
 /**
  * Example 1: Simple drop-in replacement (most common use case)

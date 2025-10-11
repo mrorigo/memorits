@@ -1,4 +1,4 @@
-import { DateTimeNormalizer } from '../../../src/core/search/filtering/temporal/DateTimeNormalizer';
+import { DateTimeNormalizer } from '../../../src/core/domain/search/filtering/temporal/DateTimeNormalizer';
 
 describe('DateTimeNormalizer', () => {
   describe('normalize() - Main API', () => {

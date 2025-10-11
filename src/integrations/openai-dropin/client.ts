@@ -5,10 +5,10 @@
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { Memori } from '../../core/Memori';
-import { MemoryAgent } from '../../core/agents/MemoryAgent';
-import { OpenAIProvider } from '../../core/providers/OpenAIProvider';
-import { ConfigManager, MemoriConfig } from '../../core/utils/ConfigManager';
-import { logInfo, logError } from '../../core/utils/Logger';
+import { MemoryAgent } from '../../core/domain/memory/MemoryAgent';
+import { OpenAIProvider } from '../../core/infrastructure/providers/OpenAIProvider';
+import { ConfigManager, MemoriConfig } from '../../core/infrastructure/config/ConfigManager';
+import { logInfo, logError } from '../../core/infrastructure/config/Logger';
 import { OpenAIMemoryManager } from './memory-manager';
 import { ChatProxy } from './chat-proxy';
 import { EmbeddingProxy } from './embedding-proxy';

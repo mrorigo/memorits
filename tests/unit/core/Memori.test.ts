@@ -1,17 +1,17 @@
 import { Memori } from '../../../src/core/Memori';
-import { DatabaseManager } from '../../../src/core/database/DatabaseManager';
-import { MemoryAgent } from '../../../src/core/agents/MemoryAgent';
-import { ConsciousAgent } from '../../../src/core/agents/ConsciousAgent';
-import { OpenAIProvider } from '../../../src/core/providers/OpenAIProvider';
-import { ConfigManager } from '../../../src/core/utils/ConfigManager';
-import * as Logger from '../../../src/core/utils/Logger';
+import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
+import { MemoryAgent } from '../../../src/core/domain/memory/MemoryAgent';
+import { ConsciousAgent } from '../../../src/core/domain/memory/ConsciousAgent';
+import { OpenAIProvider } from '../../../src/core/infrastructure/providers/OpenAIProvider';
+import { ConfigManager } from '../../../src/core/infrastructure/config/ConfigManager';
+import * as Logger from '../../../src/core/infrastructure/config/Logger';
 
 // Mock dependencies
-jest.mock('../../../src/core/database/DatabaseManager');
-jest.mock('../../../src/core/agents/MemoryAgent');
-jest.mock('../../../src/core/agents/ConsciousAgent');
-jest.mock('../../../src/core/providers/OpenAIProvider');
-jest.mock('../../../src/core/utils/ConfigManager');
+jest.mock('../../../src/core/infrastructure/database/DatabaseManager');
+jest.mock('../../../src/core/domain/memory/MemoryAgent');
+jest.mock('../../../src/core/domain/memory/ConsciousAgent');
+jest.mock('../../../src/core/infrastructure/providers/OpenAIProvider');
+jest.mock('../../../src/core/infrastructure/config/ConfigManager');
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'mock-uuid'),
 }));

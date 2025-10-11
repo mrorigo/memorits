@@ -1,18 +1,18 @@
 // src/core/Memori.ts
 import { v4 as uuidv4 } from 'uuid';
-import { DatabaseManager } from './database/DatabaseManager';
-import { MemoryAgent } from './agents/MemoryAgent';
-import { ConsciousAgent } from './agents/ConsciousAgent';
-import { OpenAIProvider } from './providers/OpenAIProvider';
-import { ConfigManager, MemoriConfig } from './utils/ConfigManager';
-import { logInfo, logError } from './utils/Logger';
+import { DatabaseManager } from './infrastructure/database/DatabaseManager';
+import { MemoryAgent } from './domain/memory/MemoryAgent';
+import { ConsciousAgent } from './domain/memory/ConsciousAgent';
+import { OpenAIProvider } from './infrastructure/providers/OpenAIProvider';
+import { ConfigManager, MemoriConfig } from './infrastructure/config/ConfigManager';
+import { logInfo, logError } from './infrastructure/config/Logger';
 import {
   MemorySearchResult,
   RecordConversationOptions,
   SearchOptions,
 } from './types/models';
 import { ProcessedLongTermMemory, MemoryClassification, MemoryImportanceLevel, MemoryRelationship } from './types/schemas';
-import { SearchStrategy, SearchQuery } from './search/types';
+import { SearchStrategy, SearchQuery } from './domain/search/types';
 
 export class Memori {
   private dbManager: DatabaseManager;
@@ -571,7 +571,7 @@ export class Memori {
   /**
    * Get comprehensive health report for the search index
    */
-  async getIndexHealthReport(): Promise<import('./search/SearchIndexManager').IndexHealthReport> {
+  async getIndexHealthReport(): Promise<import('./domain/search/SearchIndexManager').IndexHealthReport> {
     if (!this.enabled) {
       throw new Error('Memori is not enabled');
     }
@@ -601,7 +601,7 @@ export class Memori {
   /**
    * Perform index optimization with specified strategy
    */
-  async optimizeIndex(type?: import('./search/SearchIndexManager').OptimizationType): Promise<import('./search/SearchIndexManager').OptimizationResult> {
+  async optimizeIndex(type?: import('./domain/search/SearchIndexManager').OptimizationType): Promise<import('./domain/search/SearchIndexManager').OptimizationResult> {
     if (!this.enabled) {
       throw new Error('Memori is not enabled');
     }
@@ -633,7 +633,7 @@ export class Memori {
   /**
    * Create a backup of the current search index
    */
-  async createIndexBackup(): Promise<import('./search/SearchIndexManager').BackupMetadata> {
+  async createIndexBackup(): Promise<import('./domain/search/SearchIndexManager').BackupMetadata> {
     if (!this.enabled) {
       throw new Error('Memori is not enabled');
     }

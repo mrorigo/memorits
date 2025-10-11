@@ -11,7 +11,7 @@ import {
   RecoveryStrategy,
 } from '../types';
 import { MemoryError } from '../types';
-import { logInfo, logError } from '../../../core/utils/Logger';
+import { logInfo, logError } from '../../../core/infrastructure/config/Logger';
 
 /**
  * Streaming context interface for error handling
