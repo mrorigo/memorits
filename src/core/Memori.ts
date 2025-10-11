@@ -320,7 +320,7 @@ export class Memori {
         // Don't fail the close process if search service cleanup fails
         logInfo('Search service cleanup failed during Memori close (non-critical)', {
           component: 'Memori',
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
       }
 
@@ -330,7 +330,7 @@ export class Memori {
       logError('Error during Memori close', {
         component: 'Memori',
         error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
     }

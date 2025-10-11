@@ -649,7 +649,14 @@ export class ConsciousAgent {
       });
 
       // Get consolidation statistics from database
-      const consolidationStats = await this.dbManager.getConsolidationStats(targetNamespace);
+      const consolidationAnalytics = await this.dbManager.getConsolidationService().getConsolidationAnalytics();
+      const consolidationStats = {
+        totalMemories: consolidationAnalytics.totalMemories,
+        potentialDuplicates: consolidationAnalytics.duplicateCount,
+        consolidatedMemories: consolidationAnalytics.consolidatedMemories,
+        consolidationRatio: consolidationAnalytics.averageConsolidationRatio,
+        lastConsolidation: consolidationAnalytics.lastConsolidationActivity,
+      };
       const processingMetrics = await this.dbManager.getProcessingMetrics();
 
       // Get recent consolidation activity

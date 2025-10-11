@@ -89,6 +89,9 @@ npm run example:dual-memory
 
 # Performance dashboard demonstration
 npm run example:performance-dashboard
+
+# Memory consolidation demonstration
+npm run example:consolidation
 ```
 
 ### Running Individual Examples Directly
@@ -113,6 +116,9 @@ npx tsx examples/dual-memory-mode.ts
 
 # Performance dashboard
 npx tsx examples/performance-dashboard.ts
+
+# Memory consolidation
+npx tsx examples/memory-consolidation.ts
 ```
 
 ## Example Descriptions
@@ -207,6 +213,23 @@ Comprehensive demonstration of Memori's performance monitoring and alerting capa
 - Performance report generation with trends and recommendations
 - Alert acknowledgment and resolution workflow
 - Dashboard configuration export and management
+
+### 7. Memory Consolidation (`memory-consolidation.ts`)
+
+Demonstrates the memory consolidation service:
+- **Duplicate detection**: Using similarity algorithms to find duplicate memories
+- **Memory consolidation**: Safe merging with rollback capabilities
+- **Architecture overview**: Clean service-oriented design for maintainability
+- **Performance characteristics**: Fast duplicate detection and processing
+- **Service integration**: How consolidation works with existing Memori features
+
+**Expected Output:**
+- Memory creation for consolidation demonstration
+- Duplicate detection results with similarity analysis
+- Consolidation process with rollback safety
+- Architecture capabilities demonstration
+- Performance metrics and system capabilities
+- Service design and integration showcase
 
 ## Expected Output Examples
 

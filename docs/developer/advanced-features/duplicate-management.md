@@ -2,6 +2,26 @@
 
 Duplicate management is a critical feature of Memorits that ensures memory quality and prevents redundancy. The system automatically detects, consolidates, and manages duplicate memories to maintain a clean, efficient, and accurate knowledge base for AI agents.
 
+## Consolidation Service Architecture
+
+The duplicate management system uses a modern service-oriented architecture that provides clean separation of concerns, excellent testability, and enhanced maintainability. The [Consolidation Service Architecture](../advanced-features/consolidation-service-architecture.md) consists of:
+
+- **ConsolidationService Interface**: Business-focused contract for consolidation operations
+- **MemoryConsolidationService**: Domain logic implementation with advanced algorithms
+- **IConsolidationRepository**: Data access abstraction layer
+- **PrismaConsolidationRepository**: Concrete implementation with optimized queries
+- **RepositoryFactory**: Dependency injection and testing support
+
+### Architecture Features
+
+- **Clean Separation**: Business logic separated from data access concerns
+- **Enhanced Testing**: Easy unit testing with mock repositories
+- **Better Error Handling**: Comprehensive validation and preview capabilities
+- **Rollback Support**: Safe operations with backup and recovery
+- **Performance Monitoring**: Built-in analytics and optimization recommendations
+
+For detailed API documentation, see [Consolidation Service API Reference](../api-reference/consolidation-service-api.md).
+
 ## Overview
 
 The duplicate management system provides:

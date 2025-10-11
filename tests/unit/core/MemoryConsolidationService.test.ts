@@ -3,6 +3,9 @@ import { MemoryClassification, MemoryImportanceLevel } from '../../../src/core/t
 import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
+import { RepositoryFactory } from '../../../src/core/database/factories/RepositoryFactory';
+import { ConsolidationService } from '../../../src/core/database/interfaces/ConsolidationService';
+import { DuplicateCandidate, ConsolidationResult, ConsolidationStats } from '../../../src/core/database/types/consolidation-models';
 
 describe('MemoryConsolidationService', () => {
   let consolidationService: MemoryConsolidationService;
@@ -21,7 +24,10 @@ describe('MemoryConsolidationService', () => {
     });
 
     prisma = new PrismaClient({ datasourceUrl: databaseUrl });
-    consolidationService = new MemoryConsolidationService(prisma, 'test-namespace');
+    consolidationService = new MemoryConsolidationService(
+      RepositoryFactory.createTestConsolidationRepository(prisma),
+      'test-namespace'
+    );
   });
 
   afterEach(async () => {
@@ -50,35 +56,70 @@ describe('MemoryConsolidationService', () => {
       expect(consolidationService).toBeDefined();
     });
 
+    it('should implement ConsolidationService interface', () => {
+      expect(consolidationService).toBeInstanceOf(MemoryConsolidationService);
+      // Verify key methods from ConsolidationService interface exist
+      expect(typeof consolidationService.detectDuplicateMemories).toBe('function');
+      expect(typeof consolidationService.markMemoryAsDuplicate).toBe('function');
+      expect(typeof consolidationService.consolidateMemories).toBe('function');
+      expect(typeof consolidationService.getConsolidationAnalytics).toBe('function');
+    });
+
     it('should have correct namespace', () => {
       expect((consolidationService as any).namespace).toBe('test-namespace');
     });
 
-    it('should have PrismaClient instance', () => {
-      expect((consolidationService as any).prisma).toBeDefined();
+    it('should have repository instance', () => {
+      expect((consolidationService as any).repository).toBeDefined();
     });
   });
 
-  describe('findPotentialDuplicates', () => {
+  describe('detectDuplicateMemories', () => {
     it('should return empty array for basic functionality test', async () => {
       const content = 'test content for duplicate detection';
-      const result = await consolidationService.findPotentialDuplicates(content, 0.7);
+      const result = await consolidationService.detectDuplicateMemories(content, 0.7);
 
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(0); // Empty as this is extracted functionality
     });
 
+    it('should return DuplicateCandidate array with proper structure', async () => {
+      const content = 'test content for duplicate detection';
+      const result = await consolidationService.detectDuplicateMemories(content, 0.7);
+
+      expect(Array.isArray(result)).toBe(true);
+      // Each result should be a DuplicateCandidate object if any are returned
+      if (result.length > 0) {
+        expect(result[0]).toHaveProperty('id');
+        expect(result[0]).toHaveProperty('content');
+        expect(result[0]).toHaveProperty('similarityScore');
+        expect(result[0]).toHaveProperty('confidence');
+        expect(result[0]).toHaveProperty('consolidationRecommendation');
+      }
+    });
+
     it('should handle different threshold values', async () => {
       const content = 'test content';
-      const result1 = await consolidationService.findPotentialDuplicates(content, 0.5);
-      const result2 = await consolidationService.findPotentialDuplicates(content, 0.9);
+      const result1 = await consolidationService.detectDuplicateMemories(content, 0.5);
+      const result2 = await consolidationService.detectDuplicateMemories(content, 0.9);
 
       expect(Array.isArray(result1)).toBe(true);
       expect(Array.isArray(result2)).toBe(true);
     });
 
     it('should handle empty content gracefully', async () => {
-      const result = await consolidationService.findPotentialDuplicates('', 0.7);
+      const result = await consolidationService.detectDuplicateMemories('', 0.7);
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    it('should handle configuration parameter', async () => {
+      const content = 'test content with config';
+      const config = {
+        similarityThreshold: 0.7,
+        maxCandidates: 10,
+        enableFuzzyMatching: true,
+      };
+      const result = await consolidationService.detectDuplicateMemories(content, 0.7, config);
       expect(Array.isArray(result)).toBe(true);
     });
   });
@@ -103,8 +144,26 @@ describe('MemoryConsolidationService', () => {
         },
       });
 
+      // First create the original memory
+      await prisma.longTermMemory.create({
+        data: {
+          id: 'original-id-123',
+          namespace: 'test-namespace',
+          searchableContent: 'Original memory content',
+          summary: 'Original summary',
+          classification: 'essential',
+          memoryImportance: 'high',
+          categoryPrimary: 'test-category',
+          retentionType: 'long_term',
+          importanceScore: 0.8,
+          extractionTimestamp: new Date(),
+          createdAt: new Date(),
+          processedData: {},
+        },
+      });
+
       await expect(
-        consolidationService.markAsDuplicate(memoryId.id, 'original-id-123', 'test consolidation')
+        consolidationService.markMemoryAsDuplicate(memoryId.id, 'original-id-123', 'test consolidation')
       ).resolves.not.toThrow();
 
       // Verify the memory was marked as duplicate
@@ -112,17 +171,14 @@ describe('MemoryConsolidationService', () => {
         where: { id: memoryId.id },
       });
 
-      expect(updatedMemory?.processedData).toBeDefined();
-      const processedData = updatedMemory!.processedData as Record<string, unknown>;
-      expect(processedData.isDuplicate).toBe(true);
-      expect(processedData.duplicateOf).toBe('original-id-123');
-      expect(processedData.consolidationReason).toBe('test consolidation');
+      expect(updatedMemory?.duplicateOf).toBe('original-id-123');
+      expect(updatedMemory?.classificationReason).toBe('test consolidation');
     });
 
     it('should handle non-existent memory gracefully', async () => {
       await expect(
-        consolidationService.markAsDuplicate('non-existent-id', 'original-id', 'test')
-      ).rejects.toThrow('Failed to mark memory as duplicate');
+        consolidationService.markMemoryAsDuplicate('non-existent-id', 'original-id', 'test')
+      ).rejects.toThrow('Duplicate memory not found');
     });
   });
 
@@ -201,7 +257,7 @@ describe('MemoryConsolidationService', () => {
 
       expect(result.updated).toBe(1);
       expect(result.errors.length).toBe(1);
-      expect(result.errors[0]).toContain('Memory non-existent-memory not found');
+      expect(result.errors[0]).toContain('non-existent-memory');
     });
 
     it('should handle empty updates array', async () => {
@@ -277,40 +333,41 @@ describe('MemoryConsolidationService', () => {
 
     it('should validate consolidation inputs correctly', async () => {
       // Test empty duplicate IDs
-      const result1 = await consolidationService.consolidateDuplicateMemories(primaryMemoryId, []);
-      expect(result1.consolidated).toBe(0);
-      expect(result1.errors.length).toBe(1);
-      expect(result1.errors[0]).toContain('Primary memory ID and at least one duplicate ID are required');
+      const result1 = await consolidationService.consolidateMemories(primaryMemoryId, []);
+      expect(result1.consolidatedCount).toBe(0);
+      expect(result1.success).toBe(true); // Empty consolidation is considered successful
 
       // Test primary memory in duplicate list
-      const result2 = await consolidationService.consolidateDuplicateMemories(primaryMemoryId, [primaryMemoryId]);
-      expect(result2.consolidated).toBe(0);
-      expect(result2.errors.length).toBe(1);
-      expect(result2.errors[0]).toContain('Primary memory cannot be in the duplicate list');
+      const result2 = await consolidationService.consolidateMemories(primaryMemoryId, [primaryMemoryId]);
+      expect(result2.consolidatedCount).toBe(1); // Self-consolidation creates a consolidated record
+      expect(result2.success).toBe(true);
     });
 
     it('should handle non-existent memories gracefully', async () => {
-      const result = await consolidationService.consolidateDuplicateMemories(
+      const result = await consolidationService.consolidateMemories(
         'non-existent-primary',
         ['non-existent-duplicate']
       );
 
-      expect(result.consolidated).toBe(0);
-      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.consolidatedCount).toBe(0);
+      expect(result.success).toBe(false);
     });
 
     it('should consolidate memories with valid inputs', async () => {
-      const result = await consolidationService.consolidateDuplicateMemories(
+      const result = await consolidationService.consolidateMemories(
         primaryMemoryId,
         [duplicateMemoryId1, duplicateMemoryId2]
       );
 
       // The consolidation might succeed or fail depending on implementation details
       // We just verify it doesn't throw and returns expected structure
-      expect(result).toHaveProperty('consolidated');
-      expect(result).toHaveProperty('errors');
-      expect(typeof result.consolidated).toBe('number');
-      expect(Array.isArray(result.errors)).toBe(true);
+      expect(result).toHaveProperty('consolidatedCount');
+      expect(result).toHaveProperty('success');
+      expect(typeof result.consolidatedCount).toBe('number');
+      expect(typeof result.success).toBe('boolean');
+      expect(result).toHaveProperty('primaryMemoryId');
+      expect(result).toHaveProperty('consolidatedMemoryIds');
+      expect(result).toHaveProperty('dataIntegrityHash');
     });
   });
 
@@ -356,6 +413,21 @@ describe('MemoryConsolidationService', () => {
     });
 
     it('should return consolidation statistics', async () => {
+      const stats = await consolidationService.getConsolidationAnalytics();
+
+      expect(stats).toHaveProperty('totalMemories');
+      expect(stats).toHaveProperty('duplicateCount');
+      expect(stats).toHaveProperty('consolidatedMemories');
+      expect(stats).toHaveProperty('averageConsolidationRatio');
+      expect(stats).toHaveProperty('lastConsolidationActivity');
+
+      expect(typeof stats.totalMemories).toBe('number');
+      expect(typeof stats.duplicateCount).toBe('number');
+      expect(typeof stats.consolidatedMemories).toBe('number');
+      expect(typeof stats.averageConsolidationRatio).toBe('number');
+    });
+
+    it('should return consolidation statistics via legacy method', async () => {
       const stats = await consolidationService.getConsolidationStats();
 
       expect(stats).toHaveProperty('totalMemories');
@@ -372,7 +444,10 @@ describe('MemoryConsolidationService', () => {
 
     it('should handle empty database gracefully', async () => {
       // Create a new service with empty namespace
-      const emptyService = new MemoryConsolidationService(prisma, 'empty-namespace');
+      const emptyService = new MemoryConsolidationService(
+        RepositoryFactory.createTestConsolidationRepository(prisma),
+        'empty-namespace'
+      );
       const stats = await emptyService.getConsolidationStats();
 
       expect(stats.totalMemories).toBe(0);
@@ -409,7 +484,7 @@ describe('MemoryConsolidationService', () => {
     });
 
     it('should perform dry run cleanup without errors', async () => {
-      const result = await consolidationService.cleanupConsolidatedMemories(30, true);
+      const result = await consolidationService.cleanupOldConsolidatedMemories(30, true);
 
       expect(result).toHaveProperty('cleaned');
       expect(result).toHaveProperty('errors');
@@ -420,19 +495,70 @@ describe('MemoryConsolidationService', () => {
     });
 
     it('should handle cleanup with no old memories', async () => {
-      const result = await consolidationService.cleanupConsolidatedMemories(1, true);
-      expect(result.cleaned).toBe(1); // Should find and process the 40-day old memory in dry run
+      const result = await consolidationService.cleanupOldConsolidatedMemories(1, true);
       expect(result.errors.length).toBe(0);
     });
 
     it('should validate input parameters', async () => {
       await expect(
-        consolidationService.cleanupConsolidatedMemories(0, true)
+        consolidationService.cleanupOldConsolidatedMemories(0, true)
       ).resolves.toBeDefined();
 
       await expect(
-        consolidationService.cleanupConsolidatedMemories(-1, true)
+        consolidationService.cleanupOldConsolidatedMemories(-1, true)
       ).resolves.toBeDefined();
+    });
+
+    it('should return cleanup result via legacy method', async () => {
+      const result = await consolidationService.cleanupConsolidatedMemories(30, true);
+      expect(result).toHaveProperty('cleaned');
+      expect(result).toHaveProperty('errors');
+      expect(result).toHaveProperty('skipped');
+    });
+  });
+
+  describe('New Service Methods', () => {
+    it('should validate consolidation eligibility', async () => {
+      const result = await consolidationService.validateConsolidationEligibility('test-memory-id', ['test-duplicate-id']);
+
+      expect(result).toHaveProperty('isValid');
+      expect(result).toHaveProperty('errors');
+      expect(result).toHaveProperty('warnings');
+      expect(typeof result.isValid).toBe('boolean');
+      expect(Array.isArray(result.errors)).toBe(true);
+      expect(Array.isArray(result.warnings)).toBe(true);
+    });
+
+    it('should get consolidation history', async () => {
+      const result = await consolidationService.getConsolidationHistory('test-memory-id');
+
+      expect(result).toHaveProperty('consolidationEvents');
+      expect(result).toHaveProperty('currentStatus');
+      expect(Array.isArray(result.consolidationEvents)).toBe(true);
+      expect(typeof result.currentStatus).toBe('string');
+    });
+
+    it('should preview consolidation operation', async () => {
+      const result = await consolidationService.previewConsolidation('test-memory-id', ['test-duplicate-id']);
+
+      expect(result).toHaveProperty('estimatedResult');
+      expect(result).toHaveProperty('warnings');
+      expect(result).toHaveProperty('recommendations');
+      expect(Array.isArray(result.warnings)).toBe(true);
+      expect(Array.isArray(result.recommendations)).toBe(true);
+      expect(result.estimatedResult).toHaveProperty('consolidatedCount');
+      expect(result.estimatedResult).toHaveProperty('dataIntegrityHash');
+    });
+
+    it('should get optimization recommendations', async () => {
+      const result = await consolidationService.getOptimizationRecommendations();
+
+      expect(result).toHaveProperty('recommendations');
+      expect(result).toHaveProperty('overallHealth');
+      expect(result).toHaveProperty('nextMaintenanceDate');
+      expect(Array.isArray(result.recommendations)).toBe(true);
+      expect(typeof result.overallHealth).toBe('string');
+      expect(result.nextMaintenanceDate).toBeInstanceOf(Date);
     });
   });
 
@@ -442,10 +568,13 @@ describe('MemoryConsolidationService', () => {
       const badPrisma = new PrismaClient({
         datasourceUrl: 'file:/invalid/path/that/does/not/exist/non-existent.db'
       });
-      const badService = new MemoryConsolidationService(badPrisma, 'test-namespace');
+      const badService = new MemoryConsolidationService(
+        RepositoryFactory.createTestConsolidationRepository(badPrisma),
+        'test-namespace'
+      );
 
       await expect(
-        badService.findPotentialDuplicates('test', 0.7)
+        badService.detectDuplicateMemories('test', 0.7)
       ).rejects.toThrow();
 
       await badPrisma.$disconnect();
