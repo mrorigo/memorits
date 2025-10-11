@@ -114,9 +114,24 @@ export class PerformanceService {
       queryLatency: newLatency,
     };
 
-    // Update memory usage
-    const currentMemory = process.memoryUsage();
-    this.performanceMetrics.memoryUsage = currentMemory.heapUsed;
+    // Update memory usage (with environment compatibility)
+    let memoryUsage = 0;
+    try {
+      // Check if we're in a Node.js environment with process available
+      if (typeof process !== 'undefined' && process.memoryUsage) {
+        memoryUsage = process.memoryUsage().heapUsed;
+      } else if (typeof performance !== 'undefined') {
+        // Browser environment fallback - cast to any to avoid TypeScript issues
+        const perf = performance as any;
+        if (perf.memory && perf.memory.usedJSHeapSize) {
+          memoryUsage = perf.memory.usedJSHeapSize;
+        }
+      }
+    } catch (error) {
+      // Silently handle environments where memory usage is not available
+      memoryUsage = 0;
+    }
+    this.performanceMetrics.memoryUsage = memoryUsage;
 
     // Track errors
     if (!metrics.success && metrics.error) {

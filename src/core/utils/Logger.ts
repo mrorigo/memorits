@@ -4,10 +4,9 @@ import * as winston from 'winston';
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 // Sensitive fields that should be redacted in logs
-// Note: sessionId is intentionally NOT included as it's needed for tracking sessions in logs
 export const SENSITIVE_FIELDS = Object.freeze([
   'apiKey', 'password', 'token', 'secret', 'auth', 'credential',
-  'accessToken', 'refreshToken', 'key', 'authorization',
+  'accessToken', 'refreshToken', 'key', 'authorization', 'sessionId',
 ]);
 
 // Redaction utility functions
