@@ -271,3 +271,4 @@ conversation_exports/
 # Memory database backups
 memory_backups/
 *.db.backup
+code_vectors_chroma

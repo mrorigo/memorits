@@ -1313,8 +1313,11 @@ export class SearchService implements ISearchService {
       this.strategies.clear();
       this.strategyConfigs.clear();
 
-      // Clear error handler resources
-      this.errorHandler.resetCircuitBreaker('*');
+      // Clear error handler resources - reset all circuit breakers
+      const allStrategies = Object.values(SearchStrategy);
+      for (const strategy of allStrategies) {
+        this.errorHandler.resetCircuitBreaker(strategy);
+      }
 
       logInfo('SearchService cleanup completed successfully', {
         component: 'SearchService',
