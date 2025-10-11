@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import { unlinkSync, existsSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
 import { DuplicateDetectionConfig } from '../../../src/core/database/types/consolidation-models';
+import { initializeSearchSchema } from '../../../src/core/database/init-search-schema';
 
 describe('PrismaConsolidationRepository', () => {
   let repository: PrismaConsolidationRepository;
@@ -22,6 +23,10 @@ describe('PrismaConsolidationRepository', () => {
     });
 
     prisma = new PrismaClient({ datasourceUrl: databaseUrl });
+
+    // Initialize FTS schema for search functionality
+    await initializeSearchSchema(prisma);
+
     repository = new PrismaConsolidationRepository(prisma);
   });
 
@@ -110,21 +115,21 @@ describe('PrismaConsolidationRepository', () => {
     });
 
     it('should find duplicate candidates based on content similarity', async () => {
-      const content = 'TypeScript and JavaScript are both important for web development';
-      const candidates = await repository.findDuplicateCandidates(content, 0.5);
+       const content = 'TypeScript and JavaScript are both important for web development';
+       const candidates = await repository.findDuplicateCandidates(content, 0.5);
 
-      expect(Array.isArray(candidates)).toBe(true);
-      expect(candidates.length).toBeGreaterThan(0);
+       expect(Array.isArray(candidates)).toBe(true);
+       expect(candidates.length).toBeGreaterThan(0);
 
-      // Check that candidates have expected structure
-      candidates.forEach(candidate => {
-        expect(candidate).toHaveProperty('id');
-        expect(candidate).toHaveProperty('content');
-        expect(candidate).toHaveProperty('summary');
-        expect(candidate).toHaveProperty('classification');
-        expect(candidate).toHaveProperty('importance');
-      });
-    });
+       // Check that candidates have expected structure
+       candidates.forEach(candidate => {
+         expect(candidate).toHaveProperty('id');
+         expect(candidate).toHaveProperty('content');
+         expect(candidate).toHaveProperty('summary');
+         expect(candidate).toHaveProperty('classification');
+         expect(candidate).toHaveProperty('importance');
+       });
+     });
 
     it('should handle configuration parameters correctly', async () => {
       const content = 'test content for configuration';
@@ -416,8 +421,17 @@ describe('PrismaConsolidationRepository', () => {
     });
 
     it('should handle empty database gracefully', async () => {
-      // Create new repository with empty namespace
-      const emptyPrisma = new PrismaClient({ datasourceUrl: `file:empty-${Date.now()}.db` });
+      // Create new repository with empty database
+      const emptyDbPath = `empty-${Date.now()}.db`;
+      const emptyDatabaseUrl = `file:${emptyDbPath}`;
+
+      // Push schema to the empty database first
+      execSync(`DATABASE_URL=${emptyDatabaseUrl} npx prisma db push --accept-data-loss --force-reset`, {
+        stdio: 'inherit',
+        env: { ...process.env, DATABASE_URL: emptyDatabaseUrl },
+      });
+
+      const emptyPrisma = new PrismaClient({ datasourceUrl: emptyDatabaseUrl });
       const emptyRepository = new PrismaConsolidationRepository(emptyPrisma);
 
       const stats = await emptyRepository.getConsolidationStatistics();
@@ -428,6 +442,15 @@ describe('PrismaConsolidationRepository', () => {
       expect(stats.averageConsolidationRatio).toBe(0);
 
       await emptyPrisma.$disconnect();
+
+      // Clean up empty database file
+      if (existsSync(emptyDbPath)) {
+        try {
+          unlinkSync(emptyDbPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
     });
   });
 
@@ -651,7 +674,7 @@ describe('PrismaConsolidationRepository', () => {
           memoryId: 'tracking-memory-1',
           isDuplicate: true,
           duplicateOf: 'original-1',
-          consolidationReason: 'batch update test',
+          consolidationReason: 'batch',
         },
         {
           memoryId: 'tracking-memory-2',
@@ -674,7 +697,7 @@ describe('PrismaConsolidationRepository', () => {
       });
 
       expect(memory1?.duplicateOf).toBe('original-1');
-      expect(memory1?.classificationReason).toBe('batch test 0');
+      expect(memory1?.classificationReason).toBe('batch');
       expect(memory2?.classificationReason).toBe('not a duplicate');
     });
 

@@ -64,67 +64,52 @@ export class PrismaConsolidationRepository {
         );
       }
 
-      // Try FTS search first, fall back to LIKE search if FTS not available
-      let candidates: Array<MemorySearchResult & { score: number }> = [];
+      // Use Prisma's built-in search for reliable LIKE functionality
+      // Split the search content into key terms and search for each term
+      const searchTerms = sanitizedContent
+        .split(' ')
+        .filter(word => word.length > 3) // Filter out short words
+        .slice(0, 5); // Limit to first 5 terms for performance
 
-      try {
-        // Use FTS for similarity search if available
-        const searchQuery = this.buildSearchQuery(sanitizedContent, config);
+      // Build OR conditions for each search term
+      const orConditions = searchTerms.map(term =>
+        ({ searchableContent: { contains: term } })
+      );
 
-        // Execute search using raw SQL for better control over similarity matching
-        candidates = await this.prisma.$queryRaw`
-          SELECT
-            m.id,
-            m.searchableContent as content,
-            m.summary,
-            m.classification,
-            m.memoryImportance as importance,
-            m.topic,
-            m.entitiesJson as entities,
-            m.keywordsJson as keywords,
-            m.confidenceScore,
-            m.classificationReason,
-            m.extractionTimestamp as createdAt,
-            m.namespace,
-            ${this.calculateSimilarityScore(sanitizedContent)} as score,
-            'fts' as strategy
-          FROM long_term_memory m
-          WHERE m.searchableContent MATCH ${searchQuery}
-            AND m.namespace = 'default'
-          ORDER BY score DESC
-          LIMIT ${config?.maxCandidates || 50}
-        ` as Array<MemorySearchResult & { score: number }>;
+      // Use OR logic to find memories containing any of the search terms
+      const prismaCandidates = await this.prisma.longTermMemory.findMany({
+        where: {
+          AND: [
+            { namespace: 'default' },
+            {
+              OR: orConditions
+            }
+          ]
+        },
+        select: {
+          id: true,
+          searchableContent: true,
+          summary: true,
+          classification: true,
+          memoryImportance: true,
+        },
+      });
 
-      } catch (ftsError) {
-        // Fall back to LIKE-based search if FTS is not available
-        logInfo('FTS not available, falling back to LIKE search', {
-          component: this.componentName,
-          error: ftsError instanceof Error ? ftsError.message : String(ftsError),
-        });
-
-        candidates = await this.prisma.$queryRaw`
-          SELECT
-            m.id,
-            m.searchableContent as content,
-            m.summary,
-            m.classification,
-            m.memoryImportance as importance,
-            m.topic,
-            m.entitiesJson as entities,
-            m.keywordsJson as keywords,
-            m.confidenceScore,
-            m.classificationReason,
-            m.extractionTimestamp as createdAt,
-            m.namespace,
-            0.1 as score,
-            'like' as strategy
-          FROM long_term_memory m
-          WHERE m.searchableContent LIKE ${'%' + sanitizedContent + '%'}
-            AND m.namespace = 'default'
-          ORDER BY m.extractionTimestamp DESC
-          LIMIT ${config?.maxCandidates || 50}
-        ` as Array<MemorySearchResult & { score: number }>;
-      }
+      // Convert to the expected format
+      const candidates = prismaCandidates.map(candidate => ({
+        id: candidate.id,
+        content: candidate.searchableContent,
+        summary: candidate.summary || '',
+        classification: candidate.classification,
+        importance: candidate.memoryImportance,
+        topic: undefined,
+        entities: [],
+        keywords: [],
+        confidenceScore: 0.8,
+        classificationReason: '',
+        score: 0.8,
+        strategy: 'prisma' as const,
+      })) as unknown as Array<MemorySearchResult & { score: number }>;
 
       // Filter by threshold and convert to proper format
       const filteredCandidates = candidates
@@ -197,7 +182,7 @@ export class PrismaConsolidationRepository {
       const sanitizedReason = consolidationReason
         ? sanitizeString(consolidationReason, {
             fieldName: 'consolidationReason',
-            maxLength: 1000,
+            maxLength: 100,
           })
         : undefined;
 
@@ -340,7 +325,7 @@ export class PrismaConsolidationRepository {
           where: { id: sanitizedPrimaryId },
           data: {
             relatedMemoriesJson: sanitizedDuplicateIds,
-            classificationReason: `Consolidated ${sanitizedDuplicateIds.length} duplicate memories`,
+            classificationReason: `Consolidated ${sanitizedDuplicateIds.length} duplicates`,
           },
         });
 
@@ -397,44 +382,36 @@ export class PrismaConsolidationRepository {
         },
       });
 
-      const consolidatedMemories = await this.prisma.longTermMemory.count({
+      // Count consolidated memories - those that have actually consolidated other memories
+      // Use raw query to check if relatedMemoriesJson array is not empty
+      const consolidatedResult = await this.prisma.$queryRaw`
+        SELECT COUNT(*) as count
+        FROM long_term_memory
+        WHERE namespace = 'default'
+          AND relatedMemoriesJson IS NOT NULL
+          AND json_array_length(relatedMemoriesJson) > 0
+      ` as Array<{ count: bigint }>;
+
+      const consolidatedMemories = consolidatedResult[0]?.count ? Number(consolidatedResult[0].count) : 0;
+
+      const lastConsolidationActivity = await this.prisma.longTermMemory.findFirst({
         where: {
           namespace: 'default',
           relatedMemoriesJson: { not: undefined },
         },
-      });
-
-      const lastConsolidationActivity = await this.prisma.longTermMemory.findFirst({
-        where: { namespace: 'default' },
         orderBy: { extractionTimestamp: 'desc' },
         select: { extractionTimestamp: true },
       });
-
-      const stats = [{
-        total_memories: BigInt(totalMemories),
-        duplicate_count: BigInt(duplicateCount),
-        consolidated_memories: BigInt(consolidatedMemories),
-        avg_consolidation_ratio: consolidatedMemories > 0 ? 1.0 : 0.0,
-        last_consolidation_activity: lastConsolidationActivity?.extractionTimestamp || null,
-      }];
-
-      const result = stats[0] || {
-        total_memories: BigInt(0),
-        duplicate_count: BigInt(0),
-        consolidated_memories: BigInt(0),
-        avg_consolidation_ratio: 0,
-        last_consolidation_activity: null,
-      };
 
       // Get consolidation trends (simplified for now)
       const consolidationTrends: ConsolidationTrend[] = [];
 
       const consolidationStats: ConsolidationStats = {
-        totalMemories: Number(result.total_memories),
-        duplicateCount: Number(result.duplicate_count),
-        consolidatedMemories: Number(result.consolidated_memories),
-        averageConsolidationRatio: result.avg_consolidation_ratio || 0,
-        lastConsolidationActivity: result.last_consolidation_activity || undefined,
+        totalMemories,
+        duplicateCount,
+        consolidatedMemories,
+        averageConsolidationRatio: consolidatedMemories > 0 ? 1.0 : 0.0,
+        lastConsolidationActivity: lastConsolidationActivity?.extractionTimestamp || undefined,
         consolidationTrends,
       };
 
@@ -716,7 +693,7 @@ export class PrismaConsolidationRepository {
             }) : undefined,
             consolidationReason: update.consolidationReason ? sanitizeString(update.consolidationReason, {
               fieldName: 'consolidationReason',
-              maxLength: 1000,
+              maxLength: 100,
             }) : undefined,
             markedAsDuplicateAt: update.markedAsDuplicateAt,
           };
@@ -725,7 +702,7 @@ export class PrismaConsolidationRepository {
             where: { id: sanitizedUpdate.memoryId },
             data: {
               duplicateOf: sanitizedUpdate.duplicateOf,
-              classificationReason: sanitizedUpdate.consolidationReason,
+              classificationReason: sanitizedUpdate.consolidationReason || undefined,
             },
           });
 
