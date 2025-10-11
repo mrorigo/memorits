@@ -339,10 +339,10 @@ export class DuplicateManager {
     }
   }
 
-  /**
-   * Calculate content similarity using enhanced algorithm
-   */
-  private calculateContentSimilarity(content1: string, content2: string): number {
+ /**
+  * Calculate content similarity using enhanced algorithm (public for external use)
+  */
+ public calculateContentSimilarity(content1: string, content2: string): number {
     // Normalize content for comparison
     const normalizeContent = (content: string): string => {
       return content

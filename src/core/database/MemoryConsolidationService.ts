@@ -3,6 +3,7 @@ import { MemorySearchResult } from '../types/models';
 import { MemoryRelationship, MemoryImportanceLevel } from '../types/schemas';
 import { IConsolidationRepository } from './interfaces/IConsolidationRepository';
 import { ConsolidationService } from './interfaces/ConsolidationService';
+import { DuplicateManager } from './DuplicateManager';
 import {
   DuplicateCandidate,
   ConsolidationResult,
@@ -22,10 +23,33 @@ import { createHash } from 'node:crypto';
  * Extracted from DatabaseManager to follow Single Responsibility Principle
  */
 export class MemoryConsolidationService implements ConsolidationService {
+  private duplicateManager?: DuplicateManager;
+  private namespace: string;
+
+  constructor(repository: IConsolidationRepository);
+  constructor(repository: IConsolidationRepository, namespace: string);
+  constructor(repository: IConsolidationRepository, duplicateManager: DuplicateManager, namespace?: string);
   constructor(
     private repository: IConsolidationRepository,
-    private namespace: string = 'default',
-  ) {}
+    duplicateManagerOrNamespace?: DuplicateManager | string,
+    namespaceOrUndefined?: string,
+  ) {
+    // Handle backward compatibility for constructor overloads
+    if (duplicateManagerOrNamespace instanceof DuplicateManager) {
+      this.duplicateManager = duplicateManagerOrNamespace;
+      this.namespace = namespaceOrUndefined || 'default';
+    } else {
+      // Legacy constructor: (repository, namespace)
+      this.namespace = duplicateManagerOrNamespace || 'default';
+    }
+  }
+
+  /**
+   * Set DuplicateManager for similarity calculations
+   */
+  setDuplicateManager(duplicateManager: DuplicateManager): void {
+    this.duplicateManager = duplicateManager;
+  }
 
   /**
    * Detect potential duplicate memories for given content
@@ -48,18 +72,29 @@ export class MemoryConsolidationService implements ConsolidationService {
       const candidates = await this.repository.findDuplicateCandidates(content, threshold, config);
 
       // Convert to DuplicateCandidate format with business logic
-      const duplicateCandidates: DuplicateCandidate[] = candidates.map((candidate, index) => {
-        // Calculate similarity score based on content similarity (this would be provided by the repository)
-        const similarityScore = Math.min(0.9, 0.5 + (index * 0.1)); // Mock similarity score for now
+      const duplicateCandidates: DuplicateCandidate[] = [];
 
-        return {
+      for (const candidate of candidates) {
+        // Use DuplicateManager for sophisticated similarity calculation if available
+        let similarityScore = 0.5; // Default score
+
+        if (this.duplicateManager) {
+          // Use DuplicateManager's sophisticated similarity algorithm
+          similarityScore = this.duplicateManager.calculateContentSimilarity(content, candidate.content);
+        } else {
+          // Fallback to repository-based scoring (FTS/LIKE based)
+          // Extract score from candidate if available (would be provided by FTS)
+          similarityScore = (candidate as any).score || 0.5;
+        }
+
+        duplicateCandidates.push({
           id: candidate.id,
           content: candidate.content,
           similarityScore,
           confidence: this.calculateDuplicateConfidence(similarityScore, content, candidate.content),
           consolidationRecommendation: this.getConsolidationRecommendation(similarityScore),
-        };
-      });
+        });
+      }
 
       // Filter and sort by confidence score
       const filteredCandidates = duplicateCandidates
@@ -675,76 +710,164 @@ export class MemoryConsolidationService implements ConsolidationService {
   }
 
   /**
-   * Rollback a previously completed consolidation operation
-   */
-  async rollbackConsolidation(
-    primaryMemoryId: string,
-    rollbackToken: string,
-  ): Promise<{
-    success: boolean;
-    restoredMemories: number;
-    errors: string[];
-  }> {
-    const errors: string[] = [];
+    * Rollback a previously completed consolidation operation with comprehensive validation
+    */
+   async rollbackConsolidation(
+     primaryMemoryId: string,
+     rollbackToken: string,
+   ): Promise<{
+     success: boolean;
+     restoredMemories: number;
+     errors: string[];
+   }> {
+     const errors: string[] = [];
 
-    try {
-      logInfo(`Starting rollback of consolidation for memory ${primaryMemoryId}`, {
-        component: 'MemoryConsolidationService',
-        primaryMemoryId,
-        rollbackToken,
-        namespace: this.namespace,
-      });
+     try {
+       logInfo(`Starting comprehensive rollback of consolidation for memory ${primaryMemoryId}`, {
+         component: 'MemoryConsolidationService',
+         primaryMemoryId,
+         rollbackToken,
+         namespace: this.namespace,
+       });
 
-      // Get consolidated memories that need to be rolled back
-      const consolidatedMemoryIds = await this.repository.getConsolidatedMemories(primaryMemoryId);
+       // Validate rollback token exists and is valid
+       if (!rollbackToken || rollbackToken.trim().length === 0) {
+         errors.push('Valid rollback token is required');
+         return {
+           success: false,
+           restoredMemories: 0,
+           errors,
+         };
+       }
 
-      if (consolidatedMemoryIds.length === 0) {
-        errors.push('No consolidated memories found for rollback');
-        return {
-          success: false,
-          restoredMemories: 0,
-          errors,
-        };
-      }
+       // Get consolidated memories that need to be rolled back
+       const consolidatedMemoryIds = await this.repository.getConsolidatedMemories(primaryMemoryId);
 
-      // Backup current state before rollback
-      const currentData = await this.repository.backupMemoryData([primaryMemoryId, ...consolidatedMemoryIds]);
+       if (consolidatedMemoryIds.length === 0) {
+         errors.push('No consolidated memories found for rollback');
+         return {
+           success: false,
+           restoredMemories: 0,
+           errors,
+         };
+       }
 
-      // Use repository rollback method
-      await this.repository.rollbackConsolidation(primaryMemoryId, consolidatedMemoryIds, currentData);
+       // Validate all memories still exist before rollback
+       const validation = await this.validateConsolidationEligibility(primaryMemoryId, consolidatedMemoryIds);
+       if (!validation.isValid) {
+         errors.push(...validation.errors);
+         errors.push('Cannot rollback - some memories are no longer eligible');
+         return {
+           success: false,
+           restoredMemories: 0,
+           errors,
+         };
+       }
 
-      logInfo(`Successfully rolled back consolidation for memory ${primaryMemoryId}`, {
-        component: 'MemoryConsolidationService',
-        primaryMemoryId,
-        restoredMemories: consolidatedMemoryIds.length,
-        rollbackToken,
-        namespace: this.namespace,
-      });
+       // Backup current state before rollback for safety
+       const currentData = await this.repository.backupMemoryData([primaryMemoryId, ...consolidatedMemoryIds]);
 
-      return {
-        success: true,
-        restoredMemories: consolidatedMemoryIds.length,
-        errors: [],
-      };
-    } catch (error) {
-      const errorMsg = `Rollback failed for memory ${primaryMemoryId}: ${error instanceof Error ? error.message : String(error)}`;
-      errors.push(errorMsg);
+       // Create enhanced rollback data with validation
+       const rollbackData = new Map<string, any>();
+       for (const [memoryId, data] of currentData) {
+         rollbackData.set(memoryId, {
+           ...data,
+           rollbackTimestamp: new Date(),
+           rollbackToken,
+           rollbackReason: 'user_requested',
+           originalConsolidationState: {
+             consolidatedAt: data.extractionTimestamp,
+             consolidationReason: data.classificationReason,
+           }
+         });
+       }
 
-      logError(errorMsg, {
-        component: 'MemoryConsolidationService',
-        primaryMemoryId,
-        rollbackToken,
-        namespace: this.namespace,
-        error: error instanceof Error ? error.stack : String(error),
-      });
+       // Use repository rollback method with enhanced data
+       await this.repository.rollbackConsolidation(primaryMemoryId, consolidatedMemoryIds, rollbackData);
 
-      return {
-        success: false,
-        restoredMemories: 0,
-        errors,
-      };
-    }
-  }
+       // Verify rollback was successful by checking memory states
+       const verification = await this.verifyRollbackSuccess(primaryMemoryId, consolidatedMemoryIds);
+       if (!verification.success) {
+         errors.push(...verification.errors);
+         logError('Rollback verification failed', {
+           component: 'MemoryConsolidationService',
+           primaryMemoryId,
+           consolidatedMemoryIds,
+           verificationErrors: verification.errors,
+         });
+         return {
+           success: false,
+           restoredMemories: 0,
+           errors,
+         };
+       }
+
+       logInfo(`Successfully completed comprehensive rollback for memory ${primaryMemoryId}`, {
+         component: 'MemoryConsolidationService',
+         primaryMemoryId,
+         restoredMemories: consolidatedMemoryIds.length,
+         rollbackToken,
+         namespace: this.namespace,
+         verificationPassed: verification.success,
+       });
+
+       return {
+         success: true,
+         restoredMemories: consolidatedMemoryIds.length,
+         errors: [],
+       };
+     } catch (error) {
+       const errorMsg = `Comprehensive rollback failed for memory ${primaryMemoryId}: ${error instanceof Error ? error.message : String(error)}`;
+       errors.push(errorMsg);
+
+       logError(errorMsg, {
+         component: 'MemoryConsolidationService',
+         primaryMemoryId,
+         rollbackToken,
+         namespace: this.namespace,
+         error: error instanceof Error ? error.stack : String(error),
+       });
+
+       return {
+         success: false,
+         restoredMemories: 0,
+         errors,
+       };
+     }
+   }
+
+   /**
+    * Verify that rollback operation completed successfully
+    */
+   private async verifyRollbackSuccess(primaryMemoryId: string, consolidatedMemoryIds: string[]): Promise<{ success: boolean; errors: string[] }> {
+     const errors: string[] = [];
+
+     try {
+       // Check that primary memory no longer has consolidation metadata
+       const primaryMemory = await this.repository.getConsolidatedMemory(primaryMemoryId);
+       if (primaryMemory?.isConsolidated) {
+         errors.push(`Primary memory ${primaryMemoryId} still shows as consolidated after rollback`);
+       }
+
+       // Check that all consolidated memories are no longer marked as duplicates
+       for (const memoryId of consolidatedMemoryIds) {
+         const memory = await this.repository.getConsolidatedMemory(memoryId);
+         if (memory?.isDuplicate) {
+           errors.push(`Memory ${memoryId} still shows as duplicate after rollback`);
+         }
+       }
+
+       return {
+         success: errors.length === 0,
+         errors,
+       };
+     } catch (error) {
+       return {
+         success: false,
+         errors: [`Verification failed: ${error instanceof Error ? error.message : String(error)}`],
+       };
+     }
+   }
 
   /**
    * Get consolidation recommendations for optimizing memory storage

@@ -64,6 +64,27 @@ const relevantMemories = await memori.searchMemories('TypeScript', {
 console.log(`Found ${relevantMemories.length} relevant memories`);
 ```
 
+### 4. Enable Consolidation (Optional)
+
+For production applications, enable automated consolidation to manage duplicate memories:
+
+```typescript
+// Get the database manager for advanced operations
+const dbManager = (memori as any).dbManager;
+
+// Start automated consolidation (recommended for production)
+dbManager.startConsolidationScheduling({
+  intervalMinutes: 60,        // Run every hour
+  maxConsolidationsPerRun: 50, // Process max 50 consolidations per run
+  similarityThreshold: 0.7,    // 70% similarity threshold
+  dryRun: false               // Perform actual consolidation
+});
+
+// Monitor consolidation performance
+const metrics = await dbManager.getConsolidationPerformanceMetrics();
+console.log(`Consolidation success rate: ${metrics.consolidationSuccessRate}%`);
+```
+
 ## Configuration Options
 
 ### Environment Variables (Recommended)

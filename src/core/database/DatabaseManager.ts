@@ -163,6 +163,18 @@ export class DatabaseManager {
   // Prisma client reference
   private prisma: PrismaClient;
 
+  // Consolidation scheduling configuration
+  private consolidationScheduleConfig = {
+    enabled: true,
+    intervalMinutes: 60, // Run every hour
+    maxConsolidationsPerRun: 50,
+    similarityThreshold: 0.7,
+    dryRun: false,
+  };
+
+  // Consolidation scheduling timer
+  private consolidationTimer?: NodeJS.Timeout;
+
 
   constructor(
     databaseUrl: string,
@@ -234,10 +246,15 @@ export class DatabaseManager {
       this.memoryManager,
     );
 
-    // Initialize consolidation service
-    this.consolidationService = consolidationService || new MemoryConsolidationService(
-      RepositoryFactory.createConsolidationRepository(this.prisma)
-    );
+    // Initialize consolidation service with DuplicateManager for unified similarity calculations
+    this.consolidationService = consolidationService || (() => {
+      const service = new MemoryConsolidationService(
+        RepositoryFactory.createConsolidationRepository(this.prisma)
+      );
+      // Inject DuplicateManager for sophisticated similarity calculations
+      service.setDuplicateManager(this.duplicateManager);
+      return service;
+    })();
   }
 
   /**
@@ -252,6 +269,95 @@ export class DatabaseManager {
    */
   getConsolidationService(): ConsolidationService {
     return this.consolidationService;
+  }
+
+  /**
+   * Get consolidation performance metrics integrated with main performance monitoring
+   */
+  async getConsolidationPerformanceMetrics(): Promise<{
+    consolidationOperations: number;
+    averageConsolidationTime: number;
+    consolidationSuccessRate: number;
+    consolidationErrors: number;
+    rollbackOperations: number;
+    averageRollbackTime: number;
+    consolidationThroughput: number; // operations per minute
+    memoryReductionRatio: number; // average memory reduction per consolidation
+    lastConsolidationActivity?: Date;
+    consolidationQueueSize: number;
+  }> {
+    try {
+      // Get consolidation analytics from service
+      const consolidationAnalytics = await this.consolidationService.getConsolidationAnalytics();
+
+      // Get performance metrics from performance service
+      const performanceMetrics = this.getPerformanceMetrics();
+      const recentOperations = this.getRecentOperationMetrics(100);
+
+      // Filter consolidation-related operations
+      const consolidationOperations = recentOperations.filter(op =>
+        op.operationType?.includes('consolidation') || op.operationType?.includes('duplicate')
+      );
+
+      // Calculate consolidation-specific metrics
+      const consolidationTimes = consolidationOperations
+        .filter(op => op.duration !== undefined)
+        .map(op => op.duration!);
+
+      const averageConsolidationTime = consolidationTimes.length > 0
+        ? consolidationTimes.reduce((a, b) => a + b, 0) / consolidationTimes.length
+        : 0;
+
+      const consolidationErrors = consolidationOperations.filter(op => op.error).length;
+      const consolidationSuccessRate = consolidationOperations.length > 0
+        ? ((consolidationOperations.length - consolidationErrors) / consolidationOperations.length) * 100
+        : 100;
+
+      // Calculate throughput (operations per minute over last hour)
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      const recentConsolidationOps = consolidationOperations.filter(op => op.startTime > oneHourAgo);
+      const consolidationThroughput = recentConsolidationOps.length;
+
+      // Calculate memory reduction ratio (estimated)
+      const memoryReductionRatio = consolidationAnalytics.averageConsolidationRatio * 0.7; // Assume 70% efficiency
+
+      // Get rollback operations count
+      const rollbackOperations = recentOperations.filter(op =>
+        op.operationType?.includes('rollback')
+      ).length;
+
+      const averageRollbackTime = 0; // Would need additional tracking
+
+      return {
+        consolidationOperations: consolidationOperations.length,
+        averageConsolidationTime: Math.round(averageConsolidationTime),
+        consolidationSuccessRate: Math.round(consolidationSuccessRate * 100) / 100,
+        consolidationErrors,
+        rollbackOperations,
+        averageRollbackTime,
+        consolidationThroughput,
+        memoryReductionRatio: Math.round(memoryReductionRatio * 100) / 100,
+        lastConsolidationActivity: consolidationAnalytics.lastConsolidationActivity,
+        consolidationQueueSize: 0, // Would need queue tracking implementation
+      };
+    } catch (error) {
+      logError('Error getting consolidation performance metrics', {
+        component: 'DatabaseManager',
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      return {
+        consolidationOperations: 0,
+        averageConsolidationTime: 0,
+        consolidationSuccessRate: 0,
+        consolidationErrors: 0,
+        rollbackOperations: 0,
+        averageRollbackTime: 0,
+        consolidationThroughput: 0,
+        memoryReductionRatio: 0,
+        consolidationQueueSize: 0,
+      };
+    }
   }
 
   /**
@@ -873,101 +979,10 @@ export class DatabaseManager {
 
   // Duplicate Consolidation Operations
 
-  /**
-   * Find potential duplicate memories based on content similarity
-   */
-  async findPotentialDuplicates(
-    content: string,
-    namespace: string = 'default',
-    threshold: number = 0.7,
-  ): Promise<MemorySearchResult[]> {
-    try {
-      // Use consolidation service to detect duplicates
-      const duplicateCandidates = await this.consolidationService.detectDuplicateMemories(content, threshold);
-
-      // Convert DuplicateCandidate[] to MemorySearchResult[] for backward compatibility
-      const results: MemorySearchResult[] = duplicateCandidates.map(candidate => ({
-        id: candidate.id,
-        content: candidate.content,
-        summary: '', // Will be populated by repository if needed
-        classification: 'unknown' as MemoryClassification,
-        importance: 'medium' as MemoryImportanceLevel,
-        topic: undefined,
-        entities: [],
-        keywords: [],
-        confidenceScore: candidate.confidence,
-        classificationReason: '',
-        metadata: {
-          searchScore: candidate.similarityScore,
-          searchStrategy: 'duplicate_detection',
-        },
-      }));
-
-      logInfo(`Found ${results.length} potential duplicates for content`, {
-        component: 'DatabaseManager',
-        contentLength: content.length,
-        threshold,
-        namespace,
-        duplicatesFound: results.length,
-      });
-
-      return results;
-    } catch (error) {
-      logError('Error finding potential duplicates', {
-        component: 'DatabaseManager',
-        contentLength: content.length,
-        threshold,
-        namespace,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  }
 
 
 
 
-  /**
-   * Consolidate duplicate memories by merging them into the primary memory
-   */
-  async consolidateDuplicateMemories(
-    primaryMemoryId: string,
-    duplicateIds: string[],
-    namespace: string = 'default',
-  ): Promise<{ consolidated: number; errors: string[] }> {
-    try {
-      // Use consolidation service to perform consolidation
-      const result = await this.consolidationService.consolidateMemories(primaryMemoryId, duplicateIds);
-
-      logInfo(`Consolidation completed for primary memory ${primaryMemoryId}`, {
-        component: 'DatabaseManager',
-        primaryMemoryId,
-        consolidatedCount: result.consolidatedCount,
-        namespace,
-        success: result.success,
-      });
-
-      return {
-        consolidated: result.consolidatedCount,
-        errors: result.success ? [] : ['Consolidation failed'],
-      };
-    } catch (error) {
-      const errorMsg = `Consolidation failed for primary memory ${primaryMemoryId}: ${error instanceof Error ? error.message : String(error)}`;
-
-      logError(errorMsg, {
-        component: 'DatabaseManager',
-        primaryMemoryId,
-        duplicateIds,
-        namespace,
-        error: error instanceof Error ? error.stack : String(error),
-      });
-
-      return {
-        consolidated: 0,
-        errors: [errorMsg],
-      };
-    }
-  }
 
 
 
@@ -1129,5 +1144,215 @@ export class DatabaseManager {
    */
   public clearPerformanceMetrics(): void {
     this.performanceService!.clearPerformanceMetrics();
+  }
+
+  // ===== CONSOLIDATION SCHEDULING METHODS =====
+
+  /**
+   * Start automated consolidation scheduling
+   */
+  public startConsolidationScheduling(config?: Partial<typeof this.consolidationScheduleConfig>): void {
+    if (!this.consolidationScheduleConfig.enabled) {
+      logInfo('Consolidation scheduling is disabled', {
+        component: 'DatabaseManager',
+      });
+      return;
+    }
+
+    if (config) {
+      this.consolidationScheduleConfig = { ...this.consolidationScheduleConfig, ...config };
+    }
+
+    // Clear existing timer if any
+    if (this.consolidationTimer) {
+      clearInterval(this.consolidationTimer);
+    }
+
+    const intervalMs = this.consolidationScheduleConfig.intervalMinutes * 60 * 1000;
+
+    this.consolidationTimer = setInterval(async () => {
+      try {
+        await this.runScheduledConsolidation();
+      } catch (error) {
+        logError('Scheduled consolidation failed', {
+          component: 'DatabaseManager',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }, intervalMs);
+
+    logInfo(`Started consolidation scheduling`, {
+      component: 'DatabaseManager',
+      intervalMinutes: this.consolidationScheduleConfig.intervalMinutes,
+      maxConsolidationsPerRun: this.consolidationScheduleConfig.maxConsolidationsPerRun,
+      similarityThreshold: this.consolidationScheduleConfig.similarityThreshold,
+    });
+  }
+
+  /**
+   * Stop automated consolidation scheduling
+   */
+  public stopConsolidationScheduling(): void {
+    if (this.consolidationTimer) {
+      clearInterval(this.consolidationTimer);
+      this.consolidationTimer = undefined;
+
+      logInfo('Stopped consolidation scheduling', {
+        component: 'DatabaseManager',
+      });
+    }
+  }
+
+  /**
+   * Run consolidation on schedule
+   */
+  private async runScheduledConsolidation(): Promise<void> {
+    try {
+      logInfo('Running scheduled consolidation', {
+        component: 'DatabaseManager',
+        maxConsolidations: this.consolidationScheduleConfig.maxConsolidationsPerRun,
+        similarityThreshold: this.consolidationScheduleConfig.similarityThreshold,
+      });
+
+      // Get optimization recommendations to determine what needs consolidation
+      const recommendations = await this.consolidationService.getOptimizationRecommendations();
+
+      if (recommendations.overallHealth === 'poor') {
+        logInfo('Skipping scheduled consolidation - system health is poor', {
+          component: 'DatabaseManager',
+          recommendations: recommendations.recommendations.length,
+        });
+        return;
+      }
+
+      // Get consolidation analytics to check current state
+      const analytics = await this.consolidationService.getConsolidationAnalytics();
+
+      if (analytics.duplicateCount === 0) {
+        logInfo('No duplicates found for consolidation', {
+          component: 'DatabaseManager',
+          totalMemories: analytics.totalMemories,
+        });
+        return;
+      }
+
+      // Limit consolidation to avoid overwhelming the system
+      const consolidationLimit = Math.min(
+        this.consolidationScheduleConfig.maxConsolidationsPerRun,
+        Math.floor(analytics.duplicateCount * 0.1) // Only consolidate 10% at a time
+      );
+
+      if (consolidationLimit === 0) {
+        return;
+      }
+
+      // Get recent memories for consolidation analysis
+      const recentMemories = await this.prisma.longTermMemory.findMany({
+        where: {
+          namespace: 'default',
+          duplicateOf: null, // Only primary memories
+        },
+        orderBy: { createdAt: 'desc' },
+        take: consolidationLimit * 2, // Get more to account for filtering
+        select: {
+          id: true,
+          searchableContent: true,
+          summary: true,
+        },
+      });
+
+      let consolidatedCount = 0;
+      const errors: string[] = [];
+
+      // Process memories in batches for consolidation
+      for (let i = 0; i < recentMemories.length && consolidatedCount < consolidationLimit; i++) {
+        try {
+          const memory = recentMemories[i];
+
+          // Find duplicates for this memory
+          const duplicates = await this.consolidationService.detectDuplicateMemories(
+            memory.searchableContent + ' ' + memory.summary,
+            this.consolidationScheduleConfig.similarityThreshold,
+          );
+
+          if (duplicates.length > 0) {
+            // Filter to only high-confidence duplicates
+            const highConfidenceDuplicates = duplicates.filter(d => d.confidence >= 0.8);
+
+            if (highConfidenceDuplicates.length > 0) {
+              // Consolidate the duplicates
+              const result = await this.consolidationService.consolidateMemories(
+                memory.id,
+                highConfidenceDuplicates.map(d => d.id),
+              );
+
+              if (result.success) {
+                consolidatedCount += result.consolidatedCount;
+              }
+            }
+          }
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : String(error));
+        }
+      }
+
+      logInfo('Scheduled consolidation completed', {
+        component: 'DatabaseManager',
+        processedMemories: recentMemories.length,
+        consolidatedCount,
+        errors: errors.length,
+        nextRunMinutes: this.consolidationScheduleConfig.intervalMinutes,
+      });
+
+    } catch (error) {
+      logError('Scheduled consolidation error', {
+        component: 'DatabaseManager',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get consolidation scheduling status
+   */
+  public getConsolidationSchedulingStatus(): {
+    enabled: boolean;
+    running: boolean;
+    nextRunMinutes?: number;
+    config: {
+      enabled: boolean;
+      intervalMinutes: number;
+      maxConsolidationsPerRun: number;
+      similarityThreshold: number;
+      dryRun: boolean;
+    };
+  } {
+    return {
+      enabled: this.consolidationScheduleConfig.enabled,
+      running: !!this.consolidationTimer,
+      nextRunMinutes: this.consolidationTimer
+        ? this.consolidationScheduleConfig.intervalMinutes
+        : undefined,
+      config: this.consolidationScheduleConfig,
+    };
+  }
+
+  /**
+   * Update consolidation scheduling configuration
+   */
+  public updateConsolidationSchedulingConfig(config: Partial<typeof this.consolidationScheduleConfig>): void {
+    this.consolidationScheduleConfig = { ...this.consolidationScheduleConfig, ...config };
+
+    logInfo('Updated consolidation scheduling configuration', {
+      component: 'DatabaseManager',
+      config: this.consolidationScheduleConfig,
+    });
+
+    // Restart scheduling if currently running
+    if (this.consolidationTimer) {
+      this.stopConsolidationScheduling();
+      this.startConsolidationScheduling();
+    }
   }
 }

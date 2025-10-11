@@ -428,27 +428,66 @@ export class ConsciousAgent {
             });
           }
 
-          // Find potential duplicates for this memory
-          const potentialDuplicates = await this.dbManager.findPotentialDuplicates(
+          // Find potential duplicates for this memory using ConsolidationService
+          const consolidationService = this.dbManager.getConsolidationService();
+          const duplicateCandidates = await consolidationService.detectDuplicateMemories(
             memory.content + ' ' + memory.summary,
-            namespace,
             similarityThreshold,
           );
 
-          // Filter to only conscious memories and exclude self
-          const consciousDuplicates = potentialDuplicates.filter(potential =>
-            potential.id !== memory.id &&
-            potential.classification === 'conscious-info',
-          );
+          // Get actual memory objects for the duplicate candidates
+          const consciousDuplicates: ConsciousMemory[] = [];
+          for (const candidate of duplicateCandidates) {
+            if (candidate.id !== memory.id && candidate.confidence >= similarityThreshold) {
+              try {
+                // Fetch the actual memory from database
+                const memoryData = await this.dbManager.getPrismaClient().longTermMemory.findUnique({
+                  where: { id: candidate.id },
+                  select: {
+                    id: true,
+                    searchableContent: true,
+                    summary: true,
+                    classification: true,
+                    memoryImportance: true,
+                    topic: true,
+                    entitiesJson: true,
+                    keywordsJson: true,
+                    confidenceScore: true,
+                    classificationReason: true,
+                  },
+                });
+
+                if (memoryData && memoryData.classification === 'conscious-info') {
+                  consciousDuplicates.push({
+                    id: memoryData.id,
+                    content: memoryData.searchableContent || '',
+                    summary: memoryData.summary,
+                    classification: memoryData.classification,
+                    importance: memoryData.memoryImportance,
+                    topic: memoryData.topic || undefined,
+                    entities: (memoryData.entitiesJson as string[]) || [],
+                    keywords: (memoryData.keywordsJson as string[]) || [],
+                    confidenceScore: memoryData.confidenceScore,
+                    classificationReason: memoryData.classificationReason || '',
+                  });
+                }
+              } catch (error) {
+                logDebug(`Failed to fetch duplicate memory ${candidate.id}`, {
+                  component: 'ConsciousAgent',
+                  namespace,
+                  memoryId: candidate.id,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+          }
 
           if (consciousDuplicates.length > 0) {
-            // Calculate average similarity for these duplicates
+            // Calculate average similarity for these duplicates using DuplicateManager's algorithm
             const similarities = consciousDuplicates.map(duplicate => {
-              const contentWords = new Set((memory.content + ' ' + memory.summary).toLowerCase().split(/\s+/));
-              const duplicateWords = new Set((duplicate.content + ' ' + duplicate.summary).toLowerCase().split(/\s+/));
-              const intersection = new Set([...contentWords].filter(x => duplicateWords.has(x)));
-              const union = new Set([...contentWords, ...duplicateWords]);
-              return intersection.size / union.size;
+              // Use the similarity score from the candidate detection
+              const candidate = duplicateCandidates.find(c => c.id === duplicate.id);
+              return candidate ? candidate.similarityScore : 0.5;
             });
 
             const averageSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
@@ -523,6 +562,9 @@ export class ConsciousAgent {
         consolidationStats.averageSimilarity = totalSimilarity / duplicatesFound.length;
       }
 
+      // Get consolidation service for direct use
+      const consolidationService = this.dbManager.getConsolidationService();
+
       // Process each group of duplicates in batches
       const batches = this.createBatches(duplicatesFound, batchSize);
 
@@ -539,7 +581,7 @@ export class ConsciousAgent {
 
         const batchPromises = batch.map(async (group) => {
           try {
-            return await this.processConsolidationGroup(group, namespace, dryRun, consolidationStats);
+            return await this.processConsolidationGroup(group, namespace, dryRun, consolidationStats, consolidationService);
           } catch (error) {
             const errorMessage = `Error consolidating group with primary ${group.primary.id}: ${error instanceof Error ? error.message : String(error)}`;
             errors.push(errorMessage);
@@ -1148,25 +1190,26 @@ export class ConsciousAgent {
   }
 
   /**
-     * Process a single consolidation group
-     */
-  private async processConsolidationGroup(
-    group: {
-      primary: ConsciousMemory;
-      duplicates: ConsciousMemory[];
-      similarity: number;
-      safetyCheckPassed: boolean;
-    },
-    namespace: string,
-    dryRun: boolean,
-    _consolidationStats: {
-      groupsProcessed: number;
-      totalDuplicates: number;
-      averageSimilarity: number;
-      safetyChecksPassed: number;
-      safetyChecksFailed: number;
-    },
-  ): Promise<{ consolidated: number; errors: string[] }> {
+      * Process a single consolidation group
+      */
+   private async processConsolidationGroup(
+     group: {
+       primary: ConsciousMemory;
+       duplicates: ConsciousMemory[];
+       similarity: number;
+       safetyCheckPassed: boolean;
+     },
+     namespace: string,
+     dryRun: boolean,
+     _consolidationStats: {
+       groupsProcessed: number;
+       totalDuplicates: number;
+       averageSimilarity: number;
+       safetyChecksPassed: number;
+       safetyChecksFailed: number;
+     },
+     consolidationService: any,
+   ): Promise<{ consolidated: number; errors: string[] }> {
     const errors: string[] = [];
 
     // Initialize state tracking for consolidation process
@@ -1239,11 +1282,10 @@ export class ConsciousAgent {
 
         return { consolidated: 1, errors: [] };
       } else {
-        // Actually consolidate the duplicates
-        const consolidationResult = await this.dbManager.consolidateDuplicateMemories(
+        // Actually consolidate the duplicates using ConsolidationService directly
+        const consolidationResult = await consolidationService.consolidateMemories(
           group.primary.id,
           group.duplicates.map(d => d.id),
-          namespace,
         );
 
         if (consolidationResult.consolidated > 0) {

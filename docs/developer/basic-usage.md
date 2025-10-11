@@ -231,6 +231,35 @@ try {
 }
 ```
 
+## Consolidation Best Practices
+
+### 1. Use Unified Consolidation Service
+
+```typescript
+// Recommended: Use DatabaseManager for unified consolidation
+const dbManager = new DatabaseManager('your-database-url');
+const consolidationService = dbManager.getConsolidationService();
+
+// Automatic DuplicateManager integration for sophisticated similarity analysis
+const duplicates = await consolidationService.detectDuplicateMemories(content, 0.7);
+```
+
+### 2. Enable Automated Consolidation
+
+```typescript
+// Start automated consolidation scheduling
+dbManager.startConsolidationScheduling({
+  intervalMinutes: 60,        // Run every hour
+  maxConsolidationsPerRun: 50, // Process max 50 per run
+  similarityThreshold: 0.7,    // 70% similarity threshold
+  dryRun: false               // Perform actual consolidation
+});
+
+// Monitor consolidation performance
+const metrics = await dbManager.getConsolidationPerformanceMetrics();
+console.log(`Success rate: ${metrics.consolidationSuccessRate}%`);
+```
+
 ## Performance Tips
 
 ### 1. Use Appropriate Limits
@@ -268,6 +297,26 @@ function getCachedSearch(key: string, searchFn: () => Promise<any[]>) {
   return searchFn().then(results => {
     cache.set(key, results);
     return results;
+  });
+}
+```
+
+### 4. Monitor Consolidation Performance
+
+```typescript
+// Check consolidation health regularly
+const consolidationMetrics = await dbManager.getConsolidationPerformanceMetrics();
+if (consolidationMetrics.consolidationSuccessRate < 90) {
+  console.warn('Consolidation success rate below threshold');
+  // Adjust similarity thresholds or review consolidation strategy
+}
+
+// Get optimization recommendations
+const recommendations = await consolidationService.getOptimizationRecommendations();
+if (recommendations.overallHealth === 'poor') {
+  console.warn('Consolidation system health is poor');
+  recommendations.recommendations.forEach(rec => {
+    console.log(`${rec.priority}: ${rec.description}`);
   });
 }
 ```

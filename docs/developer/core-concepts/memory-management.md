@@ -264,21 +264,36 @@ const memories = await memori.searchMemories('algorithm implementation', {
 
 ### Duplicate Detection and Consolidation
 
-Memorits automatically detects and manages duplicate memories:
+Memorits provides a unified consolidation system for managing duplicate memories:
 
 ```typescript
-// Find potential duplicates
-const duplicates = await dbManager.findPotentialDuplicates(
+import { RepositoryFactory } from '../src/core/database/factories/RepositoryFactory';
+import { MemoryConsolidationService } from '../src/core/database/MemoryConsolidationService';
+
+// Initialize consolidation service
+const repository = RepositoryFactory.createConsolidationRepository();
+const consolidationService = new MemoryConsolidationService(repository);
+
+// Find potential duplicates with sophisticated similarity analysis
+const duplicates = await consolidationService.detectDuplicateMemories(
   newMemoryContent,
-  namespace,
   0.7 // 70% similarity threshold
 );
 
-// Mark as duplicate
-await dbManager.markAsDuplicate(duplicateId, originalId, 'automatic_consolidation');
+// Validate consolidation eligibility
+const validation = await consolidationService.validateConsolidationEligibility(
+  primaryId,
+  duplicates.map(d => d.id)
+);
 
-// Consolidate duplicates
-await dbManager.consolidateDuplicateMemories(primaryId, duplicateIds);
+if (validation.isValid) {
+  // Consolidate duplicates with transaction safety
+  const result = await consolidationService.consolidateMemories(primaryId, duplicates.map(d => d.id));
+
+  if (result.success) {
+    console.log(`Consolidated ${result.consolidatedCount} duplicate memories`);
+  }
+}
 ```
 
 ### Memory Statistics and Monitoring
@@ -291,9 +306,17 @@ const stats = await dbManager.getDatabaseStats(namespace);
 console.log(`Total memories: ${stats.totalMemories}`);
 console.log(`Conscious memories: ${stats.consciousMemories}`);
 
-// Get consolidation statistics
-const consolidationStats = await dbManager.getConsolidationStats(namespace);
-console.log(`Consolidation ratio: ${consolidationStats.consolidationRatio}%`);
+// Get consolidation statistics via ConsolidationService
+const consolidationService = dbManager.getConsolidationService();
+const consolidationStats = await consolidationService.getConsolidationAnalytics();
+console.log(`Consolidation ratio: ${consolidationStats.averageConsolidationRatio}%`);
+console.log(`Duplicate count: ${consolidationStats.duplicateCount}`);
+console.log(`Consolidated memories: ${consolidationStats.consolidatedMemories}`);
+
+// Get consolidation performance metrics
+const performanceMetrics = await dbManager.getConsolidationPerformanceMetrics();
+console.log(`Average consolidation time: ${performanceMetrics.averageConsolidationTime}ms`);
+console.log(`Success rate: ${performanceMetrics.consolidationSuccessRate}%`);
 ```
 
 ### Memory Cleanup and Maintenance
@@ -301,14 +324,22 @@ console.log(`Consolidation ratio: ${consolidationStats.consolidationRatio}%`);
 Manage memory lifecycle and cleanup:
 
 ```typescript
-// Clean up old consolidated memories
-const cleanupResult = await dbManager.cleanupConsolidatedMemories(
-  30, // Older than 30 days
-  namespace,
-  false // Not a dry run
-);
+// Get optimization recommendations first
+const consolidationService = dbManager.getConsolidationService();
+const recommendations = await consolidationService.getOptimizationRecommendations();
 
-console.log(`Cleaned ${cleanupResult.cleaned} memories`);
+if (recommendations.recommendations.some(r => r.type === 'cleanup')) {
+  // Clean up old consolidated memories with dry run first
+  const dryRunResult = await consolidationService.cleanupOldConsolidatedMemories(30, true);
+
+  if (dryRunResult.cleaned > 0) {
+    console.log(`Would clean ${dryRunResult.cleaned} memories`);
+
+    // Perform actual cleanup if dry run looks good
+    const cleanupResult = await consolidationService.cleanupOldConsolidatedMemories(30, false);
+    console.log(`Cleaned ${cleanupResult.cleaned} memories`);
+  }
+}
 ```
 
 ## Best Practices

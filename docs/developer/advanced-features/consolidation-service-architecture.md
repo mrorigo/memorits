@@ -6,7 +6,7 @@ The Consolidation Service Architecture provides a clean service-oriented design 
 
 ## Architecture Overview
 
-The consolidation system uses a layered architecture that cleanly separates concerns:
+The consolidation system uses a layered architecture with unified duplicate detection:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -14,13 +14,13 @@ The consolidation system uses a layered architecture that cleanly separates conc
 │                    (Business Contract)                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                    MemoryConsolidationService                   │
-│                    (Domain Logic Implementation)                 │
+│                    (Domain Logic + DuplicateManager)            │
 ├─────────────────────────────────────────────────────────────────┤
 │                    IConsolidationRepository Interface           │
 │                    (Data Access Contract)                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                    PrismaConsolidationRepository                 │
-│                    (Concrete Data Implementation)                │
+│                    (FTS-Enhanced Data Implementation)           │
 ├─────────────────────────────────────────────────────────────────┤
 │                    RepositoryFactory                             │
 │                    (Dependency Injection)                        │
@@ -51,17 +51,19 @@ The `ConsolidationService` interface defines the business-focused contract for m
 Concrete implementation of the `ConsolidationService` interface, containing pure domain logic for memory consolidation operations.
 
 **Responsibilities**:
-- **Duplicate Detection**: Intelligent similarity analysis with confidence scoring
+- **Duplicate Detection**: Intelligent similarity analysis using DuplicateManager's sophisticated algorithms
 - **Consolidation Logic**: Safe merging of duplicate memories with data integrity
 - **Validation**: Pre-consolidation eligibility checks and business rule enforcement
 - **Analytics**: Comprehensive consolidation statistics and trend analysis
 - **Optimization**: Recommendations for system health and performance
 
 **Key Features**:
-- Sophisticated confidence scoring algorithm considering content length, similarity, and context
-- Comprehensive logging with structured metadata
-- Legacy API support for gradual adoption
-- Transaction-safe operations with rollback capabilities
+- **Unified Similarity Analysis**: Integration with DuplicateManager for consistent duplicate detection
+- **Sophisticated Confidence Scoring**: Advanced algorithm considering content length, similarity, and context
+- **FTS-Enhanced Search**: Full-text search integration for high-performance similarity matching
+- **Comprehensive Logging**: Structured metadata logging for debugging and monitoring
+- **Legacy API Support**: Backward compatibility for gradual adoption
+- **Transaction-Safe Operations**: Rollback capabilities with comprehensive validation
 
 ### IConsolidationRepository Interface
 
@@ -83,11 +85,12 @@ Data access abstraction layer that defines the repository pattern interface for 
 Concrete implementation of `IConsolidationRepository` using Prisma ORM for database operations.
 
 **Features**:
-- Prisma-based data access with type safety
-- Advanced duplicate detection using full-text search
-- Transaction management for data consistency
-- Comprehensive error handling and logging
-- Performance optimization through query efficiency
+- **Prisma-based data access** with type safety
+- **FTS-enhanced duplicate detection** using BM25 similarity scoring
+- **Advanced full-text search** with phrase handling and query optimization
+- **Transaction management** for data consistency and rollback support
+- **Comprehensive error handling** and structured logging
+- **Performance optimization** through efficient query strategies and indexing
 
 ### RepositoryFactory
 
@@ -108,10 +111,17 @@ Centralized factory for creating repository instances, supporting dependency inj
 Uses facade pattern to provide a simplified interface to the consolidation subsystem, delegating operations to the service layer.
 
 **Responsibilities**:
-- Service orchestration and coordination
-- Unified API for multiple database services
-- Integration point for consolidation and other services
-- Resource management and lifecycle coordination
+- **Service orchestration** and coordination across all database services
+- **Unified API** providing facade pattern for multiple database services
+- **Consolidation integration** with automated scheduling and performance monitoring
+- **Resource management** and lifecycle coordination
+- **Performance monitoring** with consolidation-specific metrics and analytics
+
+**Key Features**:
+- **Consolidation scheduling** with configurable intervals and batch processing
+- **Performance integration** with real-time consolidation metrics
+- **Unified similarity analysis** through DuplicateManager integration
+- **Comprehensive health monitoring** for consolidation operations
 
 ## Usage Patterns
 
@@ -120,19 +130,24 @@ Uses facade pattern to provide a simplified interface to the consolidation subsy
 ```typescript
 import { RepositoryFactory } from './src/core/database/factories/RepositoryFactory';
 import { MemoryConsolidationService } from './src/core/database/MemoryConsolidationService';
+import { DatabaseManager } from './src/core/database/DatabaseManager';
 
-// Create service with dependency injection
+// Option 1: Direct service creation with dependency injection
 const repository = RepositoryFactory.createConsolidationRepository();
 const consolidationService = new MemoryConsolidationService(repository);
 
-// Use service
+// Option 2: Use DatabaseManager (recommended) - automatically injects DuplicateManager
+const dbManager = new DatabaseManager('your-database-url');
+const consolidationService = dbManager.getConsolidationService(); // Uses unified similarity analysis
+
+// Use service with sophisticated duplicate detection
 const duplicates = await consolidationService.detectDuplicateMemories(content, 0.7);
 ```
 
 ### Service Integration
 
 ```typescript
-// High-level consolidation workflow
+// High-level consolidation workflow with DuplicateManager integration
 async function consolidateSimilarMemories(content: string) {
   const duplicates = await consolidationService.detectDuplicateMemories(content, 0.8);
 
@@ -159,6 +174,27 @@ async function consolidateSimilarMemories(content: string) {
       return result;
     }
   }
+}
+
+// Automated consolidation scheduling
+async function setupAutomatedConsolidation() {
+  // Start automated consolidation (recommended approach)
+  dbManager.startConsolidationScheduling({
+    intervalMinutes: 60,        // Run every hour
+    maxConsolidationsPerRun: 50, // Process max 50 consolidations per run
+    similarityThreshold: 0.7,    // 70% similarity threshold
+    dryRun: false               // Perform actual consolidation
+  });
+
+  // Monitor consolidation performance
+  const metrics = await dbManager.getConsolidationPerformanceMetrics();
+  console.log(`Consolidation success rate: ${metrics.consolidationSuccessRate}%`);
+  console.log(`Average consolidation time: ${metrics.averageConsolidationTime}ms`);
+
+  // Get scheduling status
+  const scheduleStatus = dbManager.getConsolidationSchedulingStatus();
+  console.log(`Scheduling enabled: ${scheduleStatus.enabled}`);
+  console.log(`Next run in: ${scheduleStatus.nextRunMinutes} minutes`);
 }
 ```
 

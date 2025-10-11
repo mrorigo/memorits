@@ -981,8 +981,8 @@ export class PrismaConsolidationRepository {
   }
 
   private calculateSimilarityScore(content: string): string {
-    // This would use more sophisticated similarity calculation
-    // For now, using a simple BM25-like scoring
+    // Use BM25 scoring for FTS similarity matching
+    // This provides proper relevance scoring based on term frequency and document structure
     return `bm25(memory_fts, 1.0, 1.0)`;
   }
 }
