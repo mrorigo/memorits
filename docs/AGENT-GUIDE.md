@@ -1,671 +1,448 @@
-# AI Agent Guide: Using memorits Library
+# Memorits AI Agent Integration Guide
 
-## Overview
-memorits is a TypeScript library enabling AI agents with persistent memory, LLM integration, and advanced planning capabilities.
+## Core Architecture
+- **Memori Class**: Main memory management system
+- **Manager Pattern**: Specialized managers for different operations
+- **Search Strategies**: Multiple search algorithms with automatic selection
+- **Configuration**: Environment-based configuration with runtime updates
 
-## Quick Start
+## Essential Setup
 
-### Installation
+### Installation & Initialization
 ```bash
 npm install memorits
 ```
 
-### Basic Memory-Enabled Agent
 ```typescript
-import { Memori, MemoryAgent, OpenAIProvider } from 'memorits';
+import { Memori, ConfigManager } from 'memorits';
 
-const memori = new Memori();
-const provider = new OpenAIProvider({
-  apiKey: process.env.OPENAI_API_KEY
+// Load configuration from environment
+const config = ConfigManager.loadConfig();
+const memori = new Memori(config);
+await memori.enable();
+```
+
+### Environment Variables
+```bash
+OPENAI_API_KEY=your-key
+DATABASE_URL=sqlite:./memories.db
+MEMORI_NAMESPACE=default
+MEMORI_AUTO_INGEST=true
+MEMORI_CONSCIOUS_INGEST=false
+```
+
+## Memory Operations
+
+### Store Conversations
+```typescript
+// Record conversation for memory processing
+const chatId = await memori.recordConversation(
+  'User question or statement',
+  'AI response or action taken',
+  {
+    model: 'gpt-4o-mini',
+    sessionId: 'current-session-id',
+    metadata: { topic: 'category', importance: 'high' }
+  }
+);
+```
+
+### Search Memories
+```typescript
+// Basic search
+const memories = await memori.searchMemories('query text', {
+  limit: 5,
+  minImportance: 'medium',
+  categories: ['essential', 'contextual']
 });
 
-memori.registerProvider(provider);
-const agent = new MemoryAgent({ name: 'assistant', memori });
-
-// Store memory
-await agent.addMemory({
-  content: "Important fact to remember",
-  tags: ['category', 'context']
-});
-
-// Recall memories
-const memories = await agent.searchMemories({
-  query: "What do I know about...",
-  limit: 3
+// Advanced filtering
+const filtered = await memori.searchMemories('specific topic', {
+  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
+  includeMetadata: true
 });
 ```
 
-## Core Components
-
-### 1. Memori Instance
-- Central orchestrator
-- Manages providers and agents
-- Handles memory persistence
-
-### 2. Agents
-Three main types:
-- **MemoryAgent**: Basic memory operations with search and retrieval
-- **ConsciousAgent**: Advanced planning + memory with relationship processing
-- **ProcessingStateManager**: Enterprise-grade memory processing state management
-
-### 3. Providers
-LLM integration (e.g., OpenAI)
-
-## Key Operations
-
-### Memory Management
+### Strategy-Specific Search
 ```typescript
-// Add memory
-await agent.addMemory({
-  content: "Information to store",
-  tags: ['context']
-});
+// Use specific search strategies
+import { SearchStrategy } from 'memorits/core/domain/search/types';
 
-// Search
-const results = await agent.searchMemories({
-  query: "Search terms",
-  limit: 5
-});
+const fts5Results = await memori.searchMemoriesWithStrategy(
+  'exact phrase',
+  SearchStrategy.FTS5,
+  { limit: 10 }
+);
 
-// Summarize
-const summary = await agent.summarizeMemories({
-  filter: { tags: ['meeting'] }
+const recentResults = await memori.searchRecentMemories(5, true);
+```
+
+## Memory Modes
+
+### Auto-Ingestion (Default)
+```typescript
+// Automatic memory processing during conversations
+const config = ConfigManager.loadConfig();
+Object.assign(config, {
+  autoIngest: true,
+  consciousIngest: false
+});
+const memori = new Memori(config);
+```
+
+### Conscious Processing
+```typescript
+// Background processing with reflection
+const config = ConfigManager.loadConfig();
+Object.assign(config, {
+  autoIngest: false,
+  consciousIngest: true
+});
+const memori = new Memori(config);
+
+// Manual processing trigger
+await memori.checkForConsciousContextUpdates();
+```
+
+## Search Strategies
+
+### Automatic Strategy Selection
+```typescript
+// Memorits chooses optimal strategy based on query
+const results = await memori.searchMemories('urgent meeting notes');
+
+// Uses: FTS5 → Category Filter → Temporal Filter → Recent
+```
+
+### Strategy-Specific Usage
+```typescript
+import { SearchStrategy } from 'memorits/core/domain/search/types';
+
+// Force specific strategy
+const fts5Results = await memori.searchMemoriesWithStrategy(
+  'exact phrase',
+  SearchStrategy.FTS5
+);
+
+const recentResults = await memori.searchRecentMemories(5);
+
+// Get available strategies
+const strategies = await memori.getAvailableSearchStrategies();
+```
+
+### Advanced Filtering
+```typescript
+// Multi-dimensional search
+const results = await memori.searchMemories('project requirements', {
+  minImportance: 'high',
+  categories: ['essential', 'contextual'],
+  filterExpression: 'importance_score >= 0.7',
+  includeMetadata: true,
+  limit: 10
 });
 ```
 
-### Advanced Agent Features
+## Memory Consolidation
 
-#### **Memory Processing State Management**
+### Automatic Consolidation
 ```typescript
-import { ProcessingStateManager, MemoryProcessingState } from 'memorits';
+// Enable automated consolidation via environment
+process.env.MEMORI_ENABLE_CONSOLIDATION = 'true';
+process.env.MEMORI_CONSOLIDATION_INTERVAL_MINUTES = '60';
 
-class SmartAgent extends ConsciousAgent {
-  private stateManager: ProcessingStateManager;
+// Or configure programmatically
+const config = ConfigManager.loadConfig();
+Object.assign(config, {
+  enableConsolidation: true,
+  consolidationIntervalMinutes: 60
+});
+```
 
-  constructor() {
-    super();
-    this.stateManager = new ProcessingStateManager({
-      enableHistoryTracking: true,
-      maxHistoryEntries: 100,
-      enableMetrics: true,
-      retryAttempts: 3
-    });
-  }
+### Manual Consolidation
+```typescript
+// Consolidate specific duplicate memories
+const result = await memori.consolidateDuplicateMemories(
+  'primary-memory-id',
+  ['duplicate-id-1', 'duplicate-id-2']
+);
 
-  async processTaskWithStateTracking(goal: string) {
-    const memoryId = await this.generateMemoryId();
+console.log(`Consolidated: ${result.consolidated}`);
+```
 
-    // Initialize memory state
-    await this.stateManager.initializeMemoryState(
-      memoryId,
-      MemoryProcessingState.PENDING
-    );
+## Index Management
 
-    try {
-      // Transition to processing
-      await this.stateManager.transitionToState(
-        memoryId,
-        MemoryProcessingState.PROCESSING,
-        { reason: 'Starting task processing', agentId: this.name }
-      );
+### Health Monitoring
+```typescript
+// Get index health report
+const health = await memori.getIndexHealthReport();
+console.log(`Health: ${health.health}`);
+console.log(`Issues: ${health.issues.length}`);
+```
 
-      // Generate plan with relationship context
-      const plan = await this.plan(goal);
+### Performance Optimization
+```typescript
+// Optimize search index
+const optimization = await memori.optimizeIndex('merge');
+console.log(`Space saved: ${optimization.spaceSaved} bytes`);
 
-      // Execute with memory context and state tracking
-      for (const step of plan.steps) {
-        await this.stateManager.transitionToState(
-          memoryId,
-          MemoryProcessingState.CONSCIOUS_PROCESSING,
-          { reason: `Executing step: ${step.description}` }
-        );
+// Create backup
+const backup = await memori.createIndexBackup();
+console.log(`Backup size: ${backup.indexSize}`);
 
-        const context = await this.searchMemories({
-          query: step.description,
-          limit: 2,
-          includeRelatedMemories: true,
-          maxRelationshipDepth: 2
-        });
+// Restore from backup
+const restored = await memori.restoreIndexFromBackup(backup.id);
+```
 
-        await this.executeStep(step, context);
-      }
+## OpenAI Integration
 
-      // Mark as completed
-      await this.stateManager.transitionToState(
-        memoryId,
-        MemoryProcessingState.CONSCIOUS_PROCESSED,
-        { reason: 'Task completed successfully' }
-      );
+### Drop-in Replacement
+```typescript
+import { MemoriOpenAI } from 'memorits/integrations/openai-dropin/client';
 
-    } catch (error) {
-      // Handle failure with retry logic
-      await this.stateManager.transitionToState(
-        memoryId,
-        MemoryProcessingState.FAILED,
-        {
-          reason: 'Task failed',
-          errorMessage: error.message
-        }
-      );
+// Replace OpenAI with zero code changes
+const client = new MemoriOpenAI('your-api-key', {
+  enableChatMemory: true,
+  autoInitialize: true
+});
 
-      // Attempt retry
-      const retrySuccess = await this.stateManager.retryTransition(
-        memoryId,
-        MemoryProcessingState.CONSCIOUS_PROCESSING,
-        { maxRetries: 3 }
-      );
+// Conversations automatically recorded
+const response = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Remember this...' }]
+});
 
-      if (!retrySuccess) {
-        throw new Error(`Task failed permanently: ${error.message}`);
-      }
-    }
-  }
+// Access memory directly
+const memories = await client.memory.searchMemories('important');
+```
 
-  // Get state statistics for monitoring
-  getProcessingStats() {
-    const stats = this.stateManager.getStateStatistics();
-    const history = this.stateManager.getMetrics();
+### Factory Pattern
+```typescript
+import { MemoriOpenAIFromEnv } from 'memorits/integrations/openai-dropin/factory';
 
-    return {
-      stateDistribution: stats,
-      transitionCounts: history,
-      pendingMemories: this.stateManager.getMemoriesByState(MemoryProcessingState.PENDING),
-      failedMemories: this.stateManager.getMemoriesByState(MemoryProcessingState.FAILED)
-    };
-  }
+// Initialize from environment
+const client = MemoriOpenAIFromEnv();
+
+// Or from database URL
+const client = MemoriOpenAIFromDatabase('postgresql://localhost/memories');
+
+// Or from configuration object
+const client = MemoriOpenAIFromConfig({
+  apiKey: 'your-key',
+  enableChatMemory: true,
+  autoIngest: true
+});
+```
+
+## Error Handling
+
+### Circuit Breaker Protection
+```typescript
+// Automatic error recovery
+try {
+  const results = await memori.searchMemories('query');
+} catch (error) {
+  // Graceful fallback - errors don't break functionality
+  console.warn('Search failed, continuing without memory context');
+}
+
+// Memory operations are non-blocking
+// Failed memory operations don't affect AI responses
+```
+
+### Graceful Degradation
+```typescript
+// Always handle errors gracefully
+const context = await memori.searchMemories('context').catch(() => []);
+// Continue with empty context if search fails
+
+const response = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [
+    ...(context.length > 0 ? [{ role: 'system', content: context[0].content }] : []),
+    { role: 'user', content: userMessage }
+  ]
+});
+```
+
+## Configuration
+
+### Environment Variables
+```bash
+# Core configuration
+OPENAI_API_KEY=your-key
+DATABASE_URL=sqlite:./memories.db
+MEMORI_NAMESPACE=default
+
+# Memory modes
+MEMORI_AUTO_INGEST=true
+MEMORI_CONSCIOUS_INGEST=false
+MEMORI_ENABLE_RELATIONSHIP_EXTRACTION=true
+
+# Performance
+MEMORI_MODEL=gpt-4o-mini
+MEMORI_ENABLE_CONSOLIDATION=true
+MEMORI_CONSOLIDATION_INTERVAL_MINUTES=60
+```
+
+### Runtime Configuration
+```typescript
+// Override configuration at runtime
+const config = ConfigManager.loadConfig();
+Object.assign(config, {
+  namespace: 'production-app',
+  autoIngest: true,
+  enableRelationshipExtraction: true
+});
+
+const memori = new Memori(config);
+```
+
+## Testing
+
+### Test Setup
+```typescript
+// Use in-memory database for tests
+const config = ConfigManager.loadConfig();
+Object.assign(config, {
+  databaseUrl: ':memory:',  // SQLite in-memory database
+  autoIngest: false  // Disable for predictable tests
+});
+
+const memori = new Memori(config);
+await memori.enable();
+```
+
+### Test Patterns
+```typescript
+// Test memory storage and retrieval
+const chatId = await memori.recordConversation(
+  'Test input',
+  'Test output',
+  { model: 'test-model', sessionId: 'test-session' }
+);
+
+// Wait for processing (if auto-ingest enabled)
+await new Promise(resolve => setTimeout(resolve, 100));
+
+const memories = await memori.searchMemories('test');
+assert(memories.length > 0);
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Empty Search Results**
+```typescript
+// Wait for processing
+await new Promise(resolve => setTimeout(resolve, 1000));
+
+// Check if auto-ingestion is enabled
+console.log('Auto mode:', memori.isAutoModeEnabled());
+console.log('Conscious mode:', memori.isConsciousModeEnabled());
+
+// Try manual processing if conscious mode
+if (memori.isConsciousModeEnabled()) {
+  await memori.checkForConsciousContextUpdates();
 }
 ```
 
-#### **Advanced Memory Relationship Processing**
+**Memory Not Recording**
 ```typescript
-class RelationshipAwareAgent extends ConsciousAgent {
-  async processConversationWithRelationships(userInput: string, context: string) {
-    // Extract entities and relationships using LLM
-    const relationships = await this.extractRelationships(userInput, context);
+// Verify system is enabled
+console.log('Enabled:', memori.isEnabled());
 
-    // Search with relationship context
-    const relatedMemories = await this.searchMemories(userInput, {
-      includeRelatedMemories: true,
-      maxRelationshipDepth: 3,
-      minRelationshipConfidence: 0.7,
-      filterExpression: 'importance_score >= 0.6'
-    });
+// Check configuration
+const config = ConfigManager.loadConfig();
+console.log('Auto ingest:', config.autoIngest);
 
-    // Process relationships for enhanced context
-    const enhancedContext = await this.buildRelationshipContext(relatedMemories);
-
-    // Generate response with relationship awareness
-    const response = await this.generateResponse(userInput, enhancedContext);
-
-    // Store with relationship metadata
-    await this.addMemory({
-      content: `User: ${userInput}\nAssistant: ${response}`,
-      tags: ['conversation', 'relationship-processed'],
-      metadata: {
-        relationships: relationships,
-        relatedMemoryCount: relatedMemories.length,
-        contextEnhancement: enhancedContext.enhancement
-      }
-    });
-
-    return response;
-  }
-
-  private async extractRelationships(content: string, context: string) {
-    // Use OpenAI to extract relationships
-    const extractionPrompt = `
-      Analyze the following conversation and extract relationships:
-
-      Content: ${content}
-      Context: ${context}
-
-      Identify:
-      1. Entity relationships (people, places, concepts)
-      2. Temporal relationships (before, after, during)
-      3. Semantic relationships (similar, related, opposite)
-      4. Continuation patterns
-
-      Return as JSON structure.
-    `;
-
-    const response = await this.provider.complete({
-      prompt: extractionPrompt,
-      temperature: 0.3
-    });
-
-    return JSON.parse(response);
-  }
-
-  private async buildRelationshipContext(memories: any[]) {
-    // Build enhanced context using relationship graph
-    const relationshipGraph = this.buildRelationshipGraph(memories);
-    const contextPaths = this.findOptimalContextPaths(relationshipGraph);
-
-    return {
-      primaryContext: contextPaths.primary,
-      relatedContext: contextPaths.related,
-      enhancement: contextPaths.improvement,
-      confidence: this.calculateContextConfidence(contextPaths)
-    };
-  }
-}
+// Enable if needed
+await memori.enable();
 ```
 
-#### **Duplicate Consolidation Agent**
+**Performance Issues**
 ```typescript
-class ConsolidationAgent extends MemoryAgent {
-  async consolidateDuplicateMemories() {
-    // Find potential duplicates using multiple strategies
-    const candidates = await this.findConsolidationCandidates({
-      similarityThreshold: 0.8,
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      minContentLength: 100
-    });
+// Monitor search performance
+const start = Date.now();
+const results = await memori.searchMemories('query', { limit: 5 });
+const duration = Date.now() - start;
 
-    for (const candidate of candidates) {
-      try {
-        // Validate consolidation safety
-        const safetyCheck = await this.validateConsolidationSafety(candidate);
+console.log(`Search took ${duration}ms for ${results.length} results`);
 
-        if (safetyCheck.isSafe) {
-          // Perform consolidation with rollback support
-          const result = await this.performSafeConsolidation(candidate, {
-            enableBackup: true,
-            preserveMetadata: true,
-            qualityScoring: true
-          });
-
-          console.log(`Consolidated ${result.consolidatedCount} memories`);
-          console.log(`Quality score: ${result.qualityScore}`);
-        } else {
-          console.warn(`Skipping unsafe consolidation: ${safetyCheck.reason}`);
-        }
-      } catch (error) {
-        console.error(`Consolidation failed for candidate ${candidate.id}:`, error);
-
-        // Log failure for analysis
-        await this.logConsolidationFailure(candidate, error);
-      }
-    }
-  }
-
-  private async findConsolidationCandidates(options: {
-    similarityThreshold: number;
-    maxAge: number;
-    minContentLength: number;
-  }) {
-    // Search for similar memories
-    const memories = await this.searchMemories('', {
-      limit: 1000,
-      filterExpression: `created_at > '${new Date(Date.now() - options.maxAge).toISOString()}'`
-    });
-
-    // Find duplicates using semantic similarity
-    const duplicates = await this.findDuplicateMemories(memories, {
-      similarityThreshold: options.similarityThreshold,
-      includeSemanticSimilarity: true
-    });
-
-    return duplicates.filter(d => d.similarity > options.similarityThreshold);
-  }
-}
+// Use appropriate limits and filters
+const optimized = await memori.searchMemories('query', {
+  limit: 3,
+  minImportance: 'medium'
+});
 ```
 
 ## Best Practices
 
-1. **Environment Setup**
+### Error Handling
 ```typescript
-// config.ts
-export const config = {
-  openaiKey: process.env.OPENAI_API_KEY,
-  dbUrl: process.env.DATABASE_URL || 'file:./memori.db'
-};
-```
-
-2. **Error Handling**
-```typescript
+// Always handle errors gracefully
 try {
-  await agent.addMemory({
-    content: "Critical info",
-    tags: ['important']
-  });
+  const memories = await memori.searchMemories('context');
+  // Use memories if available
+  const context = memories.slice(0, 3);
 } catch (error) {
-  if (error.code === 'DB_ERROR') {
-    // Handle storage issues
-  }
-  // Re-throw unexpected errors
-  throw error;
+  // Continue without memory context
+  console.warn('Memory search failed:', error);
+  const context = [];
 }
 ```
 
-3. **Testing**
+### Resource Management
 ```typescript
-// agent.test.ts
-describe('Agent Memory', () => {
-  let agent: MemoryAgent;
-  
-  beforeEach(async () => {
-    const memori = new Memori({
-      database: ':memory:'  // Test database
-    });
-    agent = new MemoryAgent({ 
-      name: 'test-agent',
-      memori 
-    });
-  });
-
-  test('stores and recalls memories', async () => {
-    await agent.addMemory({
-      content: "Test data",
-      tags: ['test']
-    });
-
-    const results = await agent.searchMemories({
-      query: "test",
-      limit: 1
-    });
-
-    expect(results[0].content).toBe("Test data");
-  });
+// Clean up on shutdown
+process.on('SIGINT', async () => {
+  await memori.close();
+  process.exit(0);
 });
 ```
 
-## Tips for AI Agent Implementation
-
-1. **Memory Context**
-- Tag memories appropriately with relationship metadata
-- Use semantic search with relationship context for enhanced relevance
-- Maintain memory coherence with state tracking
-- Leverage duplicate consolidation for cleaner memory bases
-
-2. **Planning**
-- Break complex tasks into steps with state management
-- Reference relevant memories using relationship graphs
-- Store execution results with processing state tracking
-- Use performance monitoring for optimization insights
-
-3. **Performance & Monitoring**
-- Batch memory operations with size limits
-- Clean up old memories using automated maintenance
-- Use memory summaries with quality scoring
-- Monitor performance with real-time dashboards
-- Implement comprehensive error handling with circuit breakers
-
-4. **Advanced Features**
-- Enable relationship processing for context enhancement
-- Use duplicate consolidation for memory optimization
-- Implement state management for complex workflows
-- Leverage performance analytics for continuous improvement
-
-## Common Patterns
-
-### Contextual Agent
+### Performance Optimization
 ```typescript
-class ContextualAgent extends MemoryAgent {
-  async respond(input: string) {
-    // Get relevant context
-    const context = await this.searchMemories({
-      query: input,
-      limit: 3
-    });
+// Use filters to reduce search space
+const results = await memori.searchMemories('topic', {
+  minImportance: 'medium',
+  categories: ['essential'],
+  limit: 5
+});
 
-    // Use LLM with context
-    const response = await this.provider.chat({
-      messages: [
-        { role: 'system', content: this.buildContext(context) },
-        { role: 'user', content: input }
-      ]
-    });
+// Cache frequently used searches
+const cache = new Map();
+const cacheKey = 'frequent-search';
 
-    // Store interaction
-    await this.addMemory({
-      content: `User: ${input}\nAssistant: ${response}`,
-      tags: ['conversation']
-    });
-
-    return response;
-  }
+if (cache.has(cacheKey)) {
+  results = cache.get(cacheKey);
+} else {
+  results = await memori.searchMemories('query');
+  cache.set(cacheKey, results);
 }
 ```
 
-### Learning Agent
-```typescript
-class LearningAgent extends ConsciousAgent {
-  async learn(information: string) {
-    // Extract key points
-    const points = await this.provider.complete({
-      prompt: `Extract key facts from: ${information}`
-    });
+## Quick Reference
 
-    // Store as separate memories
-    for (const point of points) {
-      await this.addMemory({
-        content: point,
-        tags: ['learned', 'fact']
-      });
-    }
+### Core Operations
+- `memori.recordConversation(userInput, aiOutput, options?)` - Store conversation
+- `memori.searchMemories(query, options?)` - Search memories
+- `memori.searchRecentMemories(limit, includeMetadata?)` - Get recent memories
+- `memori.getAvailableSearchStrategies()` - List available strategies
 
-    // Update knowledge summary
-    await this.summarizeAndStore();
-  }
-}
-```
+### Memory Modes
+- **Auto-Ingestion**: `autoIngest: true` - Process conversations immediately
+- **Conscious Processing**: `consciousIngest: true` - Background processing
 
-## Reference
+### Search Options
+- `limit?: number` - Result count limit
+- `minImportance?: 'low'|'medium'|'high'|'critical'` - Filter by importance
+- `categories?: string[]` - Filter by categories
+- `includeMetadata?: boolean` - Include detailed metadata
+- `filterExpression?: string` - Advanced SQL-like filtering
 
-### Memory Operations
-- `addMemory(content, tags?)`
-- `searchMemories(query, opts?)`
-- `getMemoryById(id)`
-- `summarizeMemories(filter?)`
-
-### Agent Methods
-- `plan(goal)`
-- `executeStep(step)`
-- `think()`
-
-### Provider Interface
-- `chat(messages)`
-- `complete(prompt)`
-
-## Advanced Agent Patterns
-
-### Performance Monitoring Agent
-```typescript
-class PerformanceMonitoringAgent extends MemoryAgent {
-  private dashboard: PerformanceDashboardService;
-  private alertThresholds: Record<string, number>;
-
-  constructor() {
-    super();
-    this.dashboard = new PerformanceDashboardService();
-    this.dashboard.initializeDashboard();
-
-    this.alertThresholds = {
-      searchLatency: 1000,    // ms
-      errorRate: 0.05,        // 5%
-      memoryUsage: 100 * 1024 * 1024, // 100MB
-    };
-
-    this.setupAlertCallbacks();
-  }
-
-  private setupAlertCallbacks() {
-    this.dashboard.addAlertCallback(async (alert) => {
-      console.log(`Performance Alert: ${alert.title}`);
-
-      // Store alert in memory for analysis
-      await this.addMemory({
-        content: `Performance alert: ${alert.description}`,
-        tags: ['performance', 'alert', alert.severity],
-        metadata: {
-          alertType: alert.type,
-          component: alert.component,
-          value: alert.value,
-          threshold: alert.threshold
-        }
-      });
-
-      // Trigger response based on severity
-      if (alert.severity === 'critical') {
-        await this.handleCriticalAlert(alert);
-      }
-    });
-  }
-
-  async handleCriticalAlert(alert: PerformanceAlert) {
-    // Get recent performance data
-    const recentMetrics = this.dashboard.getRealTimeMetrics(alert.component, undefined, 20);
-
-    // Analyze root cause
-    const analysis = await this.analyzePerformanceIssue(alert, recentMetrics);
-
-    // Store analysis for future reference
-    await this.addMemory({
-      content: `Critical performance analysis: ${analysis.summary}`,
-      tags: ['performance', 'analysis', 'critical'],
-      metadata: {
-        alertId: alert.id,
-        analysis: analysis,
-        recommendations: analysis.recommendations
-      }
-    });
-
-    // Execute remediation if possible
-    if (analysis.remediation) {
-      await this.executeRemediation(analysis.remediation);
-    }
-  }
-
-  getPerformanceReport() {
-    return {
-      status: this.dashboard.getSystemStatusOverview(),
-      metrics: this.dashboard.getRealTimeMetrics(undefined, undefined, 100),
-      alerts: this.dashboard.getActiveAlerts(),
-      trends: this.calculatePerformanceTrends()
-    };
-  }
-}
-```
-
-### Error Handling & Recovery Agent
-```typescript
-class ResilientAgent extends ConsciousAgent {
-  private circuitBreakers: Map<string, CircuitBreaker> = new Map();
-  private errorRecoveryStrategies: Map<string, ErrorRecoveryStrategy> = new Map();
-
-  async executeWithErrorHandling(operation: () => Promise<any>, context: string) {
-    const circuitBreaker = this.getCircuitBreaker(context);
-
-    if (circuitBreaker.isOpen()) {
-      // Use fallback strategy
-      return await this.executeFallbackStrategy(context, operation);
-    }
-
-    try {
-      const result = await operation();
-      circuitBreaker.recordSuccess();
-      return result;
-    } catch (error) {
-      circuitBreaker.recordFailure();
-
-      // Attempt recovery
-      const recoveryResult = await this.attemptErrorRecovery(error, context);
-
-      if (recoveryResult.success) {
-        return recoveryResult.result;
-      } else {
-        // Store error for analysis
-        await this.logErrorForAnalysis(error, context, recoveryResult);
-        throw error;
-      }
-    }
-  }
-
-  private getCircuitBreaker(context: string): CircuitBreaker {
-    if (!this.circuitBreakers.has(context)) {
-      this.circuitBreakers.set(context, new CircuitBreaker({
-        failureThreshold: 5,
-        resetTimeout: 60000, // 1 minute
-        monitoringPeriod: 300000 // 5 minutes
-      }));
-    }
-    return this.circuitBreakers.get(context)!;
-  }
-
-  private async executeFallbackStrategy(context: string, originalOperation: () => Promise<any>) {
-    const fallback = this.errorRecoveryStrategies.get(context);
-
-    if (fallback) {
-      try {
-        return await fallback.execute();
-      } catch (fallbackError) {
-        console.error(`Fallback also failed for ${context}:`, fallbackError);
-      }
-    }
-
-    // Last resort: return cached result or default
-    return await this.getCachedResult(context);
-  }
-
-  private async attemptErrorRecovery(error: Error, context: string) {
-    const strategy = this.selectRecoveryStrategy(error, context);
-
-    try {
-      const recoveryResult = await strategy.attemptRecovery(error);
-
-      if (recoveryResult.success) {
-        // Log successful recovery
-        await this.addMemory({
-          content: `Error recovery successful for ${context}`,
-          tags: ['error-recovery', 'success'],
-          metadata: {
-            originalError: error.message,
-            recoveryStrategy: strategy.name,
-            recoveryTime: recoveryResult.timeMs
-          }
-        });
-
-        return recoveryResult;
-      }
-    } catch (recoveryError) {
-      return {
-        success: false,
-        error: recoveryError
-      };
-    }
-
-    return { success: false };
-  }
-
-  private selectRecoveryStrategy(error: Error, context: string): ErrorRecoveryStrategy {
-    // Select appropriate strategy based on error type and context
-    if (error.message.includes('timeout')) {
-      return new TimeoutRecoveryStrategy();
-    } else if (error.message.includes('database')) {
-      return new DatabaseRecoveryStrategy();
-    } else if (error.message.includes('memory')) {
-      return new MemoryRecoveryStrategy();
-    } else {
-      return new GenericRecoveryStrategy();
-    }
-  }
-}
-```
-
-## Environment Variables
-```env
-OPENAI_API_KEY=your_key_here
-DATABASE_URL=file:./memori.db
-LOG_LEVEL=info
-
-# New configuration options
-MEMORI_CONFIG_DIR=./config/search
-MEMORI_ENABLE_PERFORMANCE_MONITORING=true
-MEMORI_ENABLE_RELATIONSHIP_PROCESSING=true
-MEMORI_ENABLE_DUPLICATE_CONSOLIDATION=true
-MEMORI_MAX_MEMORY_PROCESSING_HISTORY=1000
-MEMORI_PERFORMANCE_DASHBOARD_ENABLED=true
-```
-
-Remember: Focus on your agent's logic and let memorits handle the memory and LLM integration complexities.
+### Status Checks
+- `memori.isEnabled()` - Check if system is ready
+- `memori.getSessionId()` - Get current session ID
+- `memori.isAutoModeEnabled()` - Check auto-ingestion status
+- `memori.isConsciousModeEnabled()` - Check conscious processing status
