@@ -18,37 +18,33 @@ Memorits uses **Prisma ORM** with a **3-table architecture** for optimal perform
 ### Database Models (Prisma Schema)
 
 ```prisma
-// Core database models defined in Prisma schema
+// Core database models defined in Prisma schema (actual implementation)
 model ChatHistory {
-  id        String   @id @default(cuid())
-  userInput String
-  aiOutput  String
-  model     String?
-  timestamp DateTime @default(now())
-  sessionId String
-  namespace String   @default("default")
-  tokensUsed Int     @default(0)
-  metadata  Json?
+  id          String   @id @default(cuid())
+  userInput   String
+  aiOutput    String
+  model       String
+  timestamp   DateTime @default(now())
+  sessionId   String
+  namespace   String   @default("default")
+  tokensUsed  Int      @default(0)
+  metadata    Json?
 
   shortTermMemories ShortTermMemory[]
   longTermMemories  LongTermMemory[]
 
   @@map("chat_history")
-  @@index([sessionId, timestamp])
-  @@index([namespace, timestamp])
-  @@index([timestamp])
 }
 
 model LongTermMemory {
   id                    String   @id @default(cuid())
   originalChatId        String?
-  processedData         Json?
+  processedData         Json
   importanceScore       Float    @default(0.5)
   categoryPrimary       String
   retentionType         String   @default("long_term")
   namespace             String   @default("default")
   createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
   accessCount           Int      @default(0)
   lastAccessed          DateTime?
   searchableContent     String
@@ -80,23 +76,17 @@ model LongTermMemory {
   chat ChatHistory? @relation(fields: [originalChatId], references: [id], onDelete: SetNull)
 
   @@map("long_term_memory")
-  @@index([namespace, createdAt])
-  @@index([categoryPrimary, importanceScore])
-  @@index([searchableContent])
-  @@index([topic])
-  @@index([classification])
 }
 
 model ShortTermMemory {
   id               String   @id @default(cuid())
   chatId           String?
-  processedData    Json?
+  processedData    Json
   importanceScore  Float    @default(0.5)
   categoryPrimary  String
   retentionType    String   @default("short_term")
   namespace        String   @default("default")
   createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
   expiresAt        DateTime?
   accessCount      Int      @default(0)
   lastAccessed     DateTime?
@@ -107,9 +97,6 @@ model ShortTermMemory {
   chat ChatHistory? @relation(fields: [chatId], references: [id], onDelete: SetNull)
 
   @@map("short_term_memory")
-  @@index([namespace, expiresAt])
-  @@index([namespace, isPermanentContext])
-  @@index([accessCount])
 }
 ```
 
@@ -146,17 +133,16 @@ sqlite3 ./memories.db "SELECT summary, classification, importanceScore FROM long
 Stores processed, searchable memory data with comprehensive JSON-based metadata.
 
 ```sql
--- Actual database table (matches Prisma @@map("long_term_memory"))
+-- Actual database table (matches current Prisma schema)
 CREATE TABLE long_term_memory (
   id                    VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
   originalChatId        VARCHAR(255),                -- Reference to source conversation
-  processedData         JSON NOT NULL,               -- Rich structured memory data (includes relationships, consolidation info, state tracking)
+  processedData         JSON NOT NULL,               -- Rich structured memory data
   importanceScore       REAL DEFAULT 0.5,            -- Relevance score (0.0-1.0)
   categoryPrimary       VARCHAR(255) NOT NULL,       -- Primary classification
   retentionType         VARCHAR(50) DEFAULT 'long_term',
   namespace             VARCHAR(255) DEFAULT 'default',
   createdAt             DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updatedAt             DATETIME DEFAULT CURRENT_TIMESTAMP,
   accessCount           INTEGER DEFAULT 0,           -- Usage tracking
   lastAccessed          DATETIME,                     -- Last access timestamp
   searchableContent     TEXT NOT NULL,               -- Full-text search content
@@ -165,12 +151,12 @@ CREATE TABLE long_term_memory (
   relevanceScore        FLOAT DEFAULT 0.5,            -- Relevance scoring
   actionabilityScore    FLOAT DEFAULT 0.5,            -- Actionability scoring
 
-  -- Classification and metadata (stored in processedData JSON)
+  -- Classification and metadata
   classification        VARCHAR(50) DEFAULT 'conversational',
   memoryImportance      VARCHAR(20) DEFAULT 'medium',
   topic                 VARCHAR(255),                -- Main topic/keyword
-  entitiesJson          JSON,                        -- Extracted entities (also in processedData)
-  keywordsJson          JSON,                        -- Key terms/phrases (also in processedData)
+  entitiesJson          JSON,                        -- Extracted entities
+  keywordsJson          JSON,                        -- Key terms/phrases
   duplicateOf           VARCHAR(255),                -- Duplicate memory reference
   supersedesJson        JSON,                        -- Superseded memories
   relatedMemoriesJson   JSON,                        -- Related memory references
@@ -181,12 +167,9 @@ CREATE TABLE long_term_memory (
   classificationReason  TEXT,                        -- Why classified this way
   consciousProcessed    BOOLEAN DEFAULT FALSE,        -- Conscious processing status
 
-  -- Indexes for performance
+  -- Indexes for performance (current implementation)
   INDEX idx_namespace_created (namespace, createdAt),
-  INDEX idx_category_importance (categoryPrimary, importanceScore),
-  INDEX idx_searchable_content (searchableContent),
-  INDEX idx_topic (topic),
-  INDEX idx_classification (classification)
+  INDEX idx_category_importance (categoryPrimary, importanceScore)
 );
 ```
 
@@ -195,7 +178,7 @@ CREATE TABLE long_term_memory (
 Stores temporary, immediately accessible memories for working context.
 
 ```sql
--- Actual database table (matches Prisma @@map("short_term_memory"))
+-- Actual database table (matches current Prisma schema)
 CREATE TABLE short_term_memory (
   id               VARCHAR(255) PRIMARY KEY,     -- CUID unique identifier
   chatId           VARCHAR(255),                -- Associated chat
@@ -205,7 +188,6 @@ CREATE TABLE short_term_memory (
   retentionType    VARCHAR(50) DEFAULT 'short_term',
   namespace        VARCHAR(255) DEFAULT 'default',
   createdAt        DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updatedAt        DATETIME DEFAULT CURRENT_TIMESTAMP,
   expiresAt        DATETIME,                     -- Expiration timestamp
   accessCount      INTEGER DEFAULT 0,           -- Usage tracking
   lastAccessed     DATETIME,                     -- Last access timestamp
@@ -213,7 +195,7 @@ CREATE TABLE short_term_memory (
   summary          TEXT NOT NULL,               -- Concise memory summary
   isPermanentContext BOOLEAN DEFAULT FALSE,     -- Permanent working memory
 
-  -- Indexes for performance
+  -- Indexes for performance (current implementation)
   INDEX idx_namespace_expires (namespace, expiresAt),
   INDEX idx_permanent_context (namespace, isPermanentContext),
   INDEX idx_access_count (accessCount)

@@ -118,17 +118,17 @@ class SearchService {
     const analysis = this.analyzeQuery(query);
     const strategies = this.selectOptimalStrategies(analysis);
 
-    // 2. Parallel strategy execution
+    // 2. Parallel strategy execution with error handling
     const results = await this.executeStrategies(strategies, query);
 
-    // 3. Result merging and ranking
+    // 3. Result merging, deduplication, and ranking
     return this.mergeAndRankResults(results, query);
   }
 }
 ```
 
 **Search Strategies:**
-- **FTS5**: Full-text search with BM25 ranking
+- **FTS5**: Full-text search with BM25 ranking (SQLite)
 - **LIKE**: Pattern-based fallback search
 - **Recent**: Time-based recent memory retrieval
 - **Category Filter**: Classification-based filtering
@@ -136,40 +136,56 @@ class SearchService {
 - **Metadata Filter**: Advanced metadata-based queries
 - **Relationship Search**: Memory relationship graph traversal
 
-### 4. Database Layer
+**Advanced Features:**
+- **Circuit Breaker Protection**: Failed strategies don't break the system
+- **Strategy Configuration Management**: Runtime configuration and tuning
+- **Performance Monitoring**: Comprehensive search metrics and analytics
+- **Error Recovery**: Automatic fallback and recovery mechanisms
 
-**Optimized SQLite backend with advanced indexing.**
+### 4. Manager Pattern (Database Layer)
 
-```sql
--- Core memory storage with rich metadata
-CREATE TABLE LongTermMemory (
-  id                    VARCHAR(255) PRIMARY KEY,
-  originalChatId        VARCHAR(255),
-  processedData         JSON NOT NULL,
-  importanceScore       REAL DEFAULT 0.5,
-  categoryPrimary       VARCHAR(255) NOT NULL,
-  searchableContent     TEXT NOT NULL,
-  summary               TEXT NOT NULL,
+**Sophisticated manager-based architecture for database operations.**
 
-  -- Classification and metadata
-  classification        VARCHAR(50) DEFAULT 'conversational',
-  memoryImportance      VARCHAR(20) DEFAULT 'medium',
-  entitiesJson          JSON,
-  keywordsJson          JSON,
+```typescript
+// DatabaseManager - Main facade coordinating all database operations
+class DatabaseManager {
+  private memoryManager: MemoryManager;
+  private searchManager: SearchManager;
+  private relationshipManager: RelationshipManager;
+  private stateManager: StateManager;
 
-  -- Memory relationships
-  relatedMemoriesJson   JSON,
-  supersedesJson        JSON,
+  async storeLongTermMemory(memory: ProcessedLongTermMemory, chatId: string, namespace: string): Promise<string> {
+    return this.memoryManager.storeLongTermMemory(memory, chatId, namespace);
+  }
 
-  -- Processing state tracking
-  processingState       VARCHAR(50) DEFAULT 'PENDING',
-  stateTransitionsJson  JSON,
+  async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
+    return this.searchManager.searchMemories(query, options);
+  }
+}
 
-  -- Indexes for performance
-  INDEX idx_namespace_created (namespace, createdAt),
-  INDEX idx_category_importance (categoryPrimary, importanceScore)
-);
+// MemoryManager - Specialized memory operations with state tracking
+class MemoryManager {
+  async storeLongTermMemory(memoryData: ProcessedLongTermMemory, chatId: string, namespace: string): Promise<string> {
+    // Comprehensive validation and sanitization
+    const sanitizedData = await this.validateAndSanitizeMemoryInput(memoryData, chatId, namespace);
+
+    // Store with state tracking integration
+    const result = await this.databaseContext.getPrismaClient().longTermMemory.create({...});
+
+    // Initialize state tracking for workflow management
+    await this.stateManager.initializeExistingMemoryState(result.id, MemoryProcessingState.PROCESSED);
+
+    return result.id;
+  }
+}
 ```
+
+**Manager Architecture Benefits:**
+- **Separation of Concerns**: Each manager handles specific domain responsibilities
+- **State Tracking Integration**: Built-in workflow state management across all operations
+- **Performance Monitoring**: Comprehensive metrics and analytics
+- **Error Recovery**: Sophisticated error handling with circuit breakers
+- **Namespace Isolation**: Multi-tenant support with logical separation
 
 ### 5. Memory State Management
 
@@ -260,25 +276,38 @@ interface ISearchStrategy {
 - **Performance**: Strategies can be optimized individually
 - **Reliability**: Failed strategies don't break the system
 
-### 2. Repository Pattern (Database)
+### 2. Manager Pattern (Database)
 
-**Abstracted data access with clean interfaces.**
+**Specialized managers for different operational domains.**
 
 ```typescript
-interface MemoryRepository {
-  save(memory: Memory): Promise<void>;
-  findById(id: string): Promise<Memory | null>;
-  findByQuery(query: SearchQuery): Promise<Memory[]>;
-  update(id: string, updates: Partial<Memory>): Promise<void>;
-  delete(id: string): Promise<void>;
+// MemoryManager - Dedicated memory operations with state tracking
+class MemoryManager {
+  async storeLongTermMemory(memory: ProcessedLongTermMemory, chatId: string, namespace: string): Promise<string>;
+  async getMemoryById(id: string, namespace?: string): Promise<ProcessedLongTermMemory | null>;
+  async updateMemory(id: string, updates: Partial<ProcessedLongTermMemory>, namespace?: string): Promise<boolean>;
+  async getMemoriesByImportance(minImportance: MemoryImportanceLevel, namespace?: string): Promise<ProcessedLongTermMemory[]>;
+}
+
+// SearchManager - Dedicated search operations
+class SearchManager {
+  async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]>;
+  async searchWithStrategy(query: string, strategy: SearchStrategy): Promise<MemorySearchResult[]>;
+}
+
+// RelationshipManager - Memory relationship operations
+class RelationshipManager {
+  async storeMemoryRelationships(memoryId: string, relationships: MemoryRelationship[]): Promise<void>;
+  async getRelatedMemories(memoryId: string, options: RelationshipQueryOptions): Promise<RelatedMemory[]>;
 }
 ```
 
 **Benefits:**
-- **Testability**: Easy mocking for unit tests
-- **Flexibility**: Database implementation can be swapped
-- **Performance**: Optimized queries for specific use cases
-- **Maintainability**: Clear separation of concerns
+- **Domain Expertise**: Each manager encapsulates specific business logic
+- **State Integration**: Built-in workflow state tracking across operations
+- **Performance Monitoring**: Comprehensive metrics and error handling
+- **Separation of Concerns**: Clear boundaries between different operational domains
+- **Testing**: Easy mocking and unit testing of specific functionality
 
 ### 3. Observer Pattern (Memory Processing)
 

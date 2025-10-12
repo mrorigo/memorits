@@ -8,14 +8,14 @@ The search system is built around a modular architecture where different strateg
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Search        │───▶│  Strategy       │───▶│  Result        │
-│   Query         │    │  Orchestrator   │    │  Processor     │
+│   Search        │───▶│  Strategy       │───▶│  Result         │
+│   Query         │    │  Orchestrator   │    │  Processor      │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Query          │    │  Strategy       │    │  Merging &     │
-│  Analysis       │    │  Execution      │    │  Ranking       │
+│  Query          │    │  Strategy       │    │  Merging &      │
+│  Analysis       │    │  Execution      │    │  Ranking        │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
@@ -298,39 +298,56 @@ class AdvancedFilterEngine {
 
 ### SearchService Coordinator
 
-The SearchService orchestrates multiple strategies for optimal results:
+The SearchService orchestrates multiple strategies with sophisticated error handling and performance monitoring:
 
 ```typescript
 class SearchService {
   private strategies: Map<SearchStrategy, ISearchStrategy> = new Map();
+  private performanceMonitor: SearchPerformanceMonitor;
+  private errorHandler: SearchErrorHandler;
 
   async search(query: SearchQuery): Promise<SearchResult[]> {
-    // 1. Analyze query characteristics
-    const queryAnalysis = this.analyzeQuery(query);
+    const startTime = Date.now();
 
-    // 2. Select applicable strategies
-    const applicableStrategies = this.selectStrategies(queryAnalysis);
+    try {
+      // 1. Validate and sanitize input
+      const validation = this.validateSearchInput(query);
+      if (!validation.isValid) {
+        throw new SearchValidationError(`Invalid search query: ${validation.errors.join(', ')}`);
+      }
 
-    // 3. Execute strategies in parallel
-    const strategyPromises = applicableStrategies.map(strategy =>
-      this.executeStrategy(strategy, query).catch(error => {
-        console.warn(`Strategy ${strategy.name} failed:`, error);
-        return []; // Return empty array on failure
-      })
-    );
+      // 2. Analyze query characteristics
+      const analysis = this.analyzeQuery(query);
 
-    const strategyResults = await Promise.all(strategyPromises);
+      // 3. Select applicable strategies
+      const applicableStrategies = this.selectStrategies(queryAnalysis);
 
-    // 4. Merge and deduplicate results
-    return this.mergeResults(strategyResults, query);
+      // 4. Execute strategies with circuit breaker protection
+      const strategyResults = await this.executeStrategiesWithErrorHandling(strategies, query);
+
+      // 5. Merge, deduplicate, and rank results
+      const mergedResults = this.mergeResults(strategyResults, query);
+
+      // 6. Track performance metrics
+      const queryTime = Date.now() - startTime;
+      this.performanceMonitor.updatePerformanceMetrics(queryTime);
+
+      return mergedResults;
+
+    } catch (error) {
+      // Track performance metrics even for failed queries
+      const queryTime = Date.now() - startTime;
+      this.performanceMonitor.updatePerformanceMetrics(queryTime);
+      throw error;
+    }
   }
 
   private analyzeQuery(query: SearchQuery): QueryAnalysis {
     return {
       hasTextSearch: !!query.text && query.text.length > 0,
-      hasTemporalFilters: !!(query as any).temporalFilters,
-      hasMetadataFilters: !!(query as any).metadataFilters,
-      hasCategoryFilters: !!(query as any).categories,
+      hasTemporalFilters: this.hasTemporalFilters(query),
+      hasMetadataFilters: !!(query.filters?.metadataFilters),
+      hasCategoryFilters: !!(query.filters?.categories),
       estimatedComplexity: this.calculateComplexity(query)
     };
   }
@@ -361,12 +378,17 @@ private selectStrategies(analysis: QueryAnalysis): ISearchStrategy[] {
     strategies.push(this.strategies.get(SearchStrategy.CATEGORY_FILTER));
   }
 
-  // Always include recent strategy for context
-  if (analysis.estimatedComplexity === 'low') {
+  // Always include recent strategy for context (fallback)
+  if (!strategies.includes(SearchStrategy.RECENT)) {
     strategies.push(this.strategies.get(SearchStrategy.RECENT));
   }
 
-  return strategies;
+  // Add relationship search for complex queries
+  if (analysis.estimatedComplexity === 'high') {
+    strategies.push(this.strategies.get(SearchStrategy.RELATIONSHIP));
+  }
+
+  return strategies.filter(Boolean); // Remove any undefined strategies
 }
 ```
 
@@ -581,25 +603,68 @@ private async executeWithFallback(
 
 ## Error Handling
 
-### Strategy-Level Error Handling
+### Strategy-Level Error Handling with Circuit Breakers
 
 ```typescript
-async executeStrategy(
-  strategy: ISearchStrategy,
-  query: SearchQuery
-): Promise<SearchResult[]> {
-  const timeout = this.getStrategyTimeout(strategy);
+class SearchErrorHandler {
+  private circuitBreakers: Map<SearchStrategy, CircuitBreaker> = new Map();
+  private errorCounts: Map<SearchStrategy, number> = new Map();
 
-  return Promise.race([
-    strategy.search(query),
-    this.createTimeoutPromise(timeout)
-  ]);
+  async executeWithCircuitBreaker(
+    strategy: SearchStrategy,
+    operation: () => Promise<SearchResult[]>
+  ): Promise<SearchResult[]> {
+    const circuitBreaker = this.getCircuitBreaker(strategy);
+
+    if (circuitBreaker.isOpen()) {
+      throw new SearchError(`Circuit breaker is OPEN for strategy: ${strategy}`);
+    }
+
+    try {
+      const result = await operation();
+      this.onSuccess(strategy);
+      return result;
+    } catch (error) {
+      this.onError(strategy, error);
+      throw error;
+    }
+  }
+
+  private onError(strategy: SearchStrategy, error: unknown): void {
+    const currentCount = this.errorCounts.get(strategy) || 0;
+    this.errorCounts.set(strategy, currentCount + 1);
+
+    // Open circuit breaker if too many errors
+    if (currentCount >= this.maxErrors) {
+      this.getCircuitBreaker(strategy).open();
+    }
+  }
 }
+```
 
-private createTimeoutPromise(timeout: number): Promise<never> {
-  return new Promise((_, reject) =>
-    setTimeout(() => reject(new SearchTimeoutError()), timeout)
-  );
+### Graceful Degradation and Fallback
+
+```typescript
+async searchWithDegradation(query: SearchQuery): Promise<SearchResult[]> {
+  const strategies = this.getAvailableStrategies();
+
+  for (const strategy of strategies) {
+    try {
+      // Try each strategy in priority order
+      const results = await this.executeStrategy(strategy, query);
+
+      if (results.length > 0) {
+        return results;
+      }
+    } catch (error) {
+      // Log error and try next strategy
+      console.warn(`Strategy ${strategy.name} failed, trying next...`);
+      continue;
+    }
+  }
+
+  // Return empty results rather than throwing
+  return [];
 }
 ```
 

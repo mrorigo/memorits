@@ -263,8 +263,8 @@ const testService = new MemoryConsolidationService(testRepository);
 
 ## Design Patterns Applied
 
-### Repository Pattern
-Separates business logic from data access logic, providing a consistent interface for data operations.
+### Manager Pattern
+Specialized managers handle different operational domains with built-in state tracking, performance monitoring, and error recovery.
 
 ### Factory Pattern
 Centralizes object creation, enabling proper dependency injection and testability.
