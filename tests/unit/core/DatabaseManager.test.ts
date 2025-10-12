@@ -16,9 +16,19 @@ describe('DatabaseManager (Optimized)', () => {
   });
 
   afterEach(async () => {
-    // ⚡ OPTIMIZED: Just rollback transaction instead of complex cleanup
-    await afterEachTest(testContext.testName);
-  });
+   // ⚡ OPTIMIZED: Just rollback transaction instead of complex cleanup
+   await afterEachTest(testContext.testName);
+
+   // 🧹 Fix timeout issue: Clean up SearchService and its timers
+   try {
+     const searchService = await dbManager.getSearchService();
+     if (searchService) {
+       searchService.cleanup();
+     }
+   } catch (error) {
+     // Ignore cleanup errors - not critical for tests
+   }
+ });
 
   describe('Constructor and Basic Operations', () => {
     it('should create DatabaseManager instance', () => {
@@ -49,9 +59,22 @@ describe('DatabaseManager (Optimized)', () => {
   });
 
   describe('SQL Injection Vulnerability Fix', () => {
+    let searchService: any;
+
     beforeEach(async () => {
       // Initialize FTS support for testing
-      await dbManager.getSearchService();
+      searchService = await dbManager.getSearchService();
+    });
+
+    afterEach(async () => {
+      // 🧹 Fix timeout issue: Clean up SearchService and its timers
+      try {
+        if (searchService) {
+          searchService.cleanup();
+        }
+      } catch (error) {
+        // Ignore cleanup errors - not critical for tests
+      }
     });
 
     it('should reject invalid FTS query parameters', async () => {
@@ -63,7 +86,6 @@ describe('DatabaseManager (Optimized)', () => {
       };
 
       // Test that the SearchService itself validates properly
-      const searchService = await dbManager.getSearchService();
       const searchQuery = {
         text: maliciousQuery,
         limit: options.limit,
@@ -83,7 +105,6 @@ describe('DatabaseManager (Optimized)', () => {
       };
 
       // Test that the SearchService itself validates properly
-      const searchService = await dbManager.getSearchService();
       const searchQuery = {
         text: longQuery,
         limit: options.limit,
@@ -102,7 +123,6 @@ describe('DatabaseManager (Optimized)', () => {
       };
 
       // Test that the SearchService itself validates properly
-      const searchService = await dbManager.getSearchService();
       const searchQuery = {
         text: 'test query',
         limit: options.limit,

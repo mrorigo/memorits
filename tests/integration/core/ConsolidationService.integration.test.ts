@@ -9,6 +9,9 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
   let repository: PrismaConsolidationRepository;
   let prisma: PrismaClient;
   let testContext: Awaited<ReturnType<typeof beforeEachTest>>;
+  let memory1: any;
+  let memory2: any;
+  let memory3: any;
 
   beforeEach(async () => {
     // 🚀 OPTIMIZED: Use shared integration database instead of creating per-test files
@@ -16,11 +19,10 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
     prisma = testContext.prisma;
 
     repository = new PrismaConsolidationRepository(prisma);
-    consolidationService = new MemoryConsolidationService(repository, testContext.isolation.getNamespace());
+    consolidationService = new MemoryConsolidationService(repository, testContext.namespace);
 
     // Create test memories for integration testing with unique namespaces
     const integrationMemoryData1 = TestHelper.createTestLongTermMemory(testContext, {
-      id: 'integration-memory-1',
       searchableContent: 'TypeScript provides excellent type safety for large applications',
       summary: 'TypeScript benefits',
       classification: 'essential',
@@ -34,7 +36,6 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
     });
 
     const integrationMemoryData2 = TestHelper.createTestLongTermMemory(testContext, {
-      id: 'integration-memory-2',
       searchableContent: 'JavaScript is the foundation of web development and programming',
       summary: 'JavaScript fundamentals',
       classification: 'essential',
@@ -48,7 +49,6 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
     });
 
     const integrationMemoryData3 = TestHelper.createTestLongTermMemory(testContext, {
-      id: 'integration-memory-3',
       searchableContent: 'React is a popular framework for building user interfaces',
       summary: 'React overview',
       classification: 'contextual',
@@ -61,9 +61,9 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
       processedData: {},
     });
 
-    await prisma.longTermMemory.createMany({
-      data: [integrationMemoryData1, integrationMemoryData2, integrationMemoryData3],
-    });
+    memory1 = await prisma.longTermMemory.create({ data: integrationMemoryData1 });
+    memory2 = await prisma.longTermMemory.create({ data: integrationMemoryData2 });
+    memory3 = await prisma.longTermMemory.create({ data: integrationMemoryData3 });
   });
 
   afterEach(async () => {
@@ -108,18 +108,18 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
       if (duplicates.length > 0) {
         // Step 2: Mark first duplicate
         const duplicateId = duplicates[0].id;
-        await consolidationService.markMemoryAsDuplicate(duplicateId, 'integration-memory-1', 'integration test');
+        await consolidationService.markMemoryAsDuplicate(duplicateId, memory1.id, 'integration test');
 
         // Step 3: Verify it was marked correctly
-        const markedMemory = await repository.getConsolidatedMemory(duplicateId);
-        expect(markedMemory?.isDuplicate).toBe(true);
-        expect(markedMemory?.duplicateOf).toBe('integration-memory-1');
+         const markedMemory = await repository.getConsolidatedMemory(duplicateId, testContext.namespace);
+          expect(markedMemory?.isDuplicate).toBe(true);
+          expect(markedMemory?.duplicateOf).toBe(memory1.id);
       }
     });
 
     it('should integrate consolidation statistics correctly', async () => {
       // Create some duplicates first
-      await consolidationService.markMemoryAsDuplicate('integration-memory-2', 'integration-memory-1', 'test duplicate');
+      await consolidationService.markMemoryAsDuplicate(memory2.id, memory1.id, 'test duplicate');
 
       // Get stats from service
       const stats = await consolidationService.getConsolidationAnalytics();
@@ -130,8 +130,8 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
       expect(typeof stats.consolidatedMemories).toBe('number');
       expect(typeof stats.averageConsolidationRatio).toBe('number');
 
-      // Stats should match what repository provides
-      const repositoryStats = await repository.getConsolidationStatistics();
+      // Stats should match what repository provides (both using same namespace)
+      const repositoryStats = await repository.getConsolidationStatistics(testContext.namespace);
       expect(stats.totalMemories).toBe(repositoryStats.totalMemories);
       expect(stats.duplicateCount).toBe(repositoryStats.duplicateCount);
       expect(stats.consolidatedMemories).toBe(repositoryStats.consolidatedMemories);
@@ -140,8 +140,8 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
     it('should handle validation and error integration', async () => {
       // Test validation integration
       const validation = await consolidationService.validateConsolidationEligibility(
-        'integration-memory-1',
-        ['integration-memory-2', 'integration-memory-3']
+        memory1.id,
+        [memory2.id, memory3.id]
       );
 
       expect(validation).toHaveProperty('isValid');
@@ -152,15 +152,15 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
 
       if (validation.isValid) {
         // If valid, proceed with consolidation
-        const result = await consolidationService.consolidateMemories('integration-memory-1', [
-          'integration-memory-2',
-          'integration-memory-3',
+        const result = await consolidationService.consolidateMemories(memory1.id, [
+          memory2.id,
+          memory3.id,
         ]);
 
         expect(result.success).toBe(true);
         expect(result.consolidatedCount).toBe(2);
-        expect(result.primaryMemoryId).toBe('integration-memory-1');
-        expect(result.consolidatedMemoryIds).toEqual(['integration-memory-2', 'integration-memory-3']);
+        expect(result.primaryMemoryId).toBe(memory1.id);
+        expect(result.consolidatedMemoryIds).toEqual([memory2.id, memory3.id]);
       }
     });
   });
@@ -178,25 +178,25 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
         const duplicateIds = duplicates.slice(1, 3).map(d => d.id);
 
         // 2. Validate consolidation
-        const validation = await consolidationService.validateConsolidationEligibility(primaryId, duplicateIds);
-        expect(typeof validation.isValid).toBe('boolean');
+         const validation = await consolidationService.validateConsolidationEligibility(primaryId, duplicateIds);
+         expect(typeof validation.isValid).toBe('boolean');
 
-        if (validation.isValid) {
-          // 3. Preview consolidation
-          const preview = await consolidationService.previewConsolidation(primaryId, duplicateIds);
-          expect(preview).toHaveProperty('estimatedResult');
-          expect(preview).toHaveProperty('warnings');
-          expect(preview).toHaveProperty('recommendations');
+         if (validation.isValid) {
+           // 3. Preview consolidation
+           const preview = await consolidationService.previewConsolidation(primaryId, duplicateIds);
+           expect(preview).toHaveProperty('estimatedResult');
+           expect(preview).toHaveProperty('warnings');
+           expect(preview).toHaveProperty('recommendations');
 
-          // 4. Perform consolidation
-          const result = await consolidationService.consolidateMemories(primaryId, duplicateIds);
-          expect(result.success).toBe(true);
-          expect(result.consolidatedCount).toBe(duplicateIds.length);
+           // 4. Perform consolidation
+           const result = await consolidationService.consolidateMemories(primaryId, duplicateIds);
+           expect(result.success).toBe(true);
+           expect(result.consolidatedCount).toBe(duplicateIds.length);
 
-          // 5. Verify consolidation
-          const primaryMemory = await repository.getConsolidatedMemory(primaryId);
-          expect(primaryMemory?.isConsolidated).toBe(true);
-          expect(primaryMemory?.consolidationCount).toBe(duplicateIds.length);
+           // 5. Verify consolidation
+           const primaryMemory = await repository.getConsolidatedMemory(primaryId, testContext.namespace);
+           expect(primaryMemory?.isConsolidated).toBe(true);
+           expect(primaryMemory?.consolidationCount).toBe(duplicateIds.length);
 
           // 6. Check updated statistics
           const finalStats = await consolidationService.getConsolidationAnalytics();
@@ -207,28 +207,28 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
 
     it('should handle consolidation rollback workflow', async () => {
       // Create a consolidation scenario
-      await consolidationService.markMemoryAsDuplicate('integration-memory-3', 'integration-memory-1', 'rollback test');
+      await consolidationService.markMemoryAsDuplicate(memory3.id, memory1.id, 'rollback test');
 
       // Backup data before consolidation
-      const memoryIds = ['integration-memory-1', 'integration-memory-3'];
-      const backupData = await repository.backupMemoryData(memoryIds);
+      const memoryIds = [memory1.id, memory3.id];
+      const backupData = await repository.backupMemoryData(memoryIds, testContext.namespace);
 
       // Perform consolidation
-      const consolidationResult = await consolidationService.consolidateMemories('integration-memory-1', ['integration-memory-3']);
+      const consolidationResult = await consolidationService.consolidateMemories(memory1.id, [memory3.id]);
       expect(consolidationResult.success).toBe(true);
 
       // Generate rollback token (using data integrity hash)
       const rollbackToken = consolidationResult.dataIntegrityHash;
 
       // Perform rollback
-      const rollbackResult = await consolidationService.rollbackConsolidation('integration-memory-1', rollbackToken);
+      const rollbackResult = await consolidationService.rollbackConsolidation(memory1.id, rollbackToken);
       expect(rollbackResult).toHaveProperty('success');
       expect(rollbackResult).toHaveProperty('restoredMemories');
       expect(rollbackResult).toHaveProperty('errors');
 
       // Verify rollback was successful
       if (rollbackResult.success) {
-        const restoredMemory = await repository.getConsolidatedMemory('integration-memory-3');
+        const restoredMemory = await repository.getConsolidatedMemory(memory3.id, testContext.namespace);
         // After rollback, the memory should no longer be consolidated
         expect(restoredMemory?.isConsolidated).toBe(false);
       }
@@ -252,42 +252,38 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
     it('should handle large scale consolidation efficiently', async () => {
       // Create multiple memories for batch testing
       const batchSize = 10;
-      const memoryIds = [];
+      const batchMemories = [];
 
       for (let i = 0; i < batchSize; i++) {
-        const memoryId = `batch-memory-${i}`;
-        memoryIds.push(memoryId);
-
-        await prisma.longTermMemory.create({
-          data: {
-            id: memoryId,
-            namespace: 'test',
-            searchableContent: `Batch memory ${i} with similar content for testing`,
-            summary: `Summary ${i}`,
-            classification: 'contextual',
-            memoryImportance: 'medium',
-            categoryPrimary: 'test',
-            retentionType: 'long_term',
-            importanceScore: 0.5,
-            extractionTimestamp: new Date(),
-            createdAt: new Date(),
-            processedData: {},
-          },
+        const batchMemoryData = TestHelper.createTestLongTermMemory(testContext, {
+          searchableContent: `Batch memory ${i} with similar content for testing`,
+          summary: `Summary ${i}`,
+          classification: 'contextual',
+          memoryImportance: 'medium',
+          categoryPrimary: 'test',
+          retentionType: 'long_term',
+          importanceScore: 0.5,
+          extractionTimestamp: new Date(),
+          createdAt: new Date(),
+          processedData: {},
         });
+
+        const batchMemory = await prisma.longTermMemory.create({ data: batchMemoryData });
+        batchMemories.push(batchMemory);
       }
 
       const startTime = Date.now();
 
       // Mark all as duplicates of first memory
-      for (let i = 1; i < memoryIds.length; i++) {
-        await consolidationService.markMemoryAsDuplicate(memoryIds[i], memoryIds[0], `batch test ${i}`);
+      for (let i = 1; i < batchMemories.length; i++) {
+        await consolidationService.markMemoryAsDuplicate(batchMemories[i].id, batchMemories[0].id, `batch test ${i}`);
       }
 
       const markDuration = Date.now() - startTime;
 
       // Consolidate them
       const consolidateStartTime = Date.now();
-      const result = await consolidationService.consolidateMemories(memoryIds[0], memoryIds.slice(1));
+      const result = await consolidationService.consolidateMemories(batchMemories[0].id, batchMemories.slice(1).map(m => m.id));
       const consolidateDuration = Date.now() - consolidateStartTime;
 
       expect(result.success).toBe(true);
@@ -319,7 +315,7 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
 
     it('should maintain data consistency during partial failures', async () => {
       // Create scenario where some duplicates exist and some don't
-      const validDuplicate = 'integration-memory-3';
+      const validDuplicate = memory3.id;
       const invalidDuplicate = 'non-existent-duplicate';
 
       // This should handle the mixed scenario gracefully
@@ -327,13 +323,13 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
         {
           memoryId: validDuplicate,
           isDuplicate: true,
-          duplicateOf: 'integration-memory-1',
+          duplicateOf: memory1.id,
           consolidationReason: 'partial test',
         },
         {
           memoryId: invalidDuplicate,
           isDuplicate: true,
-          duplicateOf: 'integration-memory-1',
+          duplicateOf: memory1.id,
           consolidationReason: 'partial test',
         },
       ]);
@@ -343,7 +339,7 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
       expect(result.errors.length).toBe(1); // One error for invalid memory
 
       // Verify the valid update was applied
-      const updatedMemory = await repository.getConsolidatedMemory(validDuplicate);
+      const updatedMemory = await repository.getConsolidatedMemory(validDuplicate, testContext.namespace);
       expect(updatedMemory?.isDuplicate).toBe(true);
     });
   });
@@ -402,7 +398,7 @@ describe('ConsolidationService Integration Tests (Optimized)', () => {
 
     it('should handle optimization recommendations integration', async () => {
       // Create scenario that should trigger recommendations
-      await consolidationService.markMemoryAsDuplicate('integration-memory-2', 'integration-memory-1', 'optimization test');
+      await consolidationService.markMemoryAsDuplicate(memory2.id, memory1.id, 'optimization test');
 
       const recommendations = await consolidationService.getOptimizationRecommendations();
 

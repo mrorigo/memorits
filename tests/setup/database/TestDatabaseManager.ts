@@ -82,16 +82,20 @@ export class TestDatabaseManager {
     try {
       // Create database URL with absolute path
       const databaseUrl = `file:${dbPath}`;
-      console.log(`Working directory: ${process.cwd()}`);
 
-      // Push schema once per test suite type
-      console.log(`Initializing ${suiteType} test database...`);
-      console.log(`Database path: ${dbPath}`);
-      console.log(`Database URL: ${databaseUrl}`);
+      // Only log if explicitly requested (reduces noise and Jest warnings)
+      if (process.env.TEST_DEBUG) {
+        console.log(`Working directory: ${process.cwd()}`);
+        console.log(`Initializing ${suiteType} test database...`);
+        console.log(`Database path: ${dbPath}`);
+        console.log(`Database URL: ${databaseUrl}`);
+      }
 
       // Verify the file doesn't exist before pushing schema
       if (existsSync(dbPath)) {
-        console.log(`⚠️ Database file already exists before schema push, cleaning up...`);
+        if (process.env.TEST_DEBUG) {
+          console.log(`⚠️ Database file already exists before schema push, cleaning up...`);
+        }
         await this.cleanupDatabaseFile(dbPath);
       }
 
@@ -106,8 +110,10 @@ export class TestDatabaseManager {
           env: { ...cleanEnv, DATABASE_URL: databaseUrl },
         });
       } catch (error: any) {
-        console.error('Prisma command failed, stderr:', error.stderr?.toString());
-        console.error('Prisma command failed, stdout:', error.stdout?.toString());
+        if (process.env.TEST_DEBUG) {
+          console.error('Prisma command failed, stderr:', error.stderr?.toString());
+          console.error('Prisma command failed, stdout:', error.stdout?.toString());
+        }
         throw error;
       }
 
@@ -117,7 +123,9 @@ export class TestDatabaseManager {
       }
 
       const stats = await import('fs').then(fs => fs.statSync(dbPath));
-      console.log(`✅ Database file created successfully: ${dbPath} (${stats.size} bytes)`);
+      if (process.env.TEST_DEBUG) {
+        console.log(`✅ Database file created successfully: ${dbPath} (${stats.size} bytes)`);
+      }
 
       // Store database path and mark as initialized
       this.databasePaths.set(dbKey, databaseUrl);
@@ -126,12 +134,16 @@ export class TestDatabaseManager {
       const duration = performance.now() - startTime;
       this.initializationMetrics.set(dbKey, { duration, timestamp: Date.now() });
 
-      console.log(`✅ ${suiteType} test database initialized in ${duration.toFixed(2)}ms`);
+      if (process.env.TEST_DEBUG) {
+        console.log(`✅ ${suiteType} test database initialized in ${duration.toFixed(2)}ms`);
+      }
 
     } catch (error) {
       // If initialization fails, cleanup and rethrow
       await this.cleanupDatabaseFile(dbPath);
-      console.error(`❌ Failed to initialize ${suiteType} test database:`, error);
+      if (process.env.TEST_DEBUG) {
+        console.error(`❌ Failed to initialize ${suiteType} test database:`, error);
+      }
       throw error;
     }
   }
@@ -147,47 +159,72 @@ export class TestDatabaseManager {
         while (retries > 0) {
           try {
             unlinkSync(dbPath);
-            console.log(`🗑️ Cleaned up existing database file: ${dbPath}`);
+            if (process.env.TEST_DEBUG) {
+              console.log(`🗑️ Cleaned up existing database file: ${dbPath}`);
+            }
             break;
           } catch (error) {
             retries--;
             if (retries > 0) {
-              console.warn(`Retrying database file cleanup (${retries} attempts left)...`);
+              if (process.env.TEST_DEBUG) {
+                console.warn(`Retrying database file cleanup (${retries} attempts left)...`);
+              }
               await new Promise(resolve => setTimeout(resolve, 100));
             } else {
-              console.warn(`Failed to remove existing test database ${dbPath}:`, error);
+              if (process.env.TEST_DEBUG) {
+                console.warn(`Failed to remove existing test database ${dbPath}:`, error);
+              }
             }
           }
         }
       }
     } catch (error) {
-      console.warn(`Error during database file cleanup for ${dbPath}:`, error);
+      if (process.env.TEST_DEBUG) {
+        console.warn(`Error during database file cleanup for ${dbPath}:`, error);
+      }
     }
   }
 
   /**
-   * Enable SQLite WAL mode for better concurrent access
-   */
-  private async enableWALMode(prisma: PrismaClient): Promise<void> {
-    try {
-      // Use $queryRaw for PRAGMA statements that return values, then ignore the result
-      await prisma.$queryRaw`PRAGMA journal_mode = WAL`;
-      await prisma.$queryRaw`PRAGMA synchronous = NORMAL`;
-      await prisma.$queryRaw`PRAGMA cache_size = 10000`;
-      await prisma.$queryRaw`PRAGMA temp_store = memory`;
+    * Enable SQLite WAL mode for better concurrent access
+    */
+   private async enableWALMode(prisma: PrismaClient): Promise<void> {
+     try {
+       // Only attempt WAL mode in non-test environments or when explicitly requested
+       // This prevents "Cannot log after tests are done" warnings from Prisma errors
+       if (process.env.NODE_ENV === 'test' && !process.env.TEST_DEBUG) {
+         return; // Skip WAL mode setup in tests unless debug logging is enabled
+       }
 
-      // Verify WAL mode is active
-      const journalMode = await prisma.$queryRaw`PRAGMA journal_mode` as Array<{ journal_mode: string }>;
-      if (journalMode[0]?.journal_mode === 'wal') {
-        console.log('✅ SQLite WAL mode enabled successfully');
-      } else {
-        console.warn('⚠️ SQLite WAL mode may not be active');
-      }
-    } catch (error) {
-      console.warn('Failed to optimize SQLite settings:', error);
-      // Don't throw - these are optimizations, not requirements
-    }
-  }
+       // Use $queryRaw for PRAGMA statements that return values, then ignore the result
+       await prisma.$queryRaw`PRAGMA journal_mode = WAL`;
+       await prisma.$queryRaw`PRAGMA synchronous = NORMAL`;
+       await prisma.$queryRaw`PRAGMA cache_size = 10000`;
+       await prisma.$queryRaw`PRAGMA temp_store = memory`;
+
+       // Verify WAL mode is active
+       const journalMode = await prisma.$queryRaw`PRAGMA journal_mode` as Array<{ journal_mode: string }>;
+       if (journalMode[0]?.journal_mode === 'wal') {
+         if (process.env.TEST_DEBUG) {
+           console.log('✅ SQLite WAL mode enabled successfully');
+         }
+       } else {
+         if (process.env.TEST_DEBUG) {
+           console.warn('⚠️ SQLite WAL mode may not be active');
+         }
+       }
+     } catch (error) {
+       // Suppress WAL mode errors in test environment to prevent "Cannot log after tests are done" warnings
+       if (process.env.NODE_ENV === 'test' && !process.env.TEST_DEBUG) {
+         return; // Silently ignore WAL mode failures in tests
+       }
+
+       if (process.env.TEST_DEBUG) {
+         console.warn('Failed to optimize SQLite settings:', error);
+       }
+       // Don't throw - these are optimizations, not requirements
+     }
+   }
 
   /**
    * Reset database for test suite (fast cleanup)
@@ -197,7 +234,9 @@ export class TestDatabaseManager {
     const prisma = this.prismaClients.get(dbKey);
 
     if (!prisma) {
-      console.warn(`No database client found for ${suiteType} tests`);
+      if (process.env.TEST_DEBUG) {
+        console.warn(`No database client found for ${suiteType} tests`);
+      }
       return;
     }
 
@@ -217,7 +256,9 @@ export class TestDatabaseManager {
             try {
               await tx.$executeRaw`DELETE FROM ${table}`;
             } catch (error) {
-              console.warn(`Failed to truncate ${table}:`, error);
+              if (process.env.TEST_DEBUG) {
+                console.warn(`Failed to truncate ${table}:`, error);
+              }
             }
           }
 
@@ -231,10 +272,14 @@ export class TestDatabaseManager {
       });
 
       const duration = performance.now() - startTime;
-      console.log(`✅ Database reset for ${suiteType} tests in ${duration.toFixed(2)}ms`);
+      if (process.env.TEST_DEBUG) {
+        console.log(`✅ Database reset for ${suiteType} tests in ${duration.toFixed(2)}ms`);
+      }
 
     } catch (error) {
-      console.error(`❌ Failed to reset ${suiteType} test database:`, error);
+      if (process.env.TEST_DEBUG) {
+        console.error(`❌ Failed to reset ${suiteType} test database:`, error);
+      }
       throw error;
     }
   }
@@ -267,58 +312,74 @@ export class TestDatabaseManager {
   }
 
   /**
-   * Clean up all databases and connections
-   */
-  public async cleanup(): Promise<void> {
-    console.log('🧹 Cleaning up test databases...');
+    * Clean up all databases and connections
+    */
+   public async cleanup(): Promise<void> {
+     if (process.env.TEST_DEBUG) {
+       console.log('🧹 Cleaning up test databases...');
+     }
 
-    // Close all Prisma clients
-    for (const [dbKey, prisma] of this.prismaClients.entries()) {
-      try {
-        await prisma.$disconnect();
-        console.log(`✅ Closed database connection for ${dbKey}`);
-      } catch (error) {
-        console.warn(`⚠️ Error closing database connection for ${dbKey}:`, error);
-      }
-    }
+     // Close all Prisma clients
+     for (const [dbKey, prisma] of this.prismaClients.entries()) {
+       try {
+         await prisma.$disconnect();
+         if (process.env.TEST_DEBUG) {
+           console.log(`✅ Closed database connection for ${dbKey}`);
+         }
+       } catch (error) {
+         if (process.env.TEST_DEBUG) {
+           console.warn(`⚠️ Error closing database connection for ${dbKey}:`, error);
+         }
+       }
+     }
 
-    this.prismaClients.clear();
+     this.prismaClients.clear();
 
-    // Clean up database files (both in root and prisma directory)
-    const potentialPaths = ['unit', 'integration'];
-    for (const suiteType of potentialPaths) {
-      const dbKey = `test-${suiteType}`;
-      const rootPath = `${process.cwd()}/test-db-${suiteType}.sqlite`;
-      const prismaPath = `${process.cwd()}/prisma/test-db-${suiteType}.sqlite`;
+     // Clean up database files (both in root and prisma directory)
+     const potentialPaths = ['unit', 'integration'];
+     for (const suiteType of potentialPaths) {
+       const dbKey = `test-${suiteType}`;
+       const rootPath = `${process.cwd()}/test-db-${suiteType}.sqlite`;
+       const prismaPath = `${process.cwd()}/prisma/test-db-${suiteType}.sqlite`;
 
-      // Clean up root location
-      if (existsSync(rootPath)) {
-        try {
-          unlinkSync(rootPath);
-          console.log(`✅ Removed database file: ${rootPath}`);
-        } catch (error) {
-          console.warn(`⚠️ Error removing database file ${rootPath}:`, error);
-        }
-      }
+       // Clean up root location
+       if (existsSync(rootPath)) {
+         try {
+           unlinkSync(rootPath);
+           if (process.env.TEST_DEBUG) {
+             console.log(`✅ Removed database file: ${rootPath}`);
+           }
+         } catch (error) {
+           if (process.env.TEST_DEBUG) {
+             console.warn(`⚠️ Error removing database file ${rootPath}:`, error);
+           }
+         }
+       }
 
-      // Clean up prisma directory location
-      if (existsSync(prismaPath)) {
-        try {
-          unlinkSync(prismaPath);
-          console.log(`✅ Removed database file: ${prismaPath}`);
-        } catch (error) {
-          console.warn(`⚠️ Error removing database file ${prismaPath}:`, error);
-        }
-      }
+       // Clean up prisma directory location
+       if (existsSync(prismaPath)) {
+         try {
+           unlinkSync(prismaPath);
+           if (process.env.TEST_DEBUG) {
+             console.log(`✅ Removed database file: ${prismaPath}`);
+           }
+         } catch (error) {
+           if (process.env.TEST_DEBUG) {
+             console.warn(`⚠️ Error removing database file ${prismaPath}:`, error);
+           }
+         }
+       }
 
-      // Clean up from our tracking maps
-      this.databasePaths.delete(dbKey);
-      this.isInitialized.delete(dbKey);
-      this.initializationMetrics.delete(dbKey);
-    }
+       // Clean up from our tracking maps
+       this.databasePaths.delete(dbKey);
+       this.isInitialized.delete(dbKey);
+       this.initializationMetrics.delete(dbKey);
+     }
 
-    console.log('✅ Test database cleanup completed');
-  }
+     if (process.env.TEST_DEBUG) {
+       console.log('✅ Test database cleanup completed');
+     }
+   }
 
   /**
    * Health check for database connections
@@ -331,14 +392,18 @@ export class TestDatabaseManager {
       const prisma = this.prismaClients.get(dbKey);
 
       if (!prisma) {
-        console.warn(`❌ No database client for ${suite} tests`);
+        if (process.env.TEST_DEBUG) {
+          console.warn(`❌ No database client for ${suite} tests`);
+        }
         return false;
       }
 
       try {
         await prisma.$queryRaw`SELECT 1`;
       } catch (error) {
-        console.error(`❌ Health check failed for ${suite} tests:`, error);
+        if (process.env.TEST_DEBUG) {
+          console.error(`❌ Health check failed for ${suite} tests:`, error);
+        }
         return false;
       }
     }

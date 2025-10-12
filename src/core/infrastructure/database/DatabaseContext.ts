@@ -96,9 +96,11 @@ export class DatabaseContext {
 
   constructor(config: DatabaseContextConfig) {
     // Initialize PrismaClient with database URL
+    // Disable Prisma logging in test environments to prevent async logging warnings
+    const isTestEnvironment = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
     this.prisma = new PrismaClient({
       datasourceUrl: config.databaseUrl,
-      log: config.enablePerformanceMonitoring !== false ? ['error', 'warn'] : ['error'],
+      log: (config.enablePerformanceMonitoring !== false && !isTestEnvironment) ? ['error', 'warn'] : [],
     });
 
     // Configure performance monitoring

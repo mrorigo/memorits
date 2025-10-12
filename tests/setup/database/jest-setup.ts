@@ -14,7 +14,9 @@ declare global {
 }
 
 export async function initializeTestDatabases() {
-  console.log('🚀 Initializing test databases...');
+  if (process.env.TEST_DEBUG) {
+    console.log('🚀 Initializing test databases...');
+  }
 
   globalThis.__TEST_DB_MANAGER__ = TestDatabaseManager.getInstance();
   globalThis.__TEST_ISOLATION_MANAGERS__ = new Map();
@@ -30,16 +32,22 @@ export async function initializeTestDatabases() {
       throw new Error('Test database health check failed');
     }
 
-    console.log('✅ Test databases initialized successfully');
+    if (process.env.TEST_DEBUG) {
+      console.log('✅ Test databases initialized successfully');
+    }
 
   } catch (error) {
-    console.error('❌ Failed to initialize test databases:', error);
+    if (process.env.TEST_DEBUG) {
+      console.error('❌ Failed to initialize test databases:', error);
+    }
     throw error;
   }
 }
 
 // Initialize databases when this module is loaded
 initializeTestDatabases().catch((error) => {
-  console.error('Failed to initialize test databases during setup:', error);
+  if (process.env.TEST_DEBUG) {
+    console.error('Failed to initialize test databases during setup:', error);
+  }
   process.exit(1);
 });
