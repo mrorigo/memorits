@@ -11,12 +11,15 @@ Memorits operates in two fundamental modes for processing conversational data in
 **Automatic, real-time memory processing** that captures and processes conversations immediately as they occur.
 
 ```typescript
-import { Memori } from 'memorits';
+import { Memori, ConfigManager } from 'memorits';
 
-const memori = new Memori({
+const config = ConfigManager.loadConfig();
+Object.assign(config, {
   autoIngest: true,        // Enable automatic processing
   consciousIngest: false,  // Disable conscious mode
 });
+
+const memori = new Memori(config);
 
 // Enable the memory system
 await memori.enable();
@@ -24,7 +27,11 @@ await memori.enable();
 // Conversations are automatically processed when recorded
 const chatId = await memori.recordConversation(
   "What's the best way to implement a search algorithm?",
-  "For most applications, I'd recommend starting with a simple linear search..."
+  "For most applications, I'd recommend starting with a simple linear search...",
+  {
+    model: 'gpt-4o-mini',
+    sessionId: 'search-discussion'
+  }
 );
 ```
 
@@ -55,22 +62,28 @@ interface AutoIngestionConfig {
 **Background processing with human-like reflection** that accumulates conversations and processes them thoughtfully over time.
 
 ```typescript
-const memori = new Memori({
+const config = ConfigManager.loadConfig();
+Object.assign(config, {
   autoIngest: false,       // Disable automatic processing
   consciousIngest: true,   // Enable conscious mode
-  backgroundInterval: 30000, // Check every 30 seconds
 });
+
+const memori = new Memori(config);
 
 // Enable with conscious processing
 await memori.enable();
 
-// Start background monitoring
+// Configure background monitoring
 memori.setBackgroundUpdateInterval(60000); // Check every minute
 
 // Conversations are stored but not immediately processed
 const chatId = await memori.recordConversation(
   "I need to remember this complex algorithm explanation",
-  "Here's a detailed walkthrough of the algorithm..."
+  "Here's a detailed walkthrough of the algorithm...",
+  {
+    model: 'gpt-4o-mini',
+    sessionId: 'algorithm-discussion'
+  }
 );
 
 // Check for new memories to process
@@ -208,6 +221,7 @@ const chatId = await memori.recordConversation(
   aiOutput,
   {
     model: 'gpt-4o-mini',
+    sessionId: 'user-session',
     metadata: { source: 'chat_interface' }
   }
 );
@@ -239,11 +253,9 @@ const processedMemory = await memoryAgent.processConversation({
 Processed memories are stored with full metadata:
 
 ```typescript
-const memoryId = await dbManager.storeLongTermMemory(
-  processedMemory,
-  chatId,
-  namespace
-);
+// Note: storeLongTermMemory is handled internally by the Memori class
+// The processed memory is stored automatically during conversation recording
+// when auto-ingestion is enabled
 ```
 
 ### 4. Retrieval Phase
@@ -396,16 +408,14 @@ Memory operations include comprehensive error handling:
 
 ```typescript
 try {
-  const chatId = await memori.recordConversation(userInput, aiOutput);
+  const chatId = await memori.recordConversation(userInput, aiOutput, {
+    model: 'gpt-4o-mini',
+    sessionId: 'user-session'
+  });
   const memories = await memori.searchMemories(query);
 } catch (error) {
-  if (error instanceof MemoryError) {
-    // Handle memory-specific errors
-    console.error('Memory operation failed:', error.message);
-  } else {
-    // Handle general errors
-    console.error('Unexpected error:', error);
-  }
+  // Handle memory operation errors
+  console.error('Memory operation failed:', error instanceof Error ? error.message : String(error));
 }
 ```
 

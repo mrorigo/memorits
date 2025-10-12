@@ -47,14 +47,10 @@ class SimpleMemoryApp {
   }
 
   async showMemoryStats() {
-    // Get memory statistics
-    const stats = await this.memori.getDatabaseStats();
-    console.log('Memory Statistics:', {
-      totalMemories: stats.totalMemories,
-      shortTermMemories: stats.shortTermMemories,
-      longTermMemories: stats.longTermMemories,
-      databaseSize: stats.databaseSize
-    });
+    // Note: Database statistics are available through the DatabaseManager
+    // This would typically be accessed for monitoring and analytics
+    console.log('Memory system is operational');
+    console.log('Use database queries to get detailed statistics');
   }
 }
 
@@ -566,7 +562,8 @@ console.log('Areas needing attention:', weakAreas);
 ## 6. Context-Aware AI Assistant
 
 ```typescript
-import { createMemoriOpenAI, Memori, ConfigManager } from 'memorits';
+import { Memori, ConfigManager } from 'memorits';
+import { createMemoriOpenAI } from 'memorits/integrations/openai';
 
 class ContextAwareAssistant {
   private client: any;

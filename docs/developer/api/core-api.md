@@ -496,7 +496,9 @@ class ValidationError extends Error {
 ### Complete Application Example
 
 ```typescript
-import { Memori, ConfigManager, createMemoriOpenAI, SearchStrategy } from 'memorits';
+import { Memori, ConfigManager } from 'memorits';
+import { createMemoriOpenAI } from 'memorits/integrations/openai';
+import { SearchStrategy } from 'memorits/core/domain/search/types';
 
 class MemoryEnabledApplication {
   private memori: Memori;
@@ -573,7 +575,7 @@ class MemoryEnabledApplication {
 ### Configuration Example
 
 ```typescript
-import { MemoriConfigSchema } from 'memorits';
+import { MemoriConfigSchema } from 'memorits/core/infrastructure/config/ConfigManager';
 
 // Load configuration with validation
 const config = MemoriConfigSchema.parse({

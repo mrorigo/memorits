@@ -78,12 +78,8 @@ This developer documentation is organized to help you build sophisticated AI age
 - **[Metadata Filtering](advanced-features/metadata-filtering.md)** - Advanced metadata-based queries
 - **[Duplicate Management](advanced-features/duplicate-management.md)** - Consolidation and cleanup strategies with service-oriented architecture
 - **[Conscious Processing](advanced-features/conscious-processing.md)** - Background memory processing
-- **[Relationship Processing](advanced-features/relationship-processing.md)** - LLM-powered relationship extraction and graph analysis
-- **[Memory State Management](advanced-features/memory-state-management.md)** - Enterprise-grade processing state tracking
 - **[Configuration Management](advanced-features/configuration-management.md)** - Runtime configuration with persistence and audit trails
 - **[Performance Monitoring](advanced-features/performance-monitoring.md)** - Real-time dashboards and analytics
-- **[Error Handling](advanced-features/error-handling.md)** - Circuit breaker patterns and recovery mechanisms
-- **[Search Index Maintenance](advanced-features/search-index-maintenance.md)** - Automated optimization and health monitoring
 - **[Consolidation Service Architecture](advanced-features/consolidation-service-architecture.md)** - Service-oriented design for memory consolidation
 - **[Service Monitoring](advanced-features/service-monitoring-metrics.md)** - Performance monitoring and metrics collection
 

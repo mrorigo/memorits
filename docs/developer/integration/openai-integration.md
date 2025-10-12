@@ -16,7 +16,7 @@ import OpenAI from 'openai';
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // After (MemoriOpenAI drop-in)
-import { MemoriOpenAI } from 'memorits';
+import { MemoriOpenAI } from 'memorits/integrations/openai-dropin/client';
 const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
   enableChatMemory: true,
   autoInitialize: true

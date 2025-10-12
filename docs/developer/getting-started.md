@@ -69,20 +69,21 @@ console.log(`Found ${relevantMemories.length} relevant memories`);
 For production applications, enable automated consolidation to manage duplicate memories:
 
 ```typescript
-// Get the database manager for advanced operations
-const dbManager = (memori as any).dbManager;
-
 // Start automated consolidation (recommended for production)
-dbManager.startConsolidationScheduling({
-  intervalMinutes: 60,        // Run every hour
-  maxConsolidationsPerRun: 50, // Process max 50 consolidations per run
-  similarityThreshold: 0.7,    // 70% similarity threshold
-  dryRun: false               // Perform actual consolidation
+// Note: Consolidation runs automatically in the background when enabled
+// Use environment variables to configure:
+process.env.MEMORI_ENABLE_CONSOLIDATION = 'true';
+process.env.MEMORI_CONSOLIDATION_INTERVAL_MINUTES = '60';
+
+// Or configure programmatically by restarting Memori with new config
+const config = ConfigManager.loadConfig();
+Object.assign(config, {
+  enableConsolidation: true,
+  consolidationIntervalMinutes: 60
 });
 
-// Monitor consolidation performance
-const metrics = await dbManager.getConsolidationPerformanceMetrics();
-console.log(`Consolidation success rate: ${metrics.consolidationSuccessRate}%`);
+const memori = new Memori(config);
+await memori.enable();
 ```
 
 ## Configuration Options
@@ -193,7 +194,10 @@ const config = MemoriConfigSchema.parse({
 const chatId = await memori.recordConversation(
   'I am building an AI assistant for developers',
   'Great! I\'ll help you build an AI assistant. What kind of features do you need?',
-  'gpt-4o-mini'
+  {
+    model: 'gpt-4o-mini',
+    sessionId: 'dev-session-1'
+  }
 );
 
 console.log('Recorded conversation:', chatId);
