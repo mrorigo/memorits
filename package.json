@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A type-safe memory engine for AI conversations with OpenAI integration. TypeScript port of the original Memori project by GibsonAI, created by mrorigo with AI assistance from Roo Code (code-supernova model).",
   "license": "Apache-2.0",
-  "author": "mrorigo",
+  "author": "mrorigo@gmail.com (mrorigo)",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "exports": {
@@ -36,12 +36,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/mrorigo/memori-port.git"
+    "url": "https://github.com/mrorigo/memorits.git"
   },
   "bugs": {
-    "url": "https://github.com/mrorigo/memori-port/issues"
+    "url": "https://github.com/mrorigo/memorits/issues"
   },
-  "homepage": "https://github.com/mrorigo/memori-port#readme",
+  "homepage": "https://github.com/mrorigo/memorits#readme",
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build && npm run test",
@@ -82,7 +82,6 @@
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
-    "date-fns": "^4.1.0",
     "openai": "^5.23.0",
     "uuid": "^13.0.0",
     "winston": "^3.14.2",
