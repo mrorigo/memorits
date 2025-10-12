@@ -12,7 +12,7 @@
  */
 
 import { PerformanceDashboardService } from '../src/core/performance/PerformanceDashboard';
-import { logInfo, logError, logWarn } from '../src/core/utils/Logger';
+import { logInfo, logError, logWarn } from '../src/core/infrastructure/config/Logger';
 
 async function performanceDashboardExample(): Promise<void> {
   logInfo('🚀 Starting Performance Dashboard Example', {

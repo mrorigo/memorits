@@ -7,10 +7,10 @@
  */
 
 import { Memori, ConfigManager } from '../src/index';
-import { SearchStrategy } from '../src/core/search/types';
+import { SearchStrategy } from '../src/core/domain/search/types';
 import { MemoryClassification, MemoryImportanceLevel } from '../src/core/types/models';
 
-import { logInfo, logError } from '../src/core/utils/Logger';
+import { logInfo, logError } from '../src/core/infrastructure/config/Logger';
 
 async function advancedMemorySearchExample(): Promise<void> {
   logInfo('🚀 Starting Advanced Memory Search and Retrieval Example...\n', {

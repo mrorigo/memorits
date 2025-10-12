@@ -6,7 +6,7 @@
  */
 
 import { Memori, ConfigManager } from '../src/index';
-import { logInfo, logError } from '../src/core/utils/Logger';
+import { logInfo, logError } from '../src/core/infrastructure/config/Logger';
 
 async function basicUsageExample(): Promise<void> {
   logInfo('🚀 Starting Basic Memori Usage Example', { component: 'basic-usage-example' });

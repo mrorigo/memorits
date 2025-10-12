@@ -6,7 +6,7 @@
  */
 
 import { Memori, ConfigManager } from '../../src/index';
-import { logInfo, logError } from '../../src/core/utils/Logger';
+import { logInfo, logError } from '../../src/core/infrastructure/config/Logger';
 
 async function createIndexBackup(): Promise<void> {
   logInfo('💾 Creating search index backup...', { component: 'index-backup' });

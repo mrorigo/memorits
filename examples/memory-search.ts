@@ -7,7 +7,7 @@
 
 import { Memori, ConfigManager } from '../src/index';
 
-import { logInfo, logError } from '../src/core/utils/Logger';
+import { logInfo, logError } from '../src/core/infrastructure/config/Logger';
 
 async function memorySearchExample(): Promise<void> {
   logInfo('🚀 Starting Memory Search and Retrieval Example...\n', { component: 'memory-search-example' });

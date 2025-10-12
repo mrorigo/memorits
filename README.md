@@ -15,6 +15,34 @@ Memorits delivers enterprise-grade memory management for AI applications - featu
 
 ---
 
+## Table of Contents
+
+- [Why Memorits?](#why-memorits)
+- [Quick Start](#quick-start)
+  - [Installation](#installation)
+  - [Basic Usage](#basic-usage)
+  - [OpenAI Drop-in Replacement](#openai-drop-in-replacement)
+- [Core API](#core-api)
+  - [Memory Management](#memory-management)
+  - [Memory Consolidation](#memory-consolidation)
+  - [Index Management](#index-management)
+- [OpenAI Drop-in Replacement](#openai-drop-in-replacement-1)
+  - [Quick Migration](#quick-migration)
+  - [Initialization Patterns](#initialization-patterns)
+  - [Advanced Usage](#advanced-usage)
+  - [Configuration](#configuration)
+  - [Environment Variables](#environment-variables)
+- [Migration Guide](#migration-guide)
+- [Architecture Overview](#architecture-overview)
+- [Key Features](#key-features)
+- [Enterprise Features](#enterprise-features)
+- [Real-World Example](#real-world-example)
+- [Architecture Deep Dive](#architecture-deep-dive)
+- [Development](#development)
+- [Dual Attribution](#dual-attribution)
+
+---
+
 ## Why Memorits?
 
 **In enterprise AI applications, conversational context is mission-critical.** Every interaction represents institutional knowledge, compliance requirements, and business value that must be captured, preserved, and made instantly accessible across your entire organization.
@@ -360,7 +388,7 @@ const client = new MemoriOpenAI(apiKey, { enableChatMemory: true });
 
 ---
 
-## Project Structure & Architecture
+## Architecture Overview
 
 Memorits follows **Domain-Driven Design (DDD)** principles with a clear separation of concerns:
 
@@ -378,12 +406,7 @@ src/
 │   │   ├── database/               # Database Access & Repository Infrastructure
 │   │   └── providers/              # External Service Provider Infrastructure
 │   ├── types/                      # 📋 Shared Type Definitions
-│   ├── agents/                     # 🤖 Agent Implementations
-│   ├── database/                   # 💾 Database Services (Consolidation, Performance)
-│   ├── memory/                     # 🧠 Memory Services (Consolidation, State)
-│   ├── performance/                # ⚡ Performance Monitoring & Analytics
-│   ├── providers/                  # 🔗 Provider Services (OpenAI, etc.)
-│   └── utils/                      # 🛠️ Core Utilities
+│   └── performance/                # ⚡ Performance Monitoring & Analytics
 ├── integrations/                   # 🔗 External Integrations
 │   └── openai-dropin/              # OpenAI Drop-in Replacement
 └── index.ts                        # 🚪 Main Entry Point
@@ -419,18 +442,7 @@ src/
 - **👥 Better Team Organization**: Teams can own specific domains without conflicts
 - **📈 Scalable Architecture**: Each domain can evolve independently as business needs grow
 
-**💻 Developer Experience**
-- **🗺️ Intuitive Navigation**: Logical organization makes code easy to find and understand
-- **🔍 Clear Dependencies**: Explicit interfaces between domains reduce coupling
-- **📚 Self-Documenting**: Domain structure clearly communicates business capabilities
-
-**🏗️ Strategic Benefits**
-- **🔮 Future-Proof Foundation**: Architecture supports complex business requirements evolution
-- **🎛️ Technology Flexibility**: Infrastructure choices can change without affecting business logic
-- **📊 Enterprise Alignment**: Structure mirrors business organization and processes
-
 ---
-
 
 ## Key Features
 
@@ -441,7 +453,6 @@ src/
 - **Metadata inclusion**: Get rich context with timestamps, sources, and relationships
 - **Full-text search**: Lightning-fast search across all memory content
 - **Filter Expressions**: Advanced boolean logic with field comparisons, ranges, and operators
-- **Filter Templates**: Pre-built filter templates for common search scenarios
 - **Multi-Strategy Search**: Intelligent orchestration of FTS5, LIKE, semantic, and relationship search strategies
 - **Relationship-based Search**: Find memories connected through relationship graphs with traversal capabilities
 
@@ -575,9 +586,7 @@ const previousDiscussions = await memori.searchMemories('authentication system',
 
 ---
 
-## Architecture
-
-Memorits is built on a foundation of enterprise-grade technologies designed for production deployment:
+## Architecture Deep Dive
 
 ### 🏗️ **Domain-Driven Design Architecture**
 - **Domain Layer** (`src/core/domain/`) - Pure business logic organized by bounded contexts:
@@ -607,6 +616,65 @@ Memorits is built on a foundation of enterprise-grade technologies designed for 
 - **Connection Pooling** - Database connection management for high-throughput applications
 - **Background Processing** - Asynchronous operations with queue management
 - **Resource Management** - Memory-efficient processing with configurable limits
+
+---
+
+## Development
+
+### Build & Test
+
+```bash
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Watch tests during development
+npm run test:watch
+
+# Lint code
+npm run lint
+
+# Database management
+npm run prisma:studio
+```
+
+### Examples
+
+Run example scripts to see Memorits in action:
+
+```bash
+# Basic usage
+npm run example:basic
+
+# OpenAI integration
+npm run example:openai
+
+# Advanced search features
+npm run example:advanced-search
+
+# Memory consolidation
+npm run example:consolidation
+
+# Performance dashboard
+npm run example:performance-dashboard
+
+# Index management
+npm run index:health
+npm run index:optimize
+npm run index:backup
+```
+
+### Project Structure
+
+The codebase follows Domain-Driven Design principles:
+
+- **`src/core/domain/`** - Business logic organized by bounded contexts
+- **`src/core/infrastructure/`** - Technical implementations and external concerns
+- **`src/integrations/`** - External system integrations
+- **`examples/`** - Usage examples and demonstrations
+- **`tests/`** - Comprehensive test coverage
 
 ---
 
@@ -654,35 +722,6 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 
 ---
 
-## Development
-
-```bash
-# Run tests
-npm test
-
-# Watch tests during development
-npm run test:watch
-
-# Lint code
-npm run lint
-
-# Database management
-npm run prisma:studio
-
-# Run examples
-npm run example:openai
-npm run example:ollama
-npm run example:search
-npm run example:advanced-search
-npm run example:search-strategy
-npm run example:performance-dashboard
-npm run example:consolidation
-
-- **npm run example:advanced-search**: Comprehensive demonstration of all search strategies, advanced filtering, performance monitoring, and error handling
-```
-
----
-
 <div align="center">
   <p>
     <strong>🚀 Ready to give your AI enterprise-grade memory?</strong>
@@ -696,484 +735,3 @@ npm run example:consolidation
     <strong>🏢 Enterprise-grade • Production-designed • Mission-capable</strong>
   </p>
 </div>
-
-## Quick Start
-
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Set up environment:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your OpenAI API key
-   ```
-
-3. Initialize database:
-   ```bash
-   npm run prisma:push
-   ```
-
-4. Build and run:
-   ```bash
-   npm run build
-   npm start
-   ```
-
-## Usage
-
-```typescript
-import { Memori, ConfigManager, createMemoriOpenAI } from 'memorits';
-
-const config = ConfigManager.loadConfig();
-const memori = new Memori(config);
-
-await memori.enable();
-
-// Create OpenAI client with automatic memory recording
-const openaiClient = createMemoriOpenAI(memori, config.apiKey);
-
-// Use normally - conversations are automatically recorded
-const response = await openaiClient.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: 'Hello world!' }],
-});
-
-// Search memories with advanced options
-const memories = await memori.searchMemories('world', {
-  limit: 5,
-  minImportance: 'high',
-  categories: ['essential', 'contextual']
-});
-
-// Search with basic options
-const basicSearch = await memori.searchMemories('world', { limit: 10 });
-
-// Advanced search with filtering
-const filteredMemories = await memori.searchMemories('programming', {
-  limit: 20,
-  minImportance: 'high', // Only show high+ importance memories
-  categories: ['essential', 'contextual'], // Filter by memory categories
-  includeMetadata: true // Include additional metadata
-});
-
-// Advanced filter expressions
-const advancedResults = await memori.searchMemories('', {
-  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
-  limit: 10
-});
-
-// Memory consolidation
-const consolidationResult = await memori.consolidateDuplicateMemories(
-  'memory-id-1',
-  ['memory-id-2', 'memory-id-3']
-);
-
-if (consolidationResult.consolidated > 0) {
-  console.log(`Consolidated ${consolidationResult.consolidated} duplicate memories`);
-}
-
-// Search with relationships
-const relationshipSearch = await memori.searchMemories('related to project setup', {
-  includeRelatedMemories: true,
-  maxRelationshipDepth: 2
-});
-
-// Get index health report
-const healthReport = await memori.getIndexHealthReport();
-console.log(`Index health: ${healthReport.health}`);
-console.log(`Issues found: ${healthReport.issues.length}`);
-
-// Optimize search index
-const optimizationResult = await memori.optimizeIndex('merge');
-console.log(`Optimization saved ${optimizationResult.spaceSaved} bytes`);
-```
-
-## Advanced Features
-
-### ⚙️ Advanced Configuration Management
-
-Memorits now features enterprise-grade configuration management with:
-
-#### **FileConfigurationPersistenceManager**
-- **Real File System Operations**: Persistent configuration storage with automatic directory management
-- **Enhanced Backup System**: Metadata-rich backups with integrity verification using SHA-256 checksums
-- **Automatic Directory Management**: Creates and manages configuration directories with proper permissions
-- **Backup Rotation**: Configurable retention policies with automatic cleanup of old backups
-
-```typescript
-import { SearchStrategyConfigManager, FileConfigurationPersistenceManager } from 'memorits';
-
-// Create persistence manager with custom config directory
-const persistenceManager = new FileConfigurationPersistenceManager('./config/search');
-
-// Create configuration manager
-const configManager = new SearchStrategyConfigManager(persistenceManager);
-
-// Save configuration with automatic backup
-await configManager.saveConfiguration('FTS5', {
-  strategyName: 'FTS5',
-  enabled: true,
-  priority: 10,
-  performance: {
-    enableCaching: true,
-    cacheSize: 1000,
-    enableParallelExecution: false,
-  },
-  strategySpecific: {
-    bm25Weights: { title: 2.0, content: 1.0, category: 1.5 }
-  }
-});
-
-// Create backup with metadata
-const backup = await persistenceManager.backup('FTS5');
-console.log(`Backup created: ${backup.id}, Size: ${backup.fileSize}, Checksum: ${backup.checksum}`);
-
-// Restore from backup with integrity validation
-const restoredConfig = await persistenceManager.restoreWithValidation('FTS5', backup.id);
-```
-
-#### **Runtime Configuration Management**
-- **Dynamic Updates**: Modify search strategies without service restart
-- **Configuration Notifications**: Real-time change notifications for strategy updates
-- **Comprehensive Audit Trails**: Complete history tracking of all configuration changes
-- **Strategy Reconfiguration**: Hot-swapping of search strategy parameters
-
-```typescript
-// Get current configuration
-const currentConfig = await configManager.loadConfiguration('FTS5');
-
-// Update configuration dynamically
-const updatedConfig = configManager.mergeConfigurations(currentConfig!, {
-  priority: 15,
-  performance: {
-    cacheSize: 2000,
-    enableCaching: true
-  }
-});
-
-// Save with audit trail
-await configManager.saveConfiguration('FTS5', updatedConfig);
-
-// Get audit history
-const history = await configManager.getAuditHistory('FTS5', 10);
-console.log('Configuration changes:', history);
-
-// Get performance analytics
-const analytics = configManager.getPerformanceAnalytics();
-console.log(`Cache hit rate: ${analytics.cacheEfficiency * 100}%`);
-console.log(`Average operation latency: ${analytics.averageLatency}ms`);
-```
-
-#### **Configuration Performance Monitoring**
-- **Real-time Metrics**: Operation latency, throughput, and error rate tracking
-- **Performance Analytics**: Detailed performance reports with recommendations
-- **Trend Analysis**: Historical performance analysis with predictions
-- **Alert Integration**: Performance threshold monitoring and alerting
-
-```typescript
-// Get performance metrics
-const metrics = configManager.getPerformanceMetrics();
-console.log(`Total operations: ${metrics.totalOperations}`);
-console.log(`Average latency: ${metrics.averageOperationTime}ms`);
-console.log(`Cache hit rate: ${metrics.cacheHitRate}`);
-
-// Get detailed performance report
-const report = configManager.getConfigurationPerformanceReport();
-console.log('Performance summary:', report.summary);
-console.log('Recommendations:', report.recommendations);
-
-// Get recent operation metrics
-const recentOps = configManager.getRecentOperationMetrics(50);
-console.log(`Recent operations: ${recentOps.length}`);
-```
-
-### 🛡️ Enterprise Error Handling
-
-#### **Circuit Breaker Pattern**
-- **Fault Tolerance**: Automatic failure detection and recovery
-- **Strategy-specific Recovery**: Individual error handling per search strategy
-- **Enhanced Error Context**: Detailed error information with stack traces and context
-- **Graceful Degradation**: Fallback mechanisms when strategies fail
-
-```typescript
-// Circuit breaker automatically handles strategy failures
-const searchService = new SearchService(dbManager, configManager);
-
-// Search continues even if one strategy fails
-const results = await searchService.searchWithStrategy(query, SearchStrategy.FTS5);
-
-// Get error context for debugging
-const errorContext = searchService.getLastError();
-if (errorContext) {
-  console.log(`Strategy: ${errorContext.strategy}`);
-  console.log(`Error: ${errorContext.message}`);
-  console.log(`Recovery action: ${errorContext.recoveryAction}`);
-}
-```
-
-#### **Error Recovery Mechanisms**
-- **Automatic Retry**: Configurable retry policies with exponential backoff
-- **Fallback Strategies**: Alternative search approaches when primary fails
-- **Error Classification**: Categorization of errors by severity and type
-- **Recovery Tracking**: Monitoring and reporting of recovery success rates
-
-### 📊 Performance Monitoring & Analytics
-
-#### **Real-time Performance Dashboard**
-- **Live Metrics**: Real-time collection of performance data
-- **Visual Widgets**: Configurable dashboard with charts and indicators
-- **Alert System**: Proactive monitoring with customizable thresholds
-- **Trend Analysis**: Historical analysis with predictive capabilities
-
-```typescript
-import { PerformanceDashboardService } from 'memorits';
-
-const dashboard = new PerformanceDashboardService();
-dashboard.initializeDashboard();
-
-// Get system status overview
-const status = dashboard.getSystemStatusOverview();
-console.log(`Overall health: ${status.overallHealth}`);
-console.log(`Active alerts: ${status.activeAlerts}`);
-
-// Get real-time metrics
-const metrics = dashboard.getRealTimeMetrics('search', 'latency', 100);
-console.log(`Recent search latency: ${metrics.map(m => m.value).join(', ')}`);
-
-// Set up alert callbacks
-dashboard.addAlertCallback((alert) => {
-  console.log(`Alert: ${alert.title} - ${alert.description}`);
-  if (alert.severity === 'critical') {
-    // Trigger incident response
-    notifyOnCall(alert);
-  }
-});
-```
-
-#### **Comprehensive Analytics**
-- **Performance Reports**: Automated report generation with insights
-- **Cross-component Analysis**: Correlation analysis across system components
-- **Resource Utilization**: Memory, CPU, and I/O efficiency tracking
-- **Predictive Analytics**: Trend-based performance predictions
-
-### Enhanced Search API
-
-The search API now supports advanced filtering options including filter expressions and relationship search:
-
-```typescript
-interface SearchOptions {
-  limit?: number;                    // Number of results (default: 5)
-  minImportance?: MemoryImportanceLevel; // Filter by importance level
-  categories?: MemoryClassification[];   // Filter by memory categories
-  includeMetadata?: boolean;         // Include additional metadata
-  filterExpression?: string;         // Advanced filter expression with boolean logic
-  includeRelatedMemories?: boolean;  // Include related memories in results
-  maxRelationshipDepth?: number;     // Maximum depth for relationship traversal
-  searchStrategy?: SearchStrategy;   // Force specific search strategy
-}
-
-// Search with importance filtering
-const importantMemories = await memori.searchMemories('critical', {
-  minImportance: 'high' // Only show high importance and above
-});
-
-// Search specific categories
-const technicalMemories = await memori.searchMemories('code', {
-  categories: ['essential', 'reference'] // Only technical memories
-});
-
-// Advanced filter expressions
-const recentImportantMemories = await memori.searchMemories('', {
-  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
-  limit: 20
-});
-
-// Complex boolean filter expressions
-const complexSearch = await memori.searchMemories('', {
-  filterExpression: '(category = "essential" OR category = "contextual") AND importance_score >= 0.6 AND created_at BETWEEN "2024-01-01" AND "2024-12-31"',
-  limit: 50
-});
-
-// Filter templates (pre-registered)
-const templateSearch = await memori.searchMemories('', {
-  filterExpression: 'recent_important: { days_ago: "7" }', // Template with parameters
-  limit: 10
-});
-
-### 🔗 Advanced Memory Relationship Processing
-
-#### **LLM-Powered Relationship Extraction**
-- **OpenAI Integration**: Advanced relationship analysis using GPT models
-- **Relationship Type Detection**: Automatic identification of continuation, reference, related, superseding, and contradictory relationships
-- **Confidence Scoring**: Semantic similarity and temporal proximity analysis
-- **Graph Traversal**: Multi-hop relationship navigation with depth control
-
-```typescript
-// Configure OpenAI for relationship processing
-const config = ConfigManager.loadConfig();
-config.openaiApiKey = process.env.OPENAI_API_KEY;
-config.relationshipProcessing = {
-  enabled: true,
-  model: 'gpt-4o-mini',
-  confidenceThreshold: 0.7,
-  enableSemanticAnalysis: true
-};
-
-const memori = new Memori(config);
-await memori.enable();
-
-// Memories are automatically analyzed for relationships during processing
-const chatId = await memori.recordConversation(
-  "I'm working on a React authentication system",
-  "I'll help you implement JWT-based authentication with refresh tokens"
-);
-
-// Search with relationship context
-const relatedMemories = await memori.searchMemories('authentication patterns', {
-  includeRelatedMemories: true,
-  maxRelationshipDepth: 2,
-  minRelationshipConfidence: 0.6
-});
-
-// Get relationship graph for memory
-const relationships = await memori.getMemoryRelationships(chatId);
-console.log(`Found ${relationships.length} related memories`);
-```
-
-#### **Memory Relationship Types**
-- **Continuation**: Sequential conversation flow
-- **Reference**: Related topics or concepts
-- **Related**: Associated ideas or projects
-- **Superseding**: Updated or improved information
-- **Contradictory**: Conflicting information requiring resolution
-
-#### **Relationship Graph Analysis**
-- **Traversal Algorithms**: Breadth-first and depth-first relationship exploration
-- **Strength Weighting**: Relationship confidence and recency scoring
-- **Path Discovery**: Finding connection paths between distant memories
-- **Cluster Detection**: Grouping related memories into knowledge clusters
-
-### 🔄 Intelligent Duplicate Consolidation
-
-#### **Multi-tier Safety Validation**
-- **Quality Scoring**: Content similarity and importance analysis
-- **Entity Merging**: Intelligent combination of extracted entities and metadata
-- **History Preservation**: Complete audit trail of consolidation operations
-- **Rollback Capabilities**: Transaction-safe consolidation with undo support
-
-```typescript
-// Find duplicate memories using advanced similarity detection
-const candidateMemories = await memori.searchMemories('authentication implementation', {
-  limit: 200,
-  includeMetadata: true
-});
-
-const duplicates = await memori.findDuplicateMemories(candidateMemories, {
-  similarityThreshold: 0.8,
-  includeSemanticSimilarity: true,
-  minConfidenceScore: 0.7
-});
-
-console.log(`Found ${duplicates.length} potential duplicate groups`);
-
-// Consolidate with safety validation
-for (const duplicateGroup of duplicates) {
-  const consolidationResult = await memori.consolidateDuplicateMemories(
-    duplicateGroup.primaryId,
-    duplicateGroup.duplicateIds,
-    {
-      enableQualityScoring: true,
-      preserveMetadata: true,
-      createBackup: true,
-      notifyOnConflicts: true
-    }
-  );
-
-  console.log(`Consolidated ${consolidationResult.consolidated} memories`);
-  console.log(`Quality score: ${consolidationResult.qualityScore}`);
-}
-
-// Get consolidation history
-const history = await memori.getConsolidationHistory({
-  limit: 50,
-  includeRollbackInfo: true
-});
-```
-
-#### **Consolidation State Management**
-- **Processing Workflows**: Comprehensive state tracking through consolidation pipeline
-- **Validation Gates**: Multi-stage validation with rollback on failure
-- **Progress Monitoring**: Real-time tracking of consolidation operations
-- **Error Recovery**: Automatic retry with exponential backoff
-
-### 📊 Search Index Maintenance
-
-#### **Automated Index Optimization**
-- **Health Monitoring**: Continuous monitoring of index corruption and performance
-- **Automatic Optimization**: Scheduled merge, compact, and rebuild operations
-- **Performance Metrics**: Query time, throughput, and resource usage tracking
-- **Backup & Recovery**: Automated index backups with integrity verification
-
-```typescript
-// Get index health report
-const healthReport = await memori.getIndexHealthReport();
-console.log(`Index health: ${healthReport.health}`);
-console.log(`Issues found: ${healthReport.issues.length}`);
-console.log(`Fragmentation: ${healthReport.fragmentation * 100}%`);
-
-// Optimize index with specific strategy
-const optimizationResult = await memori.optimizeIndex('merge');
-console.log(`Space saved: ${optimizationResult.spaceSaved} bytes`);
-console.log(`Operations performed: ${optimizationResult.operationsPerformed}`);
-
-// Schedule automatic maintenance
-await memori.scheduleIndexMaintenance({
-  optimizationInterval: 24 * 60 * 60 * 1000, // 24 hours
-  backupInterval: 7 * 24 * 60 * 60 * 1000,   // 7 days
-  healthCheckInterval: 60 * 60 * 1000,       // 1 hour
-  enableAutoRecovery: true
-});
-```
-
-#### **Index Performance Analytics**
-- **Query Performance**: Response time distribution and slow query analysis
-- **Resource Utilization**: Memory usage, disk I/O, and CPU consumption
-- **Maintenance Impact**: Performance before and after optimization
-- **Predictive Monitoring**: Trend analysis and capacity planning
-
-### Clean Interface System
-
-Memorits now features a comprehensive interface system with:
-- **15+ Clean Interfaces** replacing inline types
-- **Self-documenting APIs** with clear method signatures
-- **Enhanced Type Safety** with compile-time error detection
-- **Better IDE Support** with rich autocomplete and IntelliSense
-
-### Memory Classification System
-
-```typescript
-enum MemoryClassification {
-  ESSENTIAL = 'essential',        // Critical information
-  CONTEXTUAL = 'contextual',      // Supporting context
-  CONVERSATIONAL = 'conversational', // General conversation
-  REFERENCE = 'reference',        // Reference material
-  PERSONAL = 'personal',          // Personal information
-  CONSCIOUS_INFO = 'conscious-info' // Conscious context
-}
-
-enum MemoryImportanceLevel {
-  CRITICAL = 'critical',  // Must remember
-  HIGH = 'high',          // Important information
-  MEDIUM = 'medium',      // Useful information
-  LOW = 'low'             // Background information
-}
-```
-
-## Development
-
-- Run tests: `npm test`
-- Watch tests: `npm run test:watch`
-- Lint code: `npm run lint`
-- Database studio: `npm run prisma:studio`

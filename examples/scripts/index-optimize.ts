@@ -6,8 +6,8 @@
  */
 
 import { Memori, ConfigManager } from '../../src/index';
-import { logInfo, logError } from '../../src/core/utils/Logger';
-import { OptimizationType } from '../../src/core/search/SearchIndexManager';
+import { logInfo, logError } from '../../src/core/infrastructure/config/Logger';
+import { OptimizationType } from '../../src/core/domain/search/SearchIndexManager';
 
 async function optimizeIndex(): Promise<void> {
     logInfo('⚡ Starting index optimization...', { component: 'index-optimize' });

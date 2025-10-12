@@ -9,7 +9,7 @@
    */
 
 import { Memori, ConfigManager } from '../src/index';
-import { logInfo, logError } from '../src/core/utils/Logger';
+import { logInfo, logError } from '../src/core/infrastructure/config/Logger';
 
 async function autoIngestionExample(): Promise<void> {
   logInfo('🤖 Auto-Ingestion Mode Example', { component: 'dual-memory-mode-example', mode: 'auto' });
