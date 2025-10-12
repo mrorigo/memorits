@@ -1,27 +1,18 @@
-import { execSync } from 'child_process';
-import { unlinkSync, existsSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
 import { initializeSearchSchema } from '@/core/infrastructure/database/init-search-schema';
 import { DuplicateDetectionConfig } from '@/core/infrastructure/database/types/consolidation-models';
 import { PrismaConsolidationRepository } from '@/core/infrastructure/database/repositories/PrismaConsolidationRepository';
+import { TestHelper, beforeEachTest, afterEachTest } from '../../setup/database/TestHelper';
 
-describe('PrismaConsolidationRepository', () => {
+describe('PrismaConsolidationRepository (Optimized)', () => {
   let repository: PrismaConsolidationRepository;
   let prisma: PrismaClient;
-  let dbPath: string;
+  let testContext: Awaited<ReturnType<typeof beforeEachTest>>;
 
   beforeEach(async () => {
-    // Create unique database file for this test
-    dbPath = `./test-consolidation-repo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.db`;
-    const databaseUrl = `file:${dbPath}`;
-
-    // Push schema to the specific database
-    execSync(`DATABASE_URL=${databaseUrl} npx prisma db push --accept-data-loss --force-reset`, {
-      stdio: 'inherit',
-      env: { ...process.env, DATABASE_URL: databaseUrl },
-    });
-
-    prisma = new PrismaClient({ datasourceUrl: databaseUrl });
+    // 🚀 OPTIMIZED: Use shared database instead of creating per-test files
+    testContext = await beforeEachTest('unit', 'PrismaConsolidationRepository');
+    prisma = testContext.prisma;
 
     // Initialize FTS schema for search functionality
     await initializeSearchSchema(prisma);
@@ -30,24 +21,8 @@ describe('PrismaConsolidationRepository', () => {
   });
 
   afterEach(async () => {
-    // Clean up
-    if (prisma) {
-      await prisma.$disconnect();
-    }
-
-    // Clean up test database file
-    if (existsSync(dbPath)) {
-      try {
-        unlinkSync(dbPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-
-    // Force garbage collection if available
-    if (global.gc) {
-      global.gc();
-    }
+    // ⚡ OPTIMIZED: Just rollback transaction instead of deleting files
+    await afterEachTest(testContext.testName);
   });
 
   describe('Constructor and Initialization', () => {
@@ -64,52 +39,51 @@ describe('PrismaConsolidationRepository', () => {
 
   describe('findDuplicateCandidates', () => {
     beforeEach(async () => {
-      // Create test memories for duplicate detection
+      // Create test memories for duplicate detection with unique namespaces
+      const memoryData1 = TestHelper.createTestLongTermMemory(testContext, {
+        id: 'memory-1',
+        searchableContent: 'TypeScript is a great programming language for web development',
+        summary: 'TypeScript benefits',
+        classification: 'essential',
+        memoryImportance: 'high',
+        categoryPrimary: 'programming',
+        retentionType: 'long_term',
+        importanceScore: 0.8,
+        extractionTimestamp: new Date(),
+        createdAt: new Date(),
+        processedData: {},
+      });
+
+      const memoryData2 = TestHelper.createTestLongTermMemory(testContext, {
+        id: 'memory-2',
+        searchableContent: 'JavaScript is essential for web development and programming',
+        summary: 'JavaScript importance',
+        classification: 'essential',
+        memoryImportance: 'high',
+        categoryPrimary: 'programming',
+        retentionType: 'long_term',
+        importanceScore: 0.7,
+        extractionTimestamp: new Date(),
+        createdAt: new Date(),
+        processedData: {},
+      });
+
+      const memoryData3 = TestHelper.createTestLongTermMemory(testContext, {
+        id: 'memory-3',
+        searchableContent: 'Python is great for data science and machine learning',
+        summary: 'Python uses',
+        classification: 'contextual',
+        memoryImportance: 'medium',
+        categoryPrimary: 'programming',
+        retentionType: 'long_term',
+        importanceScore: 0.5,
+        extractionTimestamp: new Date(),
+        createdAt: new Date(),
+        processedData: {},
+      });
+
       await prisma.longTermMemory.createMany({
-        data: [
-          {
-            id: 'memory-1',
-            namespace: 'default',
-            searchableContent: 'TypeScript is a great programming language for web development',
-            summary: 'TypeScript benefits',
-            classification: 'essential',
-            memoryImportance: 'high',
-            categoryPrimary: 'programming',
-            retentionType: 'long_term',
-            importanceScore: 0.8,
-            extractionTimestamp: new Date(),
-            createdAt: new Date(),
-            processedData: {},
-          },
-          {
-            id: 'memory-2',
-            namespace: 'default',
-            searchableContent: 'JavaScript is essential for web development and programming',
-            summary: 'JavaScript importance',
-            classification: 'essential',
-            memoryImportance: 'high',
-            categoryPrimary: 'programming',
-            retentionType: 'long_term',
-            importanceScore: 0.7,
-            extractionTimestamp: new Date(),
-            createdAt: new Date(),
-            processedData: {},
-          },
-          {
-            id: 'memory-3',
-            namespace: 'default',
-            searchableContent: 'Python is great for data science and machine learning',
-            summary: 'Python uses',
-            classification: 'contextual',
-            memoryImportance: 'medium',
-            categoryPrimary: 'programming',
-            retentionType: 'long_term',
-            importanceScore: 0.5,
-            extractionTimestamp: new Date(),
-            createdAt: new Date(),
-            processedData: {},
-          },
-        ],
+        data: [memoryData1, memoryData2, memoryData3],
       });
     });
 
@@ -432,18 +406,11 @@ describe('PrismaConsolidationRepository', () => {
     });
 
     it('should handle empty database gracefully', async () => {
-      // Create new repository with empty database
-      const emptyDbPath = `empty-${Date.now()}.db`;
-      const emptyDatabaseUrl = `file:${emptyDbPath}`;
+      // Create a separate test context for empty database testing
+      const emptyTestContext = await beforeEachTest('unit', 'EmptyDatabaseTest');
 
-      // Push schema to the empty database first
-      execSync(`DATABASE_URL=${emptyDatabaseUrl} npx prisma db push --accept-data-loss --force-reset`, {
-        stdio: 'inherit',
-        env: { ...process.env, DATABASE_URL: emptyDatabaseUrl },
-      });
-
-      const emptyPrisma = new PrismaClient({ datasourceUrl: emptyDatabaseUrl });
-      const emptyRepository = new PrismaConsolidationRepository(emptyPrisma);
+      // Use the empty namespace to simulate empty database conditions
+      const emptyRepository = new PrismaConsolidationRepository(emptyTestContext.prisma);
 
       const stats = await emptyRepository.getConsolidationStatistics();
 
@@ -452,16 +419,7 @@ describe('PrismaConsolidationRepository', () => {
       expect(stats.consolidatedMemories).toBe(0);
       expect(stats.averageConsolidationRatio).toBe(0);
 
-      await emptyPrisma.$disconnect();
-
-      // Clean up empty database file
-      if (existsSync(emptyDbPath)) {
-        try {
-          unlinkSync(emptyDbPath);
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
+      // Cleanup is automatic via afterEachTest
     });
   });
 

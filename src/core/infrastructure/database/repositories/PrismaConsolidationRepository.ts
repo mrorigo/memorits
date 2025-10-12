@@ -38,6 +38,7 @@ export class PrismaConsolidationRepository {
     content: string,
     threshold: number,
     config?: DuplicateDetectionConfig,
+    namespace?: string,
   ): Promise<MemorySearchResult[]> {
     const startTime = Date.now();
 
@@ -77,10 +78,11 @@ export class PrismaConsolidationRepository {
       );
 
       // Use OR logic to find memories containing any of the search terms
+      const targetNamespace = namespace || 'default';
       const prismaCandidates = await this.prisma.longTermMemory.findMany({
         where: {
           AND: [
-            { namespace: 'default' },
+            { namespace: targetNamespace },
             {
               OR: orConditions
             }
@@ -155,6 +157,7 @@ export class PrismaConsolidationRepository {
     duplicateId: string,
     originalId: string,
     consolidationReason?: string,
+    namespace?: string,
   ): Promise<void> {
     const startTime = Date.now();
 
@@ -187,9 +190,20 @@ export class PrismaConsolidationRepository {
         : undefined;
 
       // Validate that both memories exist
+      const targetNamespace = namespace || 'default';
       const [duplicateMemory, originalMemory] = await Promise.all([
-        this.prisma.longTermMemory.findUnique({ where: { id: sanitizedDuplicateId } }),
-        this.prisma.longTermMemory.findUnique({ where: { id: sanitizedOriginalId } }),
+        this.prisma.longTermMemory.findUnique({
+          where: {
+            id: sanitizedDuplicateId,
+            namespace: targetNamespace
+          }
+        }),
+        this.prisma.longTermMemory.findUnique({
+          where: {
+            id: sanitizedOriginalId,
+            namespace: targetNamespace
+          }
+        }),
       ]);
 
       if (!duplicateMemory) {
@@ -243,6 +257,7 @@ export class PrismaConsolidationRepository {
   async consolidateMemories(
     primaryId: string,
     duplicateIds: string[],
+    namespace?: string,
   ): Promise<ConsolidationResult> {
     const startTime = Date.now();
 
@@ -269,10 +284,14 @@ export class PrismaConsolidationRepository {
       );
 
       // Execute consolidation in a transaction for atomicity
+      const targetNamespace = namespace || 'default';
       const result = await this.prisma.$transaction(async (tx) => {
         // Verify primary memory exists
         const primaryMemory = await tx.longTermMemory.findUnique({
-          where: { id: sanitizedPrimaryId },
+          where: {
+            id: sanitizedPrimaryId,
+            namespace: targetNamespace
+          },
         });
 
         if (!primaryMemory) {
@@ -288,6 +307,7 @@ export class PrismaConsolidationRepository {
         const duplicateMemories = await tx.longTermMemory.findMany({
           where: {
             id: { in: sanitizedDuplicateIds },
+            namespace: targetNamespace,
           },
         });
 
@@ -314,6 +334,7 @@ export class PrismaConsolidationRepository {
         await tx.longTermMemory.updateMany({
           where: {
             id: { in: sanitizedDuplicateIds },
+            namespace: targetNamespace,
           },
           data: {
             duplicateOf: sanitizedPrimaryId,
@@ -322,7 +343,10 @@ export class PrismaConsolidationRepository {
 
         // Update primary memory consolidation metadata using existing fields
         await tx.longTermMemory.update({
-          where: { id: sanitizedPrimaryId },
+          where: {
+            id: sanitizedPrimaryId,
+            namespace: targetNamespace
+          },
           data: {
             relatedMemoriesJson: sanitizedDuplicateIds,
             classificationReason: `Consolidated ${sanitizedDuplicateIds.length} duplicates`,
@@ -362,7 +386,7 @@ export class PrismaConsolidationRepository {
   /**
    * Get consolidation statistics for the current namespace
    */
-  async getConsolidationStatistics(): Promise<ConsolidationStats> {
+  async getConsolidationStatistics(namespace?: string): Promise<ConsolidationStats> {
     const startTime = Date.now();
 
     try {
@@ -371,13 +395,14 @@ export class PrismaConsolidationRepository {
       });
 
       // Aggregate statistics from the database using Prisma queries for better compatibility
+      const targetNamespace = namespace || 'default';
       const totalMemories = await this.prisma.longTermMemory.count({
-        where: { namespace: 'default' },
+        where: { namespace: targetNamespace },
       });
 
       const duplicateCount = await this.prisma.longTermMemory.count({
         where: {
-          namespace: 'default',
+          namespace: targetNamespace,
           duplicateOf: { not: null },
         },
       });
@@ -387,7 +412,7 @@ export class PrismaConsolidationRepository {
       const consolidatedResult = await this.prisma.$queryRaw`
         SELECT COUNT(*) as count
         FROM long_term_memory
-        WHERE namespace = 'default'
+        WHERE namespace = ${targetNamespace}
           AND relatedMemoriesJson IS NOT NULL
           AND json_array_length(relatedMemoriesJson) > 0
       ` as Array<{ count: bigint }>;
@@ -396,7 +421,7 @@ export class PrismaConsolidationRepository {
 
       const lastConsolidationActivity = await this.prisma.longTermMemory.findFirst({
         where: {
-          namespace: 'default',
+          namespace: targetNamespace,
           relatedMemoriesJson: { not: undefined },
         },
         orderBy: { extractionTimestamp: 'desc' },
@@ -440,6 +465,7 @@ export class PrismaConsolidationRepository {
   async cleanupConsolidatedMemories(
     olderThanDays: number,
     dryRun: boolean,
+    namespace?: string,
   ): Promise<CleanupResult> {
     const startTime = Date.now();
 
@@ -463,13 +489,14 @@ export class PrismaConsolidationRepository {
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
       // Find memories to clean up (using relatedMemoriesJson as consolidation indicator)
+      const targetNamespace = namespace || 'default';
       const memoriesToCleanup = await this.prisma.longTermMemory.findMany({
         where: {
           relatedMemoriesJson: { not: undefined },
           extractionTimestamp: {
             lt: cutoffDate,
           },
-          namespace: 'default',
+          namespace: targetNamespace,
         },
         select: {
           id: true,
@@ -537,7 +564,7 @@ export class PrismaConsolidationRepository {
   /**
    * Get detailed information about a specific consolidated memory
    */
-  async getConsolidatedMemory(memoryId: string): Promise<ConsolidationMemorySearchResult | null> {
+  async getConsolidatedMemory(memoryId: string, namespace?: string): Promise<ConsolidationMemorySearchResult | null> {
     const startTime = Date.now();
 
     try {
@@ -552,8 +579,12 @@ export class PrismaConsolidationRepository {
         allowNewlines: false,
       });
 
+      const targetNamespace = namespace || 'default';
       const memory = await this.prisma.longTermMemory.findUnique({
-        where: { id: sanitizedId },
+        where: {
+          id: sanitizedId,
+          namespace: targetNamespace
+        },
       });
 
       if (!memory) {
@@ -609,7 +640,7 @@ export class PrismaConsolidationRepository {
   /**
    * Get all memories that were consolidated into a primary memory
    */
-  async getConsolidatedMemories(primaryMemoryId: string): Promise<string[]> {
+  async getConsolidatedMemories(primaryMemoryId: string, namespace?: string): Promise<string[]> {
     const startTime = Date.now();
 
     try {
@@ -625,9 +656,11 @@ export class PrismaConsolidationRepository {
       });
 
       // Find all memories that have this memory as their duplicateOf target
+      const targetNamespace = namespace || 'default';
       const consolidatedMemories = await this.prisma.longTermMemory.findMany({
         where: {
           duplicateOf: sanitizedId,
+          namespace: targetNamespace,
         },
         select: {
           id: true,
@@ -664,7 +697,7 @@ export class PrismaConsolidationRepository {
     duplicateOf?: string;
     consolidationReason?: string;
     markedAsDuplicateAt?: Date;
-  }>): Promise<{ updated: number; errors: string[] }> {
+  }>, namespace?: string): Promise<{ updated: number; errors: string[] }> {
     const startTime = Date.now();
 
     try {
@@ -699,7 +732,10 @@ export class PrismaConsolidationRepository {
           };
 
           await this.prisma.longTermMemory.update({
-            where: { id: sanitizedUpdate.memoryId },
+            where: {
+              id: sanitizedUpdate.memoryId,
+              namespace: namespace || 'default'
+            },
             data: {
               duplicateOf: sanitizedUpdate.duplicateOf,
               classificationReason: sanitizedUpdate.consolidationReason || undefined,
@@ -739,6 +775,7 @@ export class PrismaConsolidationRepository {
   async performPreConsolidationValidation(
     primaryMemoryId: string,
     duplicateIds: string[],
+    namespace?: string,
   ): Promise<{ isValid: boolean; errors: string[] }> {
     const startTime = Date.now();
 
@@ -767,8 +804,12 @@ export class PrismaConsolidationRepository {
       );
 
       // Validate primary memory exists
+      const targetNamespace = namespace || 'default';
       const primaryMemory = await this.prisma.longTermMemory.findUnique({
-        where: { id: sanitizedPrimaryId },
+        where: {
+          id: sanitizedPrimaryId,
+          namespace: targetNamespace
+        },
       });
 
       if (!primaryMemory) {
@@ -779,6 +820,7 @@ export class PrismaConsolidationRepository {
       const duplicateMemories = await this.prisma.longTermMemory.findMany({
         where: {
           id: { in: sanitizedDuplicateIds },
+          namespace: targetNamespace,
         },
       });
 
@@ -824,7 +866,7 @@ export class PrismaConsolidationRepository {
   /**
    * Backup memory data for potential rollback operations
    */
-  async backupMemoryData(memoryIds: string[]): Promise<Map<string, any>> {
+  async backupMemoryData(memoryIds: string[], namespace?: string): Promise<Map<string, any>> {
     const startTime = Date.now();
 
     try {
@@ -843,9 +885,11 @@ export class PrismaConsolidationRepository {
       );
 
       // Get all memory data for backup
+      const targetNamespace = namespace || 'default';
       const memories = await this.prisma.longTermMemory.findMany({
         where: {
           id: { in: sanitizedIds },
+          namespace: targetNamespace,
         },
       });
 
@@ -883,6 +927,7 @@ export class PrismaConsolidationRepository {
     primaryMemoryId: string,
     duplicateIds: string[],
     originalData: Map<string, any>,
+    namespace?: string,
   ): Promise<void> {
     const startTime = Date.now();
 
@@ -894,12 +939,16 @@ export class PrismaConsolidationRepository {
       });
 
       // Execute rollback in a transaction
+      const targetNamespace = namespace || 'default';
       await this.prisma.$transaction(async (tx) => {
         // Restore primary memory data
         const primaryBackup = originalData.get(primaryMemoryId);
         if (primaryBackup) {
           await tx.longTermMemory.update({
-            where: { id: primaryMemoryId },
+            where: {
+              id: primaryMemoryId,
+              namespace: targetNamespace
+            },
             data: {
               relatedMemoriesJson: primaryBackup.relatedMemoriesJson,
               classificationReason: primaryBackup.classificationReason,
@@ -912,7 +961,10 @@ export class PrismaConsolidationRepository {
           const duplicateBackup = originalData.get(duplicateId);
           if (duplicateBackup) {
             await tx.longTermMemory.update({
-              where: { id: duplicateId },
+              where: {
+                id: duplicateId,
+                namespace: targetNamespace
+              },
               data: {
                 duplicateOf: duplicateBackup.duplicateOf,
               },

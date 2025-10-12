@@ -1,52 +1,26 @@
 import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
 import { MemoryConsolidationService } from '../../../src/core/infrastructure/database/MemoryConsolidationService';
 import { RepositoryFactory } from '../../../src/core/infrastructure/database/factories/RepositoryFactory';
-import { execSync } from 'child_process';
-import { unlinkSync, existsSync } from 'fs';
+import { TestHelper, beforeEachTest, afterEachTest } from '../../setup/database/TestHelper';
 
-beforeAll(async () => {
-  // Generate Prisma client and push schema to ensure database is ready
-  execSync('npx prisma generate', { stdio: 'inherit' });
-});
-
-describe('DatabaseManager', () => {
+describe('DatabaseManager (Optimized)', () => {
   let dbManager: DatabaseManager;
-  let dbPath: string;
+  let testContext: Awaited<ReturnType<typeof beforeEachTest>>;
 
   beforeEach(async () => {
-    dbPath = `./test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.db`;
-    // Set DATABASE_URL environment variable for this test
-    process.env.DATABASE_URL = `file:${dbPath}`;
-    // Push schema to the specific database
-    execSync(`DATABASE_URL=file:${dbPath} npx prisma db push --accept-data-loss --force-reset`, {
-      stdio: 'inherit',
-      env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
-    });
+    // 🚀 OPTIMIZED: Use shared integration database instead of creating per-test files
+    testContext = await beforeEachTest('integration', 'DatabaseManagerIntegration');
 
-    dbManager = new DatabaseManager(`file:${dbPath}`);
+    // Create DatabaseManager using shared database
+    dbManager = new DatabaseManager(`file:${process.cwd()}/test-db-integration.sqlite`);
 
     // Ensure FTS5 is properly initialized for this test
     await dbManager.getFTSStatus();
   });
 
   afterEach(async () => {
-    // Properly close database connection first
-    if (dbManager) {
-      try {
-        await dbManager.close();
-      } catch {
-        // Ignore close errors in cleanup
-      }
-    }
-
-    // Clean up test database file
-    if (existsSync(dbPath)) {
-      try {
-        unlinkSync(dbPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
+    // ⚡ OPTIMIZED: Just rollback transaction instead of deleting files
+    await afterEachTest(testContext.testName);
   });
 
   it('should store chat history', async () => {

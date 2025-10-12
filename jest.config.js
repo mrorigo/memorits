@@ -27,4 +27,8 @@ export default {
   // Clear mocks and modules between tests
   clearMocks: true,
   restoreMocks: true,
+  // Optimized database setup
+  setupFilesAfterEnv: ['<rootDir>/tests/setup/database/jest-setup.ts'],
+  globalSetup: '<rootDir>/tests/setup/database/global-setup.ts',
+  globalTeardown: '<rootDir>/tests/setup/database/global-teardown.ts',
 };

@@ -1,141 +1,23 @@
 import { ChatHistoryData } from '../../../src/core/infrastructure/database/types';
 import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
 import { MemoryClassification, MemoryImportanceLevel } from '../../../src/core/types/schemas';
-import { execSync } from 'child_process';
-import { unlinkSync, existsSync } from 'fs';
+import { TestHelper, beforeEachTest, afterEachTest } from '../../setup/database/TestHelper';
 
-describe('DatabaseManager', () => {
+describe('DatabaseManager (Optimized)', () => {
   let dbManager: DatabaseManager;
-  let dbPath: string;
+  let testContext: Awaited<ReturnType<typeof beforeEachTest>>;
 
   beforeEach(async () => {
-    // Create unique database file for this test
-    dbPath = `./test-unit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.db`;
-    const databaseUrl = `file:${dbPath}`;
+    // 🚀 OPTIMIZED: Use shared database instead of creating per-test files
+    testContext = await beforeEachTest('unit', 'DatabaseManager');
 
-    // Push schema to the specific database
-    execSync(`DATABASE_URL=${databaseUrl} npx prisma db push --accept-data-loss --force-reset`, {
-      stdio: 'inherit',
-      env: { ...process.env, DATABASE_URL: databaseUrl },
-    });
-
-    dbManager = new DatabaseManager(databaseUrl);
+    // Create DatabaseManager using shared database with unique namespace
+    dbManager = new DatabaseManager(`file:${process.cwd()}/test-db-unit.sqlite`);
   });
 
   afterEach(async () => {
-    // Clean up SearchService timers and resources first
-    if (dbManager) {
-      try {
-        console.log('Starting cleanup process...');
-
-        const searchService = (dbManager as any).searchService;
-        if (searchService) {
-          console.log('Cleaning up SearchService...');
-
-          // Stop SearchService timers immediately using proper cleanup methods if available
-          if (typeof searchService.cleanup === 'function') {
-            searchService.cleanup();
-            console.log('SearchService cleanup() called');
-          } else {
-            // Manual cleanup as fallback
-            if (searchService.maintenanceTimer) {
-              clearInterval(searchService.maintenanceTimer);
-              searchService.maintenanceTimer = null;
-              console.log('Cleared SearchService maintenanceTimer');
-            }
-            // Clean up SearchPerformanceMonitor timer
-            if (searchService.performanceMonitor) {
-              searchService.performanceMonitor.cleanup();
-              console.log('Cleaned up SearchPerformanceMonitor');
-            }
-          }
-
-          // Clear any pending performance alert callbacks
-          if (searchService.performanceAlertCallbacks) {
-            searchService.performanceAlertCallbacks.length = 0;
-            console.log('Cleared performance alert callbacks');
-          }
-        }
-
-        // Clean up SearchIndexManager timers using proper cleanup method
-        // The SearchIndexManager is created inside SearchService, so we need to access it through SearchService
-        if (searchService) {
-          console.log('Cleaning up SearchIndexManager through SearchService...');
-          const searchIndexManager = (searchService as any).searchIndexManager;
-          console.log('SearchIndexManager found in SearchService:', !!searchIndexManager);
-
-          if (searchIndexManager) {
-            // Log current timer states
-            console.log('SearchIndexManager timer states:', {
-              healthCheckTimer: !!searchIndexManager.healthCheckTimer,
-              optimizationTimer: !!searchIndexManager.optimizationTimer,
-              backupTimer: !!searchIndexManager.backupTimer,
-            });
-
-            // Use the proper cleanup method
-            if (typeof searchIndexManager.cleanup === 'function') {
-              searchIndexManager.cleanup();
-              console.log('SearchIndexManager cleanup() called successfully');
-            } else {
-              console.log('SearchIndexManager cleanup() not available, doing manual cleanup');
-              // Manual cleanup as fallback
-              if (searchIndexManager.healthCheckTimer) {
-                clearInterval(searchIndexManager.healthCheckTimer);
-                searchIndexManager.healthCheckTimer = null;
-                console.log('Cleared SearchIndexManager healthCheckTimer');
-              }
-              if (searchIndexManager.optimizationTimer) {
-                clearInterval(searchIndexManager.optimizationTimer);
-                searchIndexManager.optimizationTimer = null;
-                console.log('Cleared SearchIndexManager optimizationTimer');
-              }
-              if (searchIndexManager.backupTimer) {
-                clearInterval(searchIndexManager.backupTimer);
-                searchIndexManager.backupTimer = null;
-                console.log('Cleared SearchIndexManager backupTimer');
-              }
-            }
-          } else {
-            console.log('SearchIndexManager not found in SearchService');
-          }
-        } else {
-          console.log('SearchService not available for SearchIndexManager cleanup');
-        }
-
-        // Wait a bit for any pending async operations to complete
-        console.log('Waiting for async operations to complete...');
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        console.log('Closing DatabaseManager...');
-        await dbManager.close();
-        console.log('DatabaseManager closed successfully');
-
-        // Force cleanup of any remaining timers in DatabaseContext
-        const databaseContext = (dbManager as any).databaseContext;
-        if (databaseContext && typeof databaseContext.forceCleanupHealthMonitoring === 'function') {
-          databaseContext.forceCleanupHealthMonitoring();
-          console.log('Force cleaned up DatabaseContext health monitoring');
-        }
-      } catch (error) {
-        // Ignore close errors in cleanup but log them with more detail
-        console.warn('Cleanup error:', error);
-        console.warn('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      }
-    }
-
-    // Clean up test database file
-    if (existsSync(dbPath)) {
-      try {
-        unlinkSync(dbPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-
-    // Force garbage collection if available
-    if (global.gc) {
-      global.gc();
-    }
+    // ⚡ OPTIMIZED: Just rollback transaction instead of complex cleanup
+    await afterEachTest(testContext.testName);
   });
 
   describe('Constructor and Basic Operations', () => {

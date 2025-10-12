@@ -1,99 +1,74 @@
 import { MemoryConsolidationService } from '../../../src/core/infrastructure/database/MemoryConsolidationService';
 import { PrismaConsolidationRepository } from '../../../src/core/infrastructure/database/repositories/PrismaConsolidationRepository';
 import { RepositoryFactory } from '../../../src/core/infrastructure/database/factories/RepositoryFactory';
-import { execSync } from 'child_process';
-import { unlinkSync, existsSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
+import { TestHelper, beforeEachTest, afterEachTest } from '../../setup/database/TestHelper';
 
-describe('ConsolidationService Integration Tests', () => {
+describe('ConsolidationService Integration Tests (Optimized)', () => {
   let consolidationService: MemoryConsolidationService;
   let repository: PrismaConsolidationRepository;
   let prisma: PrismaClient;
-  let dbPath: string;
+  let testContext: Awaited<ReturnType<typeof beforeEachTest>>;
 
   beforeEach(async () => {
-    // Create unique database file for this test
-    dbPath = `./test-consolidation-integration-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.db`;
-    const databaseUrl = `file:${dbPath}`;
+    // 🚀 OPTIMIZED: Use shared integration database instead of creating per-test files
+    testContext = await beforeEachTest('integration', 'ConsolidationServiceIntegration');
+    prisma = testContext.prisma;
 
-    // Push schema to the specific database
-    execSync(`DATABASE_URL=${databaseUrl} npx prisma db push --accept-data-loss --force-reset`, {
-      stdio: 'inherit',
-      env: { ...process.env, DATABASE_URL: databaseUrl },
+    repository = new PrismaConsolidationRepository(prisma);
+    consolidationService = new MemoryConsolidationService(repository, testContext.isolation.getNamespace());
+
+    // Create test memories for integration testing with unique namespaces
+    const integrationMemoryData1 = TestHelper.createTestLongTermMemory(testContext, {
+      id: 'integration-memory-1',
+      searchableContent: 'TypeScript provides excellent type safety for large applications',
+      summary: 'TypeScript benefits',
+      classification: 'essential',
+      memoryImportance: 'high',
+      categoryPrimary: 'programming',
+      retentionType: 'long_term',
+      importanceScore: 0.8,
+      extractionTimestamp: new Date(),
+      createdAt: new Date(),
+      processedData: {},
     });
 
-    prisma = new PrismaClient({ datasourceUrl: databaseUrl });
-    repository = new PrismaConsolidationRepository(prisma);
-    consolidationService = new MemoryConsolidationService(repository, 'test');
+    const integrationMemoryData2 = TestHelper.createTestLongTermMemory(testContext, {
+      id: 'integration-memory-2',
+      searchableContent: 'JavaScript is the foundation of web development and programming',
+      summary: 'JavaScript fundamentals',
+      classification: 'essential',
+      memoryImportance: 'high',
+      categoryPrimary: 'programming',
+      retentionType: 'long_term',
+      importanceScore: 0.7,
+      extractionTimestamp: new Date(),
+      createdAt: new Date(),
+      processedData: {},
+    });
 
-    // Create test memories for integration testing
+    const integrationMemoryData3 = TestHelper.createTestLongTermMemory(testContext, {
+      id: 'integration-memory-3',
+      searchableContent: 'React is a popular framework for building user interfaces',
+      summary: 'React overview',
+      classification: 'contextual',
+      memoryImportance: 'medium',
+      categoryPrimary: 'frameworks',
+      retentionType: 'long_term',
+      importanceScore: 0.6,
+      extractionTimestamp: new Date(),
+      createdAt: new Date(),
+      processedData: {},
+    });
+
     await prisma.longTermMemory.createMany({
-      data: [
-        {
-          id: 'integration-memory-1',
-          namespace: 'integration-test',
-          searchableContent: 'TypeScript provides excellent type safety for large applications',
-          summary: 'TypeScript benefits',
-          classification: 'essential',
-          memoryImportance: 'high',
-          categoryPrimary: 'programming',
-          retentionType: 'long_term',
-          importanceScore: 0.8,
-          extractionTimestamp: new Date(),
-          createdAt: new Date(),
-          processedData: {},
-        },
-        {
-          id: 'integration-memory-2',
-          namespace: 'integration-test',
-          searchableContent: 'JavaScript is the foundation of web development and programming',
-          summary: 'JavaScript fundamentals',
-          classification: 'essential',
-          memoryImportance: 'high',
-          categoryPrimary: 'programming',
-          retentionType: 'long_term',
-          importanceScore: 0.7,
-          extractionTimestamp: new Date(),
-          createdAt: new Date(),
-          processedData: {},
-        },
-        {
-          id: 'integration-memory-3',
-          namespace: 'test',
-          searchableContent: 'React is a popular framework for building user interfaces',
-          summary: 'React overview',
-          classification: 'contextual',
-          memoryImportance: 'medium',
-          categoryPrimary: 'frameworks',
-          retentionType: 'long_term',
-          importanceScore: 0.6,
-          extractionTimestamp: new Date(),
-          createdAt: new Date(),
-          processedData: {},
-        },
-      ],
+      data: [integrationMemoryData1, integrationMemoryData2, integrationMemoryData3],
     });
   });
 
   afterEach(async () => {
-    // Clean up
-    if (prisma) {
-      await prisma.$disconnect();
-    }
-
-    // Clean up test database file
-    if (existsSync(dbPath)) {
-      try {
-        unlinkSync(dbPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-
-    // Force garbage collection if available
-    if (global.gc) {
-      global.gc();
-    }
+    // ⚡ OPTIMIZED: Just rollback transaction instead of deleting files
+    await afterEachTest(testContext.testName);
   });
 
   describe('Service-Repository Integration', () => {

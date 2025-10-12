@@ -68,7 +68,7 @@ export class MemoryConsolidationService implements ConsolidationService {
       });
 
       // Use repository to find duplicate candidates
-      const candidates = await this.repository.findDuplicateCandidates(content, threshold, config);
+      const candidates = await this.repository.findDuplicateCandidates(content, threshold, config, this.namespace);
 
       // Convert to DuplicateCandidate format with business logic
       const duplicateCandidates: DuplicateCandidate[] = [];
@@ -170,7 +170,7 @@ export class MemoryConsolidationService implements ConsolidationService {
  ): Promise<void> {
    try {
      // Use repository to mark memory as duplicate
-     await this.repository.markMemoryAsDuplicate(duplicateId, originalId, reason);
+     await this.repository.markMemoryAsDuplicate(duplicateId, originalId, reason, this.namespace);
 
      logInfo(`Marked memory ${duplicateId} as duplicate of ${originalId}`, {
        component: 'MemoryConsolidationService',
@@ -205,7 +205,7 @@ export class MemoryConsolidationService implements ConsolidationService {
     }>,
   ): Promise<{ updated: number; errors: string[] }> {
     try {
-      return await this.repository.updateDuplicateTracking(updates);
+      return await this.repository.updateDuplicateTracking(updates, this.namespace);
     } catch (error) {
       const errorMsg = `Error updating duplicate tracking: ${error instanceof Error ? error.message : String(error)}`;
       logError(errorMsg, {
@@ -236,7 +236,7 @@ export class MemoryConsolidationService implements ConsolidationService {
       });
 
       // Use repository to perform consolidation
-      const result = await this.repository.consolidateMemories(primaryId, duplicateIds);
+      const result = await this.repository.consolidateMemories(primaryId, duplicateIds, this.namespace);
 
       logInfo(`Successfully completed consolidation of ${result.consolidatedCount} duplicates into primary memory ${primaryId}`, {
         component: 'MemoryConsolidationService',
@@ -286,7 +286,7 @@ export class MemoryConsolidationService implements ConsolidationService {
       });
 
       // Use repository to perform cleanup
-      const result = await this.repository.cleanupConsolidatedMemories(olderThanDays, dryRun);
+      const result = await this.repository.cleanupConsolidatedMemories(olderThanDays, dryRun, this.namespace);
 
       logInfo(`Cleanup completed for namespace '${this.namespace}'`, {
         component: 'MemoryConsolidationService',
@@ -327,7 +327,7 @@ export class MemoryConsolidationService implements ConsolidationService {
   async getConsolidationAnalytics(): Promise<ConsolidationStats> {
     try {
       // Use repository to get statistics
-      const stats = await this.repository.getConsolidationStatistics();
+       const stats = await this.repository.getConsolidationStatistics(this.namespace);
 
       // Calculate trends based on current data
       const consolidationTrends: ConsolidationTrend[] = [];
@@ -366,7 +366,7 @@ export class MemoryConsolidationService implements ConsolidationService {
 
     try {
       // Use repository for pre-consolidation validation
-      const validation = await this.repository.performPreConsolidationValidation(primaryId, duplicateIds);
+      const validation = await this.repository.performPreConsolidationValidation(primaryId, duplicateIds, this.namespace);
 
       // Add business logic warnings
       if (duplicateIds.length > 50) {
@@ -574,7 +574,7 @@ export class MemoryConsolidationService implements ConsolidationService {
   }> {
     try {
       // Get consolidated memory details from repository
-      const consolidatedMemory = await this.repository.getConsolidatedMemory(memoryId);
+      const consolidatedMemory = await this.repository.getConsolidatedMemory(memoryId, this.namespace);
 
       const consolidationEvents = [];
       let currentStatus: 'active' | 'duplicate' | 'consolidated' | 'cleaned' = 'active';
@@ -740,7 +740,7 @@ export class MemoryConsolidationService implements ConsolidationService {
        }
 
        // Get consolidated memories that need to be rolled back
-       const consolidatedMemoryIds = await this.repository.getConsolidatedMemories(primaryMemoryId);
+       const consolidatedMemoryIds = await this.repository.getConsolidatedMemories(primaryMemoryId, this.namespace);
 
        if (consolidatedMemoryIds.length === 0) {
          errors.push('No consolidated memories found for rollback');
@@ -764,7 +764,7 @@ export class MemoryConsolidationService implements ConsolidationService {
        }
 
        // Backup current state before rollback for safety
-       const currentData = await this.repository.backupMemoryData([primaryMemoryId, ...consolidatedMemoryIds]);
+       const currentData = await this.repository.backupMemoryData([primaryMemoryId, ...consolidatedMemoryIds], this.namespace);
 
        // Create enhanced rollback data with validation
        const rollbackData = new Map<string, any>();
@@ -782,7 +782,7 @@ export class MemoryConsolidationService implements ConsolidationService {
        }
 
        // Use repository rollback method with enhanced data
-       await this.repository.rollbackConsolidation(primaryMemoryId, consolidatedMemoryIds, rollbackData);
+       await this.repository.rollbackConsolidation(primaryMemoryId, consolidatedMemoryIds, rollbackData, this.namespace);
 
        // Verify rollback was successful by checking memory states
        const verification = await this.verifyRollbackSuccess(primaryMemoryId, consolidatedMemoryIds);
@@ -843,14 +843,14 @@ export class MemoryConsolidationService implements ConsolidationService {
 
      try {
        // Check that primary memory no longer has consolidation metadata
-       const primaryMemory = await this.repository.getConsolidatedMemory(primaryMemoryId);
+       const primaryMemory = await this.repository.getConsolidatedMemory(primaryMemoryId, this.namespace);
        if (primaryMemory?.isConsolidated) {
          errors.push(`Primary memory ${primaryMemoryId} still shows as consolidated after rollback`);
        }
 
        // Check that all consolidated memories are no longer marked as duplicates
        for (const memoryId of consolidatedMemoryIds) {
-         const memory = await this.repository.getConsolidatedMemory(memoryId);
+         const memory = await this.repository.getConsolidatedMemory(memoryId, this.namespace);
          if (memory?.isDuplicate) {
            errors.push(`Memory ${memoryId} still shows as duplicate after rollback`);
          }
@@ -887,7 +887,7 @@ export class MemoryConsolidationService implements ConsolidationService {
       let overallHealth: 'good' | 'fair' | 'poor' = 'good';
 
       // Get current statistics for analysis
-      const stats = await this.repository.getConsolidationStatistics();
+      const stats = await this.repository.getConsolidationStatistics(this.namespace);
 
       // Analyze consolidation ratio
       if (stats.totalMemories > 0) {
