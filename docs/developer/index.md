@@ -86,6 +86,7 @@ This developer documentation is organized to help you build sophisticated AI age
 - **[Performance Monitoring](advanced-features/performance-monitoring.md)** - Real-time dashboards and analytics
 - **[Consolidation Service Architecture](advanced-features/consolidation-service-architecture.md)** - Service-oriented design for memory consolidation
 - **[Service Monitoring](advanced-features/service-monitoring-metrics.md)** - Performance monitoring and metrics collection
+- **[Search API Fixup](features/SEARCH_FIXUP.md)** - Recent enhancements to temporal search capabilities and API improvements
 
 ### 🔗 Integration
 - **[Multi-Provider Integration](integration/openai-integration.md)** - Drop-in replacement and provider factory patterns

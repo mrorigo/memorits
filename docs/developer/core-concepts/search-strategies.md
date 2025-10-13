@@ -111,7 +111,7 @@ const recentMemories = await memori.searchMemoriesWithStrategy(
 
 ```typescript
 // Recent memories from specific time window
-const recentWithTime = await memori.searchRecentMemories(10, true);
+const recentWithTime = await memori.searchRecentMemories(10, false);
 
 // Get recent memories with metadata
 const recentWithMetadata = await memori.searchRecentMemories(5, true);

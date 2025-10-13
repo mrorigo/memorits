@@ -184,13 +184,34 @@ interface MemoriConfig {
 
 ### SearchOptions Interface
 
+The `SearchOptions` interface provides comprehensive search configuration options for memory retrieval. This interface is defined in `src/core/types/models.ts` and supports advanced filtering and search capabilities:
+
 ```typescript
 interface SearchOptions {
-  limit?: number;
-  minImportance?: MemoryImportanceFilter;
-  categories?: MemoryClassification[];
-  includeMetadata?: boolean;
+  // Basic options
   namespace?: string;
+  limit?: number;
+  includeMetadata?: boolean;
+
+  // Filtering options
+  minImportance?: MemoryImportanceLevel;
+  categories?: MemoryClassification[];
+  temporalFilters?: TemporalFilterOptions;
+  metadataFilters?: MetadataFilterOptions;
+
+  // Sorting and pagination
+  sortBy?: SortOption;
+  offset?: number;
+
+  // Advanced options
+  strategy?: SearchStrategy;
+  timeout?: number;
+  enableCache?: boolean;
+
+  // Advanced Features
+  filterExpression?: string;
+  includeRelatedMemories?: boolean;
+  maxRelationshipDepth?: number;
 }
 ```
 
@@ -223,14 +244,14 @@ const ftsResults = await memori.searchMemoriesWithStrategy(
 ### Strategy Management
 
 ```typescript
-getAvailableSearchStrategies(): SearchStrategy[]
+async getAvailableSearchStrategies(): Promise<SearchStrategy[]>
 ```
 
 Returns all available search strategies.
 
 **Example:**
 ```typescript
-const strategies = memori.getAvailableSearchStrategies();
+const strategies = await memori.getAvailableSearchStrategies();
 console.log('Available strategies:', strategies);
 ```
 

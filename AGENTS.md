@@ -22,6 +22,7 @@ This file provides guidance to agents when working with code in this repository.
 - **Search strategies**: Implement proper error handling, timeout management, and fallback mechanisms for all search strategies
 - **State management**: Use ProcessingStateManager for memory workflow states with proper transition validation
 - **Index management**: Follow SearchIndexManager patterns for optimization, backup, and health monitoring
+- **Temporal filtering**: Use TemporalFilterOptions interface for time-based search with natural language expressions
 
 ## Project-Specific Patterns
 
@@ -35,6 +36,7 @@ This file provides guidance to agents when working with code in this repository.
 - **Factory patterns**: Multiple initialization patterns (constructor, environment, database URL, advanced config) for different use cases
 - **Memory relationships**: Extract relationships during MemoryAgent processing with proper confidence scoring and validation
 - **Search strategies**: Implement ISearchStrategy interface with proper error handling, timeout management, and fallback mechanisms
+- **Temporal search**: Enhanced searchRecentMemories API supports time windows, relative expressions, and temporal filtering
 - **Filter expressions**: Use AdvancedFilterEngine for complex boolean logic with field comparisons and operators
 - **State tracking**: Use ProcessingStateManager for memory workflow states with transition validation and history tracking
 - **Index management**: Follow SearchIndexManager patterns for automated optimization, backup, and health monitoring

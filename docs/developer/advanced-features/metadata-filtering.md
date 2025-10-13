@@ -55,10 +55,14 @@ const strategy = new MetadataFilterStrategy(config, databaseManager);
 
 ### Basic Field Operations
 
-Filter memories by any metadata field using various operators:
+Filter memories by any metadata field using various operators within the SearchOptions interface:
 
 ```typescript
-// Basic equality filtering
+import { Memori } from 'memorits';
+
+const memori = new Memori();
+
+// Basic equality filtering with SearchOptions
 const results = await memori.searchMemories('configuration', {
   metadataFilters: {
     fields: [
@@ -68,10 +72,12 @@ const results = await memori.searchMemories('configuration', {
         operator: 'eq'
       }
     ]
-  }
+  },
+  limit: 10,
+  includeMetadata: true
 });
 
-// Multiple field filtering with different operators
+// Multiple field filtering with different operators using SearchOptions
 const advancedResults = await memori.searchMemories('important data', {
   metadataFilters: {
     fields: [
@@ -91,7 +97,10 @@ const advancedResults = await memori.searchMemories('important data', {
         operator: 'eq'
       }
     ]
-  }
+  },
+  limit: 20,
+  minImportance: 'medium',
+  categories: ['essential']
 });
 ```
 

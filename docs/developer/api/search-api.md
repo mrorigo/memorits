@@ -6,6 +6,8 @@ This document provides comprehensive documentation for Memorits' advanced search
 
 ### SearchOptions Interface
 
+The `SearchOptions` interface provides comprehensive search configuration options for memory retrieval. This interface is defined in `src/core/types/models.ts` and supports:
+
 ```typescript
 interface SearchOptions {
   // Basic options
@@ -32,9 +34,10 @@ interface SearchOptions {
   filterExpression?: string;             // Advanced filter expression with boolean logic
   includeRelatedMemories?: boolean;      // Include related memories in results
   maxRelationshipDepth?: number;         // Maximum depth for relationship traversal
-  searchStrategy?: SearchStrategy;       // Force specific search strategy
 }
 ```
+
+**Note**: The canonical `SearchOptions` interface is imported from `src/core/types/models.ts`. All search operations use this comprehensive interface for consistent configuration across the system.
 
 ### SearchStrategy Enum
 
@@ -255,6 +258,29 @@ const recentResults = await memori.searchMemoriesWithStrategy(
   SearchStrategy.RECENT,
   { limit: 20 }
 );
+```
+
+### Recent Memories Search
+
+The `searchRecentMemories` method provides enhanced access to recent memories with temporal filtering:
+
+```typescript
+// Get recent memories with default settings
+const recentMemories = await memori.searchRecentMemories();
+
+// Get recent memories with custom limit
+const limitedRecent = await memori.searchRecentMemories(5);
+
+// Get recent memories with metadata
+const recentWithMetadata = await memori.searchRecentMemories(10, true);
+
+// Get recent memories with temporal filtering
+const filteredRecent = await memori.searchRecentMemories(15, false, {
+  relativeExpressions: ['last 24 hours']
+});
+
+// Get recent memories using specific strategy
+const recentByStrategy = await memori.searchRecentMemories(20, false, undefined, SearchStrategy.TEMPORAL_FILTER);
 ```
 
 ### Multi-Strategy Search

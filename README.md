@@ -165,6 +165,24 @@ const results = await memori.searchMemoriesWithStrategy(
   'FTS5', // or 'LIKE', 'SEMANTIC', 'RELATIONSHIP'
   { limit: 10 }
 );
+
+// Enhanced temporal search with time windows
+const recentMemories = await memori.searchRecentMemories(10, true, {
+  relativeExpressions: ['last week', 'yesterday'],
+  patterns: ['daily standup', 'weekly review']
+});
+
+// Complex temporal queries with multiple criteria
+const projectUpdates = await memori.searchMemories('urgent project updates', {
+  temporalFilters: {
+    timeRanges: [{
+      start: new Date('2024-01-01'),
+      end: new Date('2024-12-31')
+    }]
+  },
+  categories: ['essential'],
+  minImportance: 'high'
+});
 ```
 
 ### Memory Consolidation
@@ -404,6 +422,9 @@ src/
 
 - **Importance-based filtering**: Prioritize critical, high, medium, or low importance memories
 - **Category filtering**: Filter by essential, contextual, conversational, reference, personal, or conscious-info
+- **Temporal filtering**: Time-based search with natural language expressions ("yesterday", "last week", "2 hours ago")
+- **Time range queries**: Specify exact date ranges or relative time windows for precise temporal filtering
+- **Pattern matching**: Find recurring events and temporal patterns ("daily standup", "weekly review")
 - **Metadata inclusion**: Get rich context with timestamps, sources, and relationships
 - **Full-text search**: Lightning-fast search across all memory content
 - **Filter Expressions**: Advanced boolean logic with field comparisons, ranges, and operators

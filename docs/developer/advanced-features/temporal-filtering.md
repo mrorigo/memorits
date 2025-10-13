@@ -157,20 +157,27 @@ const aggregated = TemporalAggregation.aggregateByPeriod(
 ### 1. Natural Language Temporal Queries
 
 ```typescript
+import { Memori } from 'memorits';
+
 const memori = new Memori();
 
-// Simple relative queries
+// Simple relative queries using SearchOptions interface
 const yesterdayMemories = await memori.searchMemories('urgent issues', {
   temporalFilters: {
     relativeExpressions: ['yesterday']
-  }
+  },
+  limit: 10,
+  minImportance: 'medium'
 });
 
-// Complex natural language
+// Complex natural language with full SearchOptions
 const complexQuery = await memori.searchMemories('meeting notes', {
   temporalFilters: {
     relativeExpressions: ['last Friday afternoon', 'this Monday morning']
-  }
+  },
+  categories: ['essential', 'contextual'],
+  includeMetadata: true,
+  limit: 20
 });
 ```
 

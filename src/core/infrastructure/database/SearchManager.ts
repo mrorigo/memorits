@@ -124,10 +124,12 @@ export class SearchManager {
       limit: options.limit,
       offset: 0, // Not directly supported in SearchOptions, default to 0
       includeMetadata: options.includeMetadata,
-      filters: options.minImportance || options.categories ? {
+      filters: options.minImportance || options.categories || options.temporalFilters ? {
         minImportance: options.minImportance,
         categories: options.categories,
+        ...(options.temporalFilters && { temporalFilters: options.temporalFilters }),
       } : undefined,
+      filterExpression: options.filterExpression,
     };
 
     // Execute search using SearchService

@@ -65,26 +65,40 @@ const filteredResults = await memori.searchMemories('programming help', {
 
 ## Search Options
 
-### Basic Search Options
+### SearchOptions Interface
+
+All search operations use the comprehensive `SearchOptions` interface defined in `src/core/types/models.ts`. This interface provides:
 
 ```typescript
-interface BasicSearchOptions {
-  limit?: number;                    // Number of results (default: 5)
-  namespace?: string;                // Memory namespace (default: 'default')
-  includeMetadata?: boolean;         // Include additional metadata
-}
-```
+interface SearchOptions {
+  // Basic options
+  namespace?: string;                    // Memory namespace (default: 'default')
+  limit?: number;                       // Number of results (default: 5)
+  includeMetadata?: boolean;            // Include additional metadata
 
-### Advanced Search Options
-
-```typescript
-interface AdvancedSearchOptions extends BasicSearchOptions {
-  minImportance?: MemoryImportanceLevel;  // Filter by importance level
-  categories?: MemoryClassification[];    // Filter by memory categories
+  // Filtering options
+  minImportance?: MemoryImportanceLevel; // Filter by importance level
+  categories?: MemoryClassification[];   // Filter by memory categories
   temporalFilters?: TemporalFilterOptions; // Time-based filtering
   metadataFilters?: MetadataFilterOptions; // Metadata-based filtering
+
+  // Sorting and pagination
+  sortBy?: SortOption;                   // Sort results
+  offset?: number;                       // Pagination offset
+
+  // Advanced options
+  strategy?: SearchStrategy;             // Force specific strategy
+  timeout?: number;                      // Search timeout (ms)
+  enableCache?: boolean;                 // Enable result caching
+
+  // Advanced Features
+  filterExpression?: string;             // Advanced filter expression with boolean logic
+  includeRelatedMemories?: boolean;      // Include related memories in results
+  maxRelationshipDepth?: number;         // Maximum depth for relationship traversal
 }
 ```
+
+**Note**: The canonical `SearchOptions` interface is imported from `src/core/types/models.ts`. Use this interface for all search operations to ensure consistency across the system.
 
 ## Memory Classification System
 
@@ -153,6 +167,27 @@ const specificMemories = await memori.searchMemories('project planning', {
   categories: ['essential', 'contextual'],
   includeMetadata: true,
   limit: 15
+});
+```
+
+### 5. Recent Memories Search
+
+```typescript
+// Get recent memories for context
+const recentContext = await memori.searchRecentMemories(5, true);
+
+// Get recent memories from today only
+const todaysMemories = await memori.searchRecentMemories(10, false, {
+  relativeExpressions: ['today']
+});
+
+// Get recent high-importance memories
+const recentImportant = await memori.searchMemories('', {
+  limit: 20,
+  minImportance: 'high',
+  temporalFilters: {
+    relativeExpressions: ['last 3 days']
+  }
 });
 ```
 

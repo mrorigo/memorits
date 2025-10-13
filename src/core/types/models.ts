@@ -1,6 +1,7 @@
 // src/core/types/models.ts
 import { MemoryClassification, MemoryImportanceLevel, ProcessedLongTermMemory, ConversationContext as ZodConversationContext } from './schemas';
-import { BaseConfig, ProviderConfig, LoggerConfig as BaseLoggerConfig, LogLevel as BaseLogLevel } from './base';
+import { BaseConfig, ProviderConfig, LoggerConfig as BaseLoggerConfig } from './base';
+import { SearchStrategy } from '../domain/search/types';
 
 // Re-export Zod types for convenience
 export { MemoryClassification, MemoryImportanceLevel, ProcessedLongTermMemory };
@@ -39,11 +40,30 @@ export interface RecordConversationOptions {
 
 // Database Operation Interfaces
 export interface SearchOptions {
+  // Basic options
   namespace?: string;
   limit?: number;
+  includeMetadata?: boolean;
+
+  // Filtering options
   minImportance?: MemoryImportanceLevel;
   categories?: MemoryClassification[];
-  includeMetadata?: boolean;
+  temporalFilters?: TemporalFilterOptions;
+  metadataFilters?: MetadataFilterOptions;
+
+  // Sorting and pagination
+  sortBy?: SortOption;
+  offset?: number;
+
+  // Advanced options
+  strategy?: SearchStrategy;
+  timeout?: number;
+  enableCache?: boolean;
+
+  // Advanced Features
+  filterExpression?: string;
+  includeRelatedMemories?: boolean;
+  maxRelationshipDepth?: number;
 }
 
 export interface DatabaseStats {
@@ -89,6 +109,61 @@ export interface MemoryProcessingResult {
   error?: string;
   processingTime: number;
   fallbackUsed?: boolean;
+}
+
+// Temporal Filtering Interfaces
+/**
+ * Options for filtering memories by temporal criteria
+ */
+export interface TemporalFilterOptions {
+  /** Array of time ranges to filter within */
+  timeRanges?: TimeRange[];
+  /** Relative time expressions (e.g., "last week", "yesterday") */
+  relativeExpressions?: string[];
+  /** Specific absolute dates to filter by */
+  absoluteDates?: Date[];
+  /** Temporal patterns to match (e.g., "daily standup", "weekly review") */
+  patterns?: string[];
+}
+
+/**
+ * Represents a time range with start and end dates
+ */
+export interface TimeRange {
+  /** Start date of the time range */
+  start: Date;
+  /** End date of the time range */
+  end: Date;
+}
+
+/**
+ * Options for sorting search results
+ */
+export interface SortOption {
+  /** Field to sort by */
+  field: string;
+  /** Sort direction */
+  direction: 'asc' | 'desc';
+}
+
+/**
+ * Options for filtering memories by metadata
+ */
+export interface MetadataFilterOptions {
+  /** Array of metadata field filters to apply */
+  fields?: MetadataFilterField[];
+}
+
+/**
+ * Represents a single metadata field filter
+ */
+export interface MetadataFilterField {
+  /** Metadata field key to filter on */
+  key: string;
+  /** Value to filter for */
+  value: unknown;
+  /** Comparison operator to use */
+  operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains' | 'like';
 }
 
 // Configuration Interfaces

@@ -14,6 +14,7 @@ import {
   MemorySearchResult,
   RecordConversationOptions,
   SearchOptions,
+  TemporalFilterOptions,
 } from './types/models';
 import { ProcessedLongTermMemory, MemoryClassification, MemoryImportanceLevel, MemoryRelationship } from './types/schemas';
 import { SearchStrategy, SearchQuery } from './domain/search/types';
@@ -329,12 +330,29 @@ export class Memori {
   }
 
   /**
-   * Search for recent memories (empty query)
-   */
-  async searchRecentMemories(limit: number = 10, includeMetadata: boolean = false): Promise<MemorySearchResult[]> {
+    * Search for recent memories (empty query)
+    */
+  async searchRecentMemories(
+    limit: number = 10,
+    includeMetadata: boolean = false,
+    temporalOptions?: TemporalFilterOptions,
+    strategy?: SearchStrategy,
+  ): Promise<MemorySearchResult[]> {
+    // Use specific strategy if provided, otherwise use searchMemories with RECENT strategy as default
+    if (strategy && strategy !== SearchStrategy.RECENT) {
+      return this.searchMemoriesWithStrategy('', strategy, {
+        limit,
+        includeMetadata,
+        temporalFilters: temporalOptions,
+      });
+    }
+
+    // Use RECENT strategy for temporal relevance
     return this.searchMemories('', {
       limit,
       includeMetadata,
+      temporalFilters: temporalOptions,
+      strategy: SearchStrategy.RECENT,
     });
   }
 
