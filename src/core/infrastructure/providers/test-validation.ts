@@ -109,8 +109,8 @@ async function validateProviderImplementations() {
     console.log('4. Testing mock providers...');
 
     try {
-      // Import mock providers dynamically
-      const { MockAnthropicProvider, MockOllamaProvider } = await import('./mocks');
+      // Import mock providers dynamically from new location
+      const { MockAnthropicProvider, MockOllamaProvider } = await import('../../../../tests/mocks/providers');
 
       // Test MockAnthropicProvider
       const mockAnthropic = new MockAnthropicProvider({

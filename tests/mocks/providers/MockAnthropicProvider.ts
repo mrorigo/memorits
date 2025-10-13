@@ -1,16 +1,16 @@
-import { ILLMProvider } from '../ILLMProvider';
-import { IProviderConfig } from '../IProviderConfig';
-import { ProviderType } from '../ProviderType';
-import { ChatCompletionParams } from '../types/ChatCompletionParams';
-import { ChatCompletionResponse } from '../types/ChatCompletionResponse';
-import { EmbeddingParams } from '../types/EmbeddingParams';
-import { EmbeddingResponse } from '../types/EmbeddingResponse';
-import { ProviderDiagnostics } from '../types/ProviderDiagnostics';
+import { ILLMProvider } from '../../../src/core/infrastructure/providers/ILLMProvider';
+import { IProviderConfig } from '../../../src/core/infrastructure/providers/IProviderConfig';
+import { ProviderType } from '../../../src/core/infrastructure/providers/ProviderType';
+import { ChatCompletionParams } from '../../../src/core/infrastructure/providers/types/ChatCompletionParams';
+import { ChatCompletionResponse } from '../../../src/core/infrastructure/providers/types/ChatCompletionResponse';
+import { EmbeddingParams } from '../../../src/core/infrastructure/providers/types/EmbeddingParams';
+import { EmbeddingResponse } from '../../../src/core/infrastructure/providers/types/EmbeddingResponse';
+import { ProviderDiagnostics } from '../../../src/core/infrastructure/providers/types/ProviderDiagnostics';
 
 /**
- * Mock configuration for Ollama provider
+ * Mock configuration for Anthropic provider
  */
-export interface MockOllamaConfig extends IProviderConfig {
+export interface MockAnthropicConfig extends IProviderConfig {
   mockResponse?: string;
   mockError?: boolean;
   mockDelay?: number;
@@ -19,25 +19,24 @@ export interface MockOllamaConfig extends IProviderConfig {
     completion_tokens: number;
     total_tokens: number;
   };
-  mockEmbedding?: number[];
 }
 
 /**
- * Mock Ollama provider for testing
+ * Mock Anthropic provider for testing
  * Implements the ILLMProvider interface with configurable mock responses
  */
-export class MockOllamaProvider implements ILLMProvider {
-  private config: MockOllamaConfig;
+export class MockAnthropicProvider implements ILLMProvider {
+  private config: MockAnthropicConfig;
   private model: string;
   private isInitialized = false;
 
-  constructor(config: MockOllamaConfig) {
+  constructor(config: MockAnthropicConfig) {
     this.config = config;
-    this.model = config.model || 'llama2:7b';
+    this.model = config.model || 'claude-3-5-sonnet-20241022';
   }
 
   getProviderType(): ProviderType {
-    return ProviderType.OLLAMA;
+    return ProviderType.ANTHROPIC;
   }
 
   getConfig(): IProviderConfig {
@@ -45,8 +44,9 @@ export class MockOllamaProvider implements ILLMProvider {
   }
 
   async initialize(config: IProviderConfig): Promise<void> {
-    this.config = config as MockOllamaConfig;
-    this.model = config.model || 'llama2:7b';
+    // Preserve existing mock configuration while updating with new config
+    this.config = { ...this.config, ...config } as MockAnthropicConfig;
+    this.model = config.model || 'claude-3-5-sonnet-20241022';
     this.isInitialized = true;
   }
 
@@ -62,7 +62,7 @@ export class MockOllamaProvider implements ILLMProvider {
     const isHealthy = await this.isHealthy();
 
     return {
-      providerType: ProviderType.OLLAMA,
+      providerType: ProviderType.ANTHROPIC,
       isInitialized: this.isInitialized,
       isHealthy,
       model: this.model,
@@ -71,7 +71,6 @@ export class MockOllamaProvider implements ILLMProvider {
         mockResponse: this.config.mockResponse?.substring(0, 50) + '...',
         mockError: this.config.mockError,
         mockDelay: this.config.mockDelay,
-        localModel: true,
       },
       timestamp: new Date(),
     };
@@ -93,10 +92,10 @@ export class MockOllamaProvider implements ILLMProvider {
 
     // Simulate error if configured
     if (this.config.mockError) {
-      throw new Error('Mock Ollama API error');
+      throw new Error('Mock Anthropic API error');
     }
 
-    const responseContent = this.config.mockResponse || 'This is a mock response from Ollama. Running locally!';
+    const responseContent = this.config.mockResponse || 'This is a mock response from Anthropic Claude.';
 
     return {
       message: {
@@ -105,18 +104,16 @@ export class MockOllamaProvider implements ILLMProvider {
       },
       finish_reason: 'stop',
       usage: this.config.mockUsage || {
-        prompt_tokens: 8,
-        completion_tokens: 15,
-        total_tokens: 23,
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        total_tokens: 30,
       },
-      id: `mock-ollama-${Date.now()}`,
+      id: `mock-anthropic-${Date.now()}`,
       model: this.model,
       created: Date.now(),
       metadata: {
         mock: true,
-        provider: 'ollama',
-        local: true,
-        total_duration: 150000000, // 150ms in nanoseconds
+        provider: 'anthropic',
       },
     };
   }
@@ -133,12 +130,12 @@ export class MockOllamaProvider implements ILLMProvider {
 
     // Simulate error if configured
     if (this.config.mockError) {
-      throw new Error('Mock Ollama embeddings API error');
+      throw new Error('Mock Anthropic embeddings API error');
     }
 
     const inputText = Array.isArray(params.input) ? params.input[0] : params.input;
-    const embeddingDimension = 4096; // Standard embedding dimension for many models
-    const mockEmbedding = this.config.mockEmbedding || new Array(embeddingDimension).fill(0).map(() => Math.random() - 0.5);
+    const embeddingDimension = 1536; // Standard embedding dimension
+    const mockEmbedding = new Array(embeddingDimension).fill(0).map(() => Math.random() - 0.5);
 
     return {
       data: [{
@@ -151,23 +148,20 @@ export class MockOllamaProvider implements ILLMProvider {
         prompt_tokens: Math.ceil(inputText.length / 4), // Rough token estimation
         total_tokens: Math.ceil(inputText.length / 4),
       },
-      id: `mock-ollama-embedding-${Date.now()}`,
+      id: `mock-anthropic-embedding-${Date.now()}`,
       created: Date.now(),
       metadata: {
         mock: true,
-        provider: 'ollama',
-        local: true,
-        total_duration: 75000000, // 75ms in nanoseconds
+        provider: 'anthropic',
       },
     };
   }
 
   getClient(): any {
     return {
-      providerType: 'ollama',
+      providerType: 'anthropic',
       model: this.model,
       mock: true,
-      local: true,
     };
   }
 
@@ -190,12 +184,5 @@ export class MockOllamaProvider implements ILLMProvider {
    */
   setMockDelay(delay: number): void {
     this.config.mockDelay = delay;
-  }
-
-  /**
-   * Set mock embedding vector for testing
-   */
-  setMockEmbedding(embedding: number[]): void {
-    this.config.mockEmbedding = embedding;
   }
 }

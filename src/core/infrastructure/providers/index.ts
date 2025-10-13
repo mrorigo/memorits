@@ -23,9 +23,8 @@ export type { ChatCompletionResponse } from './types/ChatCompletionResponse';
 export type { EmbeddingParams } from './types/EmbeddingParams';
 export type { EmbeddingResponse } from './types/EmbeddingResponse';
 
-// Provider mocking
-export { MockAnthropicProvider, MockOllamaProvider } from './mocks';
-export type { MockAnthropicConfig, MockOllamaConfig } from './mocks';
+// Provider mocking - relocated to tests/mocks for proper separation
+// These are now available via tests/mocks for test code only
 
 // Provider testing
 export { ProviderTestSuite, ProviderBenchmark } from './testing';
