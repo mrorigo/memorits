@@ -36,7 +36,6 @@ export class MemoryEnabledLLMProvider implements ILLMProvider {
   private config: IProviderConfig;
   private memoryConfig: MemoryEnabledProviderConfig;
   private wrappedProvider: ILLMProvider;
-  private memoryManager?: MemoryManager;
   private isInitialized = false;
   private metrics = {
     totalRequests: 0,
@@ -138,7 +137,7 @@ export class MemoryEnabledLLMProvider implements ILLMProvider {
       // Delegate to wrapped provider for actual LLM call
       const response = await this.wrappedProvider.createChatCompletion(params);
 
-      // Record memory if enabled
+      // Record memory if enabled - using memoryConfig.memoryManager
       if (this.memoryConfig.enableChatMemory && this.memoryConfig.memoryManager) {
         await this.recordChatMemory(params, response);
       }
@@ -175,7 +174,7 @@ export class MemoryEnabledLLMProvider implements ILLMProvider {
       // Delegate to wrapped provider for actual LLM call
       const response = await this.wrappedProvider.createEmbedding(params);
 
-      // Record memory if enabled
+      // Record memory if enabled - using memoryConfig.memoryManager
       if (this.memoryConfig.enableEmbeddingMemory && this.memoryConfig.memoryManager) {
         await this.recordEmbeddingMemory(params, response);
       }
