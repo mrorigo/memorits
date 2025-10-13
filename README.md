@@ -214,10 +214,92 @@ console.log(`Index health: ${health.health}`);
 const optimization = await memori.optimizeIndex('merge');
 console.log(`Saved ${optimization.spaceSaved} bytes`);
 
-// Create backup
-const backup = await memori.createIndexBackup();
-console.log(`Backup created: ${backup.id}`);
-```
+  // Create backup
+  const backup = await memori.createIndexBackup();
+  console.log(`Backup created: ${backup.id}`);
+  ```
+
+  ### Memory Statistics & Analytics
+
+  ```typescript
+  // Get comprehensive memory statistics
+  const stats = await memori.getMemoryStatistics();
+  console.log(`Total conversations: ${stats.totalConversations}`);
+  console.log(`Total memories: ${stats.totalMemories}`);
+
+  // Get detailed breakdown by type, importance, and category
+  const detailedStats = await memori.getDetailedMemoryStatistics();
+  console.log(`Long-term memories: ${detailedStats.byType.longTerm}`);
+  console.log(`High importance: ${detailedStats.byImportance.high}`);
+  console.log(`Recent activity (24h): ${detailedStats.recentActivity.last24Hours}`);
+  ```
+
+  ### Memory Relationships & Analysis
+
+  ```typescript
+  // Extract relationships from content
+  const relationships = await memori.extractMemoryRelationships(
+    'This is a follow-up to our previous discussion about the authentication system',
+    { minConfidence: 0.7 }
+  );
+
+  for (const rel of relationships) {
+    console.log(`${rel.type}: ${rel.targetMemoryId} (confidence: ${rel.confidence})`);
+  }
+
+  // Build comprehensive relationship graph for a namespace
+  const graph = await memori.buildRelationshipGraph('my-app', {
+    maxDepth: 3,
+    includeWeakRelationships: false
+  });
+
+  console.log(`Found ${graph.nodes.length} connected memories`);
+  console.log(`Found ${graph.edges.length} relationships`);
+  console.log(`Identified ${graph.clusters.length} memory clusters`);
+  ```
+
+  ### Advanced Search Operations
+
+  ```typescript
+  // Get available search strategies
+  const strategies = await memori.getAvailableSearchStrategies();
+  console.log('Available strategies:', strategies);
+
+  // Use specific search strategy with temporal filtering
+  const semanticResults = await memori.searchMemoriesWithStrategy(
+    'project architecture decisions',
+    SearchStrategy.SEMANTIC,
+    {
+      limit: 10,
+      temporalFilters: {
+        relativeExpressions: ['last month', 'this week']
+      }
+    }
+  );
+
+  // Complex metadata filtering
+  const filteredMemories = await memori.searchMemories('urgent issues', {
+    limit: 20,
+    categories: ['essential', 'contextual'],
+    minImportance: 'high',
+    includeMetadata: true,
+    metadataFilters: {
+      field: 'createdAt',
+      operator: 'gte',
+      value: new Date('2024-01-01')
+    }
+  });
+  ```
+
+  ### Backup & Recovery
+
+  ```typescript
+  // Restore from backup
+  const success = await memori.restoreIndexFromBackup(backup.id);
+  if (success) {
+    console.log('Index restored successfully');
+  }
+  ```
 
 ---
 

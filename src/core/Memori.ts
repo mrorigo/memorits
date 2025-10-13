@@ -15,6 +15,7 @@ import {
   RecordConversationOptions,
   SearchOptions,
   TemporalFilterOptions,
+  DatabaseStats,
 } from './types/models';
 import { ProcessedLongTermMemory, MemoryClassification, MemoryImportanceLevel, MemoryRelationship } from './types/schemas';
 import { SearchStrategy, SearchQuery } from './domain/search/types';
@@ -577,6 +578,61 @@ export class Memori {
   /**
     * Consolidate duplicate memories with transaction safety and intelligent data merging
     */
+  async findDuplicateMemories(
+    content: string,
+    options?: {
+      similarityThreshold?: number;
+      namespace?: string;
+      limit?: number;
+    },
+  ): Promise<MemorySearchResult[]> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    const targetNamespace = options?.namespace || this.config.namespace;
+    const threshold = options?.similarityThreshold || 0.7;
+    const limit = options?.limit || 20;
+
+    try {
+      const duplicateManager = (this.dbManager as any).duplicateManager;
+      if (!duplicateManager) {
+        throw new Error('DuplicateManager not available');
+      }
+
+      const duplicates = await duplicateManager.findPotentialDuplicates(
+        content,
+        targetNamespace,
+        threshold,
+      );
+
+      // Apply limit if specified
+      const limitedResults = limit > 0 ? duplicates.slice(0, limit) : duplicates;
+
+      logInfo(`Found ${limitedResults.length} potential duplicate memories`, {
+        component: 'Memori',
+        contentLength: content.length,
+        namespace: targetNamespace,
+        threshold,
+        limit,
+        duplicatesFound: limitedResults.length,
+      });
+
+      return limitedResults;
+
+    } catch (error) {
+      logError('Failed to find duplicate memories', {
+        component: 'Memori',
+        contentLength: content.length,
+        namespace: targetNamespace,
+        threshold,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
   async consolidateDuplicateMemories(
     primaryMemoryId: string,
     duplicateIds: string[],
@@ -704,6 +760,215 @@ export class Memori {
     } catch (error) {
       logError('Failed to create index backup', {
         component: 'Memori',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get comprehensive memory statistics for the current namespace
+   */
+  async getMemoryStatistics(namespace?: string): Promise<DatabaseStats> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    const targetNamespace = namespace || this.config.namespace;
+
+    try {
+      const statisticsManager = (this.dbManager as any).statisticsManager;
+      if (!statisticsManager) {
+        throw new Error('StatisticsManager not available');
+      }
+
+      const stats = await statisticsManager.getDatabaseStats(targetNamespace);
+
+      logInfo('Retrieved memory statistics', {
+        component: 'Memori',
+        namespace: targetNamespace,
+        totalConversations: stats.totalConversations,
+        totalMemories: stats.totalMemories,
+        shortTermMemories: stats.shortTermMemories,
+        longTermMemories: stats.longTermMemories,
+        consciousMemories: stats.consciousMemories,
+      });
+
+      return stats;
+
+    } catch (error) {
+      logError('Failed to retrieve memory statistics', {
+        component: 'Memori',
+        namespace: targetNamespace,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get detailed memory statistics with breakdowns by type, importance, and category
+   */
+  async getDetailedMemoryStatistics(namespace?: string): Promise<{
+    totalMemories: number;
+    byType: {
+      longTerm: number;
+      shortTerm: number;
+      conscious: number;
+    };
+    byImportance: Record<string, number>;
+    byCategory: Record<string, number>;
+    recentActivity: {
+      last24Hours: number;
+      last7Days: number;
+      last30Days: number;
+    };
+    averageConfidence: number;
+  }> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    const targetNamespace = namespace || this.config.namespace;
+
+    try {
+      const statisticsManager = (this.dbManager as any).statisticsManager;
+      if (!statisticsManager) {
+        throw new Error('StatisticsManager not available');
+      }
+
+      const detailedStats = await statisticsManager.getDetailedMemoryStats(targetNamespace);
+
+      logInfo('Retrieved detailed memory statistics', {
+        component: 'Memori',
+        namespace: targetNamespace,
+        totalMemories: detailedStats.totalMemories,
+        longTermMemories: detailedStats.byType.longTerm,
+        shortTermMemories: detailedStats.byType.shortTerm,
+        consciousMemories: detailedStats.byType.conscious,
+        averageConfidence: detailedStats.averageConfidence,
+      });
+
+      return detailedStats;
+
+    } catch (error) {
+      logError('Failed to retrieve detailed memory statistics', {
+        component: 'Memori',
+        namespace: targetNamespace,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Extract memory relationships using the sophisticated RelationshipProcessor
+   */
+  async extractMemoryRelationships(
+    content: string,
+    options?: {
+      namespace?: string;
+      minConfidence?: number;
+      maxRelationships?: number;
+    },
+  ): Promise<MemoryRelationship[]> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    const targetNamespace = options?.namespace || this.config.namespace;
+    const minConfidence = options?.minConfidence || 0.5;
+    const maxRelationships = options?.maxRelationships || 10;
+
+    try {
+      // Get the RelationshipProcessor from the database manager
+      const relationshipProcessor = (this.dbManager as any).relationshipProcessor;
+      if (!relationshipProcessor) {
+        throw new Error('RelationshipProcessor not available - ensure LLM provider is configured');
+      }
+
+      const relationships = await relationshipProcessor.extractRelationships(content, {
+        namespace: targetNamespace,
+        minConfidence,
+        maxRelationships,
+      });
+
+      logInfo('Extracted memory relationships', {
+        component: 'Memori',
+        namespace: targetNamespace,
+        contentLength: content.length,
+        relationshipsFound: relationships.length,
+        minConfidence,
+        maxRelationships,
+      });
+
+      return relationships;
+
+    } catch (error) {
+      logError('Failed to extract memory relationships', {
+        component: 'Memori',
+        namespace: targetNamespace,
+        contentLength: content.length,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Build relationship graph for a namespace
+   */
+  async buildRelationshipGraph(
+    namespace?: string,
+    options?: {
+      maxDepth?: number;
+      includeWeakRelationships?: boolean;
+    },
+  ): Promise<{
+    nodes: Array<{ id: string; type: string; content: string }>;
+    edges: Array<{ source: string; target: string; type: string; strength: number }>;
+    clusters: Array<{ id: string; nodes: string[]; strength: number }>;
+  }> {
+    if (!this.enabled) {
+      throw new Error('Memori is not enabled');
+    }
+
+    const targetNamespace = namespace || this.config.namespace;
+    const maxDepth = options?.maxDepth || 3;
+    const includeWeakRelationships = options?.includeWeakRelationships || false;
+
+    try {
+      const relationshipProcessor = (this.dbManager as any).relationshipProcessor;
+      if (!relationshipProcessor) {
+        throw new Error('RelationshipProcessor not available - ensure LLM provider is configured');
+      }
+
+      const graph = await relationshipProcessor.buildRelationshipGraph(targetNamespace, {
+        maxDepth,
+        includeWeakRelationships,
+      });
+
+      logInfo('Built relationship graph', {
+        component: 'Memori',
+        namespace: targetNamespace,
+        nodesCount: graph.nodes.length,
+        edgesCount: graph.edges.length,
+        clustersCount: graph.clusters.length,
+        maxDepth,
+        includeWeakRelationships,
+      });
+
+      return graph;
+
+    } catch (error) {
+      logError('Failed to build relationship graph', {
+        component: 'Memori',
+        namespace: targetNamespace,
+        maxDepth,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });

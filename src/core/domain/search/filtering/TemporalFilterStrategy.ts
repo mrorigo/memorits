@@ -103,8 +103,10 @@ export class TemporalFilterStrategy implements ISearchStrategy {
    * Determines if this strategy can handle the given query
    */
   canHandle(query: SearchQuery): boolean {
-    // Can handle queries with temporal filters or patterns
-    return this.hasTemporalFilters(query) || this.containsTemporalPatterns(query.text);
+    // Can handle queries with temporal filters, patterns, or empty queries for recent memories
+    return this.hasTemporalFilters(query) ||
+           this.containsTemporalPatterns(query.text) ||
+           (!query.text && (query.limit || 0) > 0);
   }
 
   /**
@@ -112,13 +114,29 @@ export class TemporalFilterStrategy implements ISearchStrategy {
    */
   private hasTemporalFilters(query: SearchQuery): boolean {
     const temporalQuery = query as TemporalFilterQuery;
-    return !!(
-      temporalQuery.temporalFilters &&
-      (temporalQuery.temporalFilters.timeRanges?.length ||
-       temporalQuery.temporalFilters.relativeExpressions?.length ||
-       temporalQuery.temporalFilters.absoluteDates?.length ||
-       temporalQuery.temporalFilters.patterns?.length)
-    );
+
+    // Check for temporalFilters at the top level (TemporalFilterQuery format)
+    if (temporalQuery.temporalFilters) {
+      return !!(
+        temporalQuery.temporalFilters.timeRanges?.length ||
+        temporalQuery.temporalFilters.relativeExpressions?.length ||
+        temporalQuery.temporalFilters.absoluteDates?.length ||
+        temporalQuery.temporalFilters.patterns?.length
+      );
+    }
+
+    // Check for temporalFilters under filters property (SearchQuery format)
+    if (query.filters?.temporalFilters) {
+      const filters = query.filters as any;
+      return !!(
+        filters.temporalFilters.timeRanges?.length ||
+        filters.temporalFilters.relativeExpressions?.length ||
+        filters.temporalFilters.absoluteDates?.length ||
+        filters.temporalFilters.patterns?.length
+      );
+    }
+
+    return false;
   }
 
   /**
@@ -223,16 +241,24 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     const temporalQuery = query as TemporalFilterQuery;
     const ranges: TimeRange[] = [];
 
-    // Process explicit temporal filters
+    // Get temporal filters from either location
+    let temporalFilters: any = null;
     if (temporalQuery.temporalFilters) {
+      temporalFilters = temporalQuery.temporalFilters;
+    } else if (query.filters?.temporalFilters) {
+      temporalFilters = query.filters.temporalFilters;
+    }
+
+    // Process explicit temporal filters
+    if (temporalFilters) {
       // Add explicit time ranges
-      if (temporalQuery.temporalFilters.timeRanges) {
-        ranges.push(...temporalQuery.temporalFilters.timeRanges);
+      if (temporalFilters.timeRanges) {
+        ranges.push(...temporalFilters.timeRanges);
       }
 
       // Process absolute dates
-      if (temporalQuery.temporalFilters.absoluteDates) {
-        temporalQuery.temporalFilters.absoluteDates.forEach(date => {
+      if (temporalFilters.absoluteDates) {
+        temporalFilters.absoluteDates.forEach((date: Date) => {
           ranges.push({
             start: new Date(date.getTime() - 24 * 60 * 60 * 1000), // 1 day before
             end: new Date(date.getTime() + 24 * 60 * 60 * 1000)     // 1 day after
@@ -241,8 +267,8 @@ export class TemporalFilterStrategy implements ISearchStrategy {
       }
 
       // Process relative expressions
-      if (temporalQuery.temporalFilters.relativeExpressions) {
-        temporalQuery.temporalFilters.relativeExpressions.forEach(expr => {
+      if (temporalFilters.relativeExpressions) {
+        temporalFilters.relativeExpressions.forEach((expr: string) => {
           try {
             const normalized = DateTimeNormalizer.normalize(expr);
             ranges.push({
@@ -472,7 +498,9 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     const db = (this.databaseManager as any).prisma || this.databaseManager;
 
     try {
-      return await db.$queryRawUnsafe(sql, ...parameters);
+      const result = await db.$queryRawUnsafe(sql, ...parameters);
+      // Ensure we return an array, even if the result is not iterable
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       logError('Temporal query execution failed', {
         component: 'TemporalFilterStrategy',
@@ -567,8 +595,9 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     }
 
     // Explicit range boost
-    if (query.temporalFilters?.timeRanges) {
-      const inRange = query.temporalFilters.timeRanges.some(range =>
+    const temporalFilters = query.temporalFilters || (query.filters as any)?.temporalFilters;
+    if (temporalFilters?.timeRanges) {
+      const inRange = temporalFilters.timeRanges.some((range: TimeRange) =>
         memoryTime >= range.start && memoryTime <= range.end
       );
       if (inRange) {

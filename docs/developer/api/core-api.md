@@ -365,6 +365,202 @@ if (success) {
 }
 ```
 
+#### `findDuplicateMemories()`
+
+Find potential duplicate memories for consolidation.
+
+```typescript
+async findDuplicateMemories(
+  content: string,
+  options?: {
+    similarityThreshold?: number;
+    namespace?: string;
+    limit?: number;
+  }
+): Promise<MemorySearchResult[]>
+```
+
+**Parameters:**
+- `content`: Content to find duplicates for
+- `options` (optional): Search configuration
+  - `similarityThreshold` (optional): Similarity threshold (default: 0.7)
+  - `namespace` (optional): Memory namespace
+  - `limit` (optional): Maximum results (default: 20)
+
+**Returns:** Array of potential duplicate memories
+
+**Example:**
+```typescript
+const duplicates = await memori.findDuplicateMemories(
+  'This is a test memory about TypeScript',
+  {
+    similarityThreshold: 0.8,
+    limit: 10
+  }
+);
+
+console.log(`Found ${duplicates.length} potential duplicates`);
+```
+
+#### `getMemoryStatistics()`
+
+Get comprehensive memory statistics for a namespace.
+
+```typescript
+async getMemoryStatistics(namespace?: string): Promise<DatabaseStats>
+```
+
+**Parameters:**
+- `namespace` (optional): Memory namespace (default: configured namespace)
+
+**Returns:** Database statistics including conversation and memory counts
+
+**Example:**
+```typescript
+const stats = await memori.getMemoryStatistics();
+console.log(`Total conversations: ${stats.totalConversations}`);
+console.log(`Total memories: ${stats.totalMemories}`);
+console.log(`Long-term memories: ${stats.longTermMemories}`);
+```
+
+#### `getDetailedMemoryStatistics()`
+
+Get detailed memory statistics with breakdowns by type, importance, and category.
+
+```typescript
+async getDetailedMemoryStatistics(namespace?: string): Promise<{
+  totalMemories: number;
+  byType: {
+    longTerm: number;
+    shortTerm: number;
+    conscious: number;
+  };
+  byImportance: Record<string, number>;
+  byCategory: Record<string, number>;
+  recentActivity: {
+    last24Hours: number;
+    last7Days: number;
+    last30Days: number;
+  };
+  averageConfidence: number;
+}>
+```
+
+**Parameters:**
+- `namespace` (optional): Memory namespace (default: configured namespace)
+
+**Returns:** Detailed statistics with multiple breakdowns
+
+**Example:**
+```typescript
+const detailedStats = await memori.getDetailedMemoryStatistics();
+console.log(`Long-term memories: ${detailedStats.byType.longTerm}`);
+console.log(`High importance: ${detailedStats.byImportance.high}`);
+console.log(`Recent activity (24h): ${detailedStats.recentActivity.last24Hours}`);
+```
+
+#### `extractMemoryRelationships()`
+
+Extract memory relationships using the sophisticated RelationshipProcessor.
+
+```typescript
+async extractMemoryRelationships(
+  content: string,
+  options?: {
+    namespace?: string;
+    minConfidence?: number;
+    maxRelationships?: number;
+  }
+): Promise<MemoryRelationship[]>
+```
+
+**Parameters:**
+- `content`: Content to extract relationships from
+- `options` (optional): Extraction configuration
+  - `namespace` (optional): Memory namespace
+  - `minConfidence` (optional): Minimum confidence threshold (default: 0.5)
+  - `maxRelationships` (optional): Maximum relationships to extract (default: 10)
+
+**Returns:** Array of extracted memory relationships
+
+**Example:**
+```typescript
+const relationships = await memori.extractMemoryRelationships(
+  'This is a follow-up to our previous discussion about the authentication system',
+  {
+    minConfidence: 0.7,
+    maxRelationships: 5
+  }
+);
+
+for (const rel of relationships) {
+  console.log(`${rel.type}: ${rel.targetMemoryId} (confidence: ${rel.confidence})`);
+}
+```
+
+#### `buildRelationshipGraph()`
+
+Build relationship graph for a namespace.
+
+```typescript
+async buildRelationshipGraph(
+  namespace?: string,
+  options?: {
+    maxDepth?: number;
+    includeWeakRelationships?: boolean;
+  }
+): Promise<{
+  nodes: Array<{ id: string; type: string; content: string }>;
+  edges: Array<{ source: string; target: string; type: string; strength: number }>;
+  clusters: Array<{ id: string; nodes: string[]; strength: number }>;
+}>
+```
+
+**Parameters:**
+- `namespace` (optional): Memory namespace (default: configured namespace)
+- `options` (optional): Graph building configuration
+  - `maxDepth` (optional): Maximum traversal depth (default: 3)
+  - `includeWeakRelationships` (optional): Include weak relationships (default: false)
+
+**Returns:** Relationship graph with nodes, edges, and clusters
+
+**Example:**
+```typescript
+const graph = await memori.buildRelationshipGraph('my-app', {
+  maxDepth: 3,
+  includeWeakRelationships: false
+});
+
+console.log(`Found ${graph.nodes.length} connected memories`);
+console.log(`Found ${graph.edges.length} relationships`);
+console.log(`Identified ${graph.clusters.length} memory clusters`);
+```
+
+#### `getAvailableSearchStrategies()`
+
+Get available search strategies.
+
+```typescript
+async getAvailableSearchStrategies(): Promise<SearchStrategy[]>
+```
+
+**Returns:** Array of available search strategy types
+
+**Example:**
+```typescript
+const strategies = await memori.getAvailableSearchStrategies();
+console.log('Available strategies:', strategies);
+
+// Use specific strategy
+if (strategies.includes(SearchStrategy.SEMANTIC)) {
+  const results = await memori.searchMemoriesWithStrategy(
+    'query',
+    SearchStrategy.SEMANTIC,
+    { limit: 10 }
+  );
+}
+```
+
 ## Configuration Management
 
 ### MemoriConfig Interface

@@ -104,7 +104,8 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     if (!query.filters) return false;
 
     const temporalFields = ['createdAfter', 'createdBefore', 'since', 'until', 'age', 'timeRange'];
-    return temporalFields.some(field => field in query.filters!);
+    return temporalFields.some(field => field in query.filters!) ||
+           !!query.filters.temporalFilters;
   }
 
   /**
@@ -338,11 +339,12 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
   }
 
   /**
-   * Parse relative time expressions (e.g., "1 day ago", "2 weeks ago")
+   * Parse relative time expressions (e.g., "1 day ago", "2 weeks ago", "1 day", "2 weeks")
    */
   private parseRelativeTime(relativeTime: string): Date {
     const now = new Date();
-    const match = relativeTime.match(/^(\d+)\s*(second|minute|hour|day|week|month|year)s?\s+ago$/i);
+    // Handle both "X unit ago" and "X unit" formats
+    const match = relativeTime.match(/^(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*(ago)?$/i);
 
     if (!match) {
       throw new Error(`Invalid relative time format: ${relativeTime}`);

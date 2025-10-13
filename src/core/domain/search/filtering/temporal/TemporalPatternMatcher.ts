@@ -51,6 +51,11 @@ export class TemporalPatternMatcher {
             regex: /previous\s+(second|minute|hour|day|week|month|year)\b/gi,
             type: 'relative' as const,
             confidence: 0.85
+        },
+        {
+            regex: /\b(yesterday|today|tomorrow)\b/gi,
+            type: 'relative' as const,
+            confidence: 0.95
         }
     ];
 

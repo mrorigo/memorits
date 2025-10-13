@@ -37,15 +37,46 @@ describe('Temporal Strategy Integration Tests', () => {
     };
 
     beforeEach(() => {
+        // Mock successful database response - use the correct field names that match the SQL query
+        const mockResults = [
+            {
+                id: '1',
+                searchableContent: 'recent work content that matches the query',
+                summary: 'Work summary',
+                metadata: JSON.stringify({ namespace: 'test-namespace' }),
+                memoryType: 'long_term',
+                categoryPrimary: 'work',
+                importanceScore: '0.8',
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        // Create the prisma client mock first
+        const mockQueryRawUnsafe = jest.fn().mockResolvedValue(mockResults);
+        const mockPrisma = {
+            $queryRawUnsafe: mockQueryRawUnsafe,
+            $on: jest.fn(),
+            $connect: jest.fn(),
+            $disconnect: jest.fn(),
+            $executeRaw: jest.fn(),
+            $executeRawUnsafe: jest.fn(),
+            $transaction: jest.fn(),
+            $extends: jest.fn(),
+            $metrics: {},
+            longTermMemory: {},
+            shortTermMemory: {},
+            chatHistory: {}
+        } as any;
+
         mockDbManager = {
             $queryRawUnsafe: jest.fn(),
             storeLongTermMemory: jest.fn(),
             storeChatHistory: jest.fn(),
             searchMemories: jest.fn(),
             getSearchService: jest.fn(),
-            getPrismaClient: jest.fn(() => ({
-                $queryRawUnsafe: jest.fn()
-            })),
+            getPrismaClient: jest.fn(() => mockPrisma),
+            prisma: mockPrisma, // Add prisma property for the strategy to use
+            currentNamespace: 'test-namespace', // Add namespace for filtering
         } as any;
 
         temporalStrategy = new TemporalFilterStrategy(defaultTemporalConfig, mockDbManager);
@@ -277,7 +308,9 @@ describe('Temporal Strategy Integration Tests', () => {
                     }
                 };
 
-                (mockDbManager as any).$queryRawUnsafe.mockRejectedValue(new Error('Database error'));
+                // Override the prisma mock to reject for this test
+                const mockPrismaClient = (mockDbManager as any).prisma;
+                mockPrismaClient.$queryRawUnsafe.mockRejectedValueOnce(new Error('Database error'));
 
                 await expect(temporalStrategy.search(query)).rejects.toThrow('Temporal filter strategy failed');
             });
@@ -488,26 +521,35 @@ describe('Temporal Strategy Integration Tests', () => {
                 limit: 10
             };
 
-            // Mock successful database response
-            const mockResults = [
+            // Override the mock query result
+            const mockPrismaClient = (mockDbManager as any).prisma;
+            // Create a fresh mock result for this test
+            const testMockResults = [
                 {
-                    memory_id: '1',
-                    searchable_content: 'Recent work content',
+                    id: '1',
+                    searchableContent: 'recent work content that matches the query',
                     summary: 'Work summary',
-                    metadata: '{}',
-                    memory_type: 'long_term',
-                    category_primary: 'work',
-                    importance_score: '0.8',
-                    created_at: new Date().toISOString(),
-                    temporal_relevance_score: '0.9'
+                    metadata: JSON.stringify({ namespace: 'test-namespace' }),
+                    memoryType: 'long_term',
+                    categoryPrimary: 'work',
+                    importanceScore: '0.8',
+                    createdAt: new Date().toISOString()
                 }
             ];
-
-            // Mock the getPrismaClient method to return an object with $queryRawUnsafe
-            const mockPrisma = { $queryRawUnsafe: jest.fn().mockResolvedValue(mockResults) };
-            (mockDbManager as any).getPrismaClient.mockReturnValue(mockPrisma);
+            mockPrismaClient.$queryRawUnsafe.mockResolvedValueOnce(testMockResults);
 
             const results = await temporalStrategy.search(query);
+
+            // Debug logging
+            console.log('Query:', JSON.stringify(query, null, 2));
+            console.log('Results length:', results.length);
+            console.log('Results:', JSON.stringify(results, null, 2));
+
+            // Let's also check if the mock was called
+            console.log('Mock called:', mockPrismaClient.$queryRawUnsafe.mock.calls.length > 0);
+            if (mockPrismaClient.$queryRawUnsafe.mock.calls.length > 0) {
+                console.log('Mock call args:', JSON.stringify(mockPrismaClient.$queryRawUnsafe.mock.calls[0], null, 2));
+            }
 
             expect(results).toBeDefined();
             expect(results.length).toBeGreaterThan(0);
@@ -568,7 +610,28 @@ describe('Temporal Strategy Integration Tests', () => {
                 }
             };
 
-            (mockDbManager as any).$queryRawUnsafe.mockRejectedValue(new Error('Database connection failed'));
+            // Override both prisma and getPrismaClient mocks to reject for this test
+            const mockPrismaClient = (mockDbManager as any).prisma;
+            const mockGetPrismaClient = mockDbManager.getPrismaClient;
+
+            // Create a mock that rejects
+            const rejectingMock = {
+                $queryRawUnsafe: jest.fn().mockRejectedValue(new Error('Database connection failed')),
+                $on: jest.fn(),
+                $connect: jest.fn(),
+                $disconnect: jest.fn(),
+                $executeRaw: jest.fn(),
+                $executeRawUnsafe: jest.fn(),
+                $transaction: jest.fn(),
+                $extends: jest.fn(),
+                $metrics: {},
+                longTermMemory: {},
+                shortTermMemory: {},
+                chatHistory: {}
+            } as any;
+
+            mockPrismaClient.$queryRawUnsafe.mockRejectedValueOnce(new Error('Database connection failed'));
+            mockGetPrismaClient.mockReturnValueOnce(rejectingMock);
 
             await expect(temporalStrategy.search(query)).rejects.toThrow();
             await expect(recentStrategy.search(query)).rejects.toThrow();
