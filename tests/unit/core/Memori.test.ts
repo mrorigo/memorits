@@ -68,7 +68,10 @@ describe('Memori', () => {
   });
 
   describe('constructor', () => {
-    it('should initialize with default config', () => {
+    it('should initialize with default config', async () => {
+      // Provider initialization now happens in enable() method
+      await memori.enable();
+
       expect(mockLoadConfig).toHaveBeenCalled();
       expect(MockDatabaseManager).toHaveBeenCalledWith(mockConfig.databaseUrl);
       expect(MockOpenAIProvider).toHaveBeenCalledWith({

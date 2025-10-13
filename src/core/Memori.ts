@@ -4,6 +4,10 @@ import { DatabaseManager } from './infrastructure/database/DatabaseManager';
 import { MemoryAgent } from './domain/memory/MemoryAgent';
 import { ConsciousAgent } from './domain/memory/ConsciousAgent';
 import { OpenAIProvider } from './infrastructure/providers/OpenAIProvider';
+import { OllamaProvider } from './infrastructure/providers/OllamaProvider';
+import { AnthropicProvider } from './infrastructure/providers/AnthropicProvider';
+import { LLMProviderFactory } from './infrastructure/providers/LLMProviderFactory';
+import { ProviderType } from './infrastructure/providers/ProviderType';
 import { ConfigManager, MemoriConfig } from './infrastructure/config/ConfigManager';
 import { logInfo, logError } from './infrastructure/config/Logger';
 import {
@@ -16,9 +20,9 @@ import { SearchStrategy, SearchQuery } from './domain/search/types';
 
 export class Memori {
   private dbManager: DatabaseManager;
-  private memoryAgent: MemoryAgent;
+  private memoryAgent?: MemoryAgent;
   private consciousAgent?: ConsciousAgent;
-  private openaiProvider: OpenAIProvider;
+  private openaiProvider?: OpenAIProvider;
   private config: MemoriConfig;
   private enabled: boolean = false;
   private sessionId: string;
@@ -33,11 +37,29 @@ export class Memori {
 
     this.sessionId = uuidv4();
     this.dbManager = new DatabaseManager(this.config.databaseUrl);
-    this.openaiProvider = new OpenAIProvider({
+
+    // Register all default providers with the factory
+    LLMProviderFactory.registerProvider(ProviderType.OPENAI, OpenAIProvider);
+    LLMProviderFactory.registerProvider(ProviderType.OLLAMA, OllamaProvider);
+    LLMProviderFactory.registerProvider(ProviderType.ANTHROPIC, AnthropicProvider);
+  }
+
+  /**
+   * Initialize the Memori instance asynchronously
+   */
+  private async initializeProvider(): Promise<void> {
+    if (this.openaiProvider && this.memoryAgent) {
+      return; // Already initialized
+    }
+
+    // Create provider instance using factory
+    const providerConfig = {
       apiKey: this.config.apiKey,
       model: this.config.model,
       baseUrl: this.config.baseUrl,
-    });
+    };
+
+    this.openaiProvider = await LLMProviderFactory.createProviderFromConfig(providerConfig) as OpenAIProvider;
     this.memoryAgent = new MemoryAgent(this.openaiProvider);
   }
 
@@ -45,6 +67,9 @@ export class Memori {
     if (this.enabled) {
       throw new Error('Memori is already enabled');
     }
+
+    // Ensure provider is initialized
+    await this.initializeProvider();
 
 
     // Initialize ConsciousAgent if conscious ingestion is enabled
@@ -146,6 +171,14 @@ export class Memori {
     userInput: string,
     aiOutput: string,
   ): Promise<void> {
+    if (!this.memoryAgent) {
+      await this.initializeProvider();
+    }
+
+    if (!this.memoryAgent) {
+      throw new Error('Failed to initialize memory agent');
+    }
+
     try {
       const processedMemory = await this.memoryAgent.processConversation({
         chatId,

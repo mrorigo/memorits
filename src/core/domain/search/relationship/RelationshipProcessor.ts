@@ -5,14 +5,14 @@
  * capabilities using LLM-based analysis integrated with the existing OpenAI infrastructure.
  *
  * Key Features:
- * - LLM-powered relationship extraction using existing OpenAI integration
+ * - LLM-powered relationship extraction using OpenAI provider
  * - Advanced relationship graph analysis and traversal
  * - Relationship strength calculation and propagation
  * - Memory consolidation based on relationship patterns
  * - Comprehensive error handling and validation
  *
  * Integration:
- * - Uses existing OpenAI client from memori-ts/src/integrations/openai.ts
+ * - Uses OpenAIProvider from the provider architecture
  * - Integrates with DatabaseManager relationship storage
  * - Works with RelationshipSearchStrategy for graph traversal
  * - Follows established patterns for error handling and logging
@@ -115,8 +115,7 @@ export class RelationshipProcessor {
   }
 
   /**
-   * Extract relationships using LLM analysis with existing OpenAI integration
-   * Follows the same patterns as established in the codebase
+   * Extract relationships using LLM analysis with OpenAI provider
    */
   async extractRelationships(
     content: string,
@@ -144,11 +143,11 @@ export class RelationshipProcessor {
         contextSessionId: context.sessionId,
       });
 
-      // Use the existing OpenAI integration pattern
+      // Use OpenAI provider for relationship analysis
       const systemPrompt = this.buildRelationshipAnalysisPrompt();
       const userPrompt = this.buildRelationshipAnalysisUserPrompt(content, context, existingMemories);
 
-      // Get OpenAI client following established patterns
+      // Get OpenAI provider for relationship analysis
       const openaiClient = this.openaiProvider.getClient();
 
       const response = await openaiClient.chat.completions.create({

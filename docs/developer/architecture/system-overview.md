@@ -15,8 +15,8 @@ Memorits addresses the fundamental limitation of stateless AI conversations by p
 │                        Memorits System                          │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────┐ │
-│  │  OpenAI     │  │  Memory     │  │  Search     │  │  Index  │ │
-│  │  Drop-in    │  │  Processing │  │  Engine     │  │  Mgmt   │ │
+│  │  Multi-     │  │  Memory     │  │  Search     │  │  Index  │ │
+│  │  Provider   │  │  Processing │  │  Engine     │  │  Mgmt   │ │
 │  │  Client     │  │  Engine     │  │             │  │         │ │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────┘ │
 ├─────────────────────────────────────────────────────────────────┤
@@ -36,30 +36,40 @@ Memorits addresses the fundamental limitation of stateless AI conversations by p
 
 ## 🔧 Core Components
 
-### 1. OpenAI Drop-in Client (`MemoriOpenAIClient`)
+### 1. Multi-Provider Client (`MemoriOpenAI` & Provider Factory)
 
-**Transparent proxy for OpenAI SDK with automatic memory recording.**
+**Universal LLM integration supporting OpenAI, Anthropic, Ollama, and custom providers with automatic memory recording.**
 
 ```typescript
 // Zero breaking changes - existing OpenAI code works unchanged
-const client = new MemoriOpenAI('api-key', {
+const openaiClient = new MemoriOpenAI('openai-api-key', {
   enableChatMemory: true,
   autoInitialize: true
 });
 
-// Every conversation is automatically recorded
-const response = await client.chat.completions.create({
+// Multiple provider support with unified interface
+import { LLMProviderFactory, ProviderType } from '@memori/providers';
+
+const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
+  apiKey: 'anthropic-api-key',
+  model: 'claude-3-5-sonnet-20241022'
+});
+
+// Every conversation is automatically recorded across all providers
+const openaiResponse = await openaiClient.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Remember this for later...' }]
 });
 
-// Search through conversation history
-const memories = await client.memory.searchMemories('later');
+// Search through conversation history across all providers
+const memories = await openaiClient.memory.searchMemories('later');
 ```
 
 **Key Features:**
-- **100% API Compatibility**: Exact OpenAI SDK v5.x interface
-- **Transparent Recording**: Automatic conversation capture
+- **100% API Compatibility**: Exact OpenAI SDK v5.x interface maintained
+- **Multi-Provider Support**: OpenAI, Anthropic, Ollama, and custom providers
+- **Transparent Recording**: Automatic conversation capture across all providers
+- **Provider Factory Pattern**: Unified LLMProviderFactory for provider management
 - **Streaming Support**: Complete memory capture for streaming responses
 - **Multiple Initialization Patterns**: Constructor, environment, database URL, advanced config
 
@@ -223,7 +233,7 @@ class MemoryProcessingStateManager {
 ### Conversation Processing Flow
 
 ```
-1. User Input → 2. OpenAI API → 3. Memory Recording → 4. Processing → 5. Storage
+1. User Input → 2. LLM Provider → 3. Memory Recording → 4. Processing → 5. Storage
      ↓               ↓                    ↓              ↓            ↓
   - Context      - Response         - Conversation   - LLM         - SQLite
   - Session       - Streaming         - Metadata       - Analysis    - FTS5
@@ -374,10 +384,17 @@ interface MemoryProcessingObserver {
 ### Simple Integration
 ```typescript
 // Replace OpenAI client with zero changes
-const client = new MemoriOpenAI('api-key', { enableChatMemory: true });
-const response = await client.chat.completions.create({
+const openaiClient = new MemoriOpenAI('openai-api-key', { enableChatMemory: true });
+const response = await openaiClient.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Hello world!' }]
+});
+
+// Multi-provider support
+import { LLMProviderFactory, ProviderType } from '@memori/providers';
+const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
+  apiKey: 'anthropic-api-key',
+  model: 'claude-3-5-sonnet-20241022'
 });
 ```
 
@@ -418,3 +435,10 @@ const memories = await memori.searchMemories('urgent project requirements', {
 - **Load Distribution**: Strategy-based load balancing
 
 This architecture provides a robust, scalable foundation for building sophisticated AI agents with persistent memory capabilities while maintaining the simplicity and reliability required for production applications.
+
+## Related Documentation
+
+- **[Multi-Provider Integration Guide](../integration/openai-integration.md)** - Integration patterns for different LLM providers
+- **[Provider Documentation](../providers/)** - Complete guides for OpenAI, Anthropic, Ollama, and custom providers
+- **[Database Schema Deep Dive](database-schema.md)** - Detailed database design and optimization strategies
+- **[Search Architecture](search-architecture.md)** - Multi-strategy search implementation details

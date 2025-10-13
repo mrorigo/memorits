@@ -14,7 +14,7 @@ Memorits transforms AI conversations from fleeting interactions into persistent,
 - **🔒 Type Safe**: 100% TypeScript coverage with compile-time validation
 - **🧠 Dual Memory Modes**: Conscious processing vs. automated background ingestion
 - **🎨 Multiple Search Strategies**: FTS5, LIKE, recent, semantic, temporal, and metadata filtering
-- **🤖 OpenAI Drop-in Replacement**: Zero breaking changes for existing code
+- **🤖 Multi-Provider Integration**: Support for OpenAI, Anthropic, Ollama, and custom providers
 - **⚙️ Advanced Configuration Management**: Real file system persistence, runtime updates, audit trails
 - **🛡️ Enterprise Error Handling**: Circuit breaker patterns, strategy-specific recovery, enhanced error context
 - **📈 Performance Monitoring**: Real-time dashboards, comprehensive analytics, system health monitoring
@@ -33,15 +33,19 @@ npm install memorits
 ### Basic Usage
 
 ```typescript
-import { Memori, ConfigManager, createMemoriOpenAI } from 'memorits';
+import { Memori, ConfigManager } from 'memorits';
+import { MemoriOpenAI } from 'memorits';
 
 // Initialize with configuration
 const config = ConfigManager.loadConfig();
 const memori = new Memori(config);
 await memori.enable();
 
-// Create OpenAI client with automatic memory recording
-const openaiClient = createMemoriOpenAI(memori, config.apiKey);
+// Create OpenAI client with automatic memory recording (drop-in replacement)
+const openaiClient = new MemoriOpenAI(config.apiKey, {
+  enableChatMemory: true,
+  autoInitialize: true
+});
 
 // Use normally - conversations are automatically recorded
 const response = await openaiClient.chat.completions.create({
@@ -84,7 +88,8 @@ This developer documentation is organized to help you build sophisticated AI age
 - **[Service Monitoring](advanced-features/service-monitoring-metrics.md)** - Performance monitoring and metrics collection
 
 ### 🔗 Integration
-- **[OpenAI Integration](integration/openai-integration.md)** - Drop-in replacement patterns
+- **[Multi-Provider Integration](integration/openai-integration.md)** - Drop-in replacement and provider factory patterns
+- **[Provider Documentation](providers/)** - Complete guides for OpenAI, Anthropic, Ollama, and custom providers
 
 ### 📖 API Reference
 - **[Core API](api/core-api.md)** - Memori class and primary interfaces
@@ -92,6 +97,7 @@ This developer documentation is organized to help you build sophisticated AI age
 
 ### 💡 Examples
 - **[Basic Usage Examples](examples/basic-usage.md)** - Getting started examples and practical patterns
+- **[Advanced Examples](../../../examples/)** - Real-world usage examples and demos
 
 ## 🎯 Target Audience
 
@@ -161,11 +167,11 @@ Memorits follows **Domain-Driven Design (DDD)** principles with a clear separati
 
 ### **Infrastructure Layer** (`src/core/infrastructure/`)
 - **Database Layer**: Prisma ORM, SQLite backend, repositories, and data access objects
-- **Provider Layer**: OpenAI SDK integration and external service providers
+- **Provider Layer**: Multi-provider LLM integration supporting OpenAI, Anthropic, Ollama, and extensible architecture
 - **Configuration Layer**: Winston logging, configuration management, and utilities
 
 ### **Integration Layer** (`src/integrations/`)
-- External system integrations (OpenAI drop-in replacement, etc.)
+- External system integrations (Multi-provider drop-in replacements, etc.)
 
 **Benefits of This Structure:**
 - **Clear Separation of Concerns**: Business logic separate from technical implementation
@@ -178,7 +184,6 @@ Memorits follows **Domain-Driven Design (DDD)** principles with a clear separati
 
  - **[GitHub Repository](https://github.com/mrorigo/memorits)** - Source code and issues
  - **[NPM Package](https://npmjs.com/package/memorits)** - Package installation and versions
- - **[Migration Guide](../MIGRATION.md)** - Migrating from OpenAI to MemoriOpenAI
  - **[Python Version](../../../memori/)** - Original Python implementation
 
 ## 🤝 Contributing

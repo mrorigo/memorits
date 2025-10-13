@@ -1,10 +1,10 @@
-# OpenAI Integration Guide
+# Multi-Provider Integration Guide
 
-This guide explains how to integrate Memorits with OpenAI applications using the drop-in replacement pattern, enabling automatic memory recording with zero code changes.
+This guide explains how to integrate Memorits with multiple LLM providers (OpenAI, Anthropic, Ollama) using both drop-in replacement patterns and the provider factory system, enabling automatic memory recording with zero code changes.
 
 ## Overview
 
-Memorits provides a **zero breaking changes** drop-in replacement for the OpenAI SDK that automatically records conversations and enables intelligent memory retrieval.
+Memorits provides **zero breaking changes** drop-in replacements and provider factory patterns that automatically record conversations and enable intelligent memory retrieval across multiple LLM providers including OpenAI, Anthropic, and Ollama.
 
 ## Quick Integration (30 seconds)
 
@@ -36,9 +36,35 @@ const response = await client.chat.completions.create({
 const memories = await client.memory.searchMemories('important information');
 ```
 
+### 3. Multi-Provider Setup
+
+```typescript
+import { LLMProviderFactory, ProviderType } from '@memori/providers';
+
+// Create multiple providers with shared memory
+const openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4o-mini'
+});
+
+const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  model: 'claude-3-5-sonnet-20241022'
+});
+
+// Use different providers - all share the same memory system
+const openaiResponse = await openaiProvider.chat.completions.create({...});
+const anthropicResponse = await anthropicProvider.chat.completions.create({...});
+
+// Search across all conversations regardless of provider
+const allMemories = await openaiProvider.memory.searchMemories('cross-provider context');
+```
+
 ## Integration Patterns
 
-### Pattern 1: Simple Constructor (Most Common)
+### Pattern 1: Drop-in Replacement (OpenAI Compatible)
+
+#### Simple Constructor (Most Common)
 
 ```typescript
 import { MemoriOpenAIClient } from 'memorits';
@@ -70,6 +96,72 @@ const client = new MemoriOpenAIClient({
   autoInitialize: true,
   namespace: 'my-app'
 });
+```
+
+### Pattern 2: Provider Factory (Multi-Provider Support)
+
+```typescript
+import { LLMProviderFactory, ProviderType } from '@memori/providers';
+
+// Create OpenAI provider with memory
+const openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4o-mini',
+  enableMemory: true,
+  memoryConfig: {
+    databaseUrl: 'sqlite:./memories.db',
+    namespace: 'my-app'
+  }
+});
+
+// Create Anthropic provider with shared memory
+const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  model: 'claude-3-5-sonnet-20241022',
+  enableMemory: true,
+  memoryConfig: {
+    databaseUrl: 'sqlite:./memories.db', // Same database for shared memory
+    namespace: 'my-app'
+  }
+});
+
+// Use providers with unified interface
+const openaiResponse = await openaiProvider.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Hello from OpenAI!' }]
+});
+
+const anthropicResponse = await anthropicProvider.chat.completions.create({
+  model: 'claude-3-5-sonnet-20241022',
+  messages: [{ role: 'user', content: 'Hello from Anthropic!' }]
+});
+
+// Search across all conversations
+const memories = await openaiProvider.memory.searchMemories('cross-provider context');
+```
+
+### Pattern 3: Mixed Integration (Drop-in + Factory)
+
+```typescript
+// Use drop-in for existing OpenAI code
+const openaiClient = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
+  enableChatMemory: true,
+  autoInitialize: true
+});
+
+// Use factory for additional providers
+const ollamaProvider = await LLMProviderFactory.createProvider(ProviderType.OLLAMA, {
+  baseUrl: 'http://localhost:11434',
+  model: 'llama2:7b',
+  enableMemory: true,
+  memoryConfig: {
+    databaseUrl: 'sqlite:./memories.db',
+    namespace: 'my-app'
+  }
+});
+
+// All providers share the same memory system
+const memories = await openaiClient.memory.searchMemories('unified context');
 ```
 
 ## Memory-Enhanced Conversations
@@ -387,7 +479,7 @@ class LearningCodeAssistant {
 }
 ```
 
-## Migration from OpenAI
+## Getting Started with Multi-Provider Integration
 
 ### Step 1: Install Memorits
 
@@ -395,35 +487,41 @@ class LearningCodeAssistant {
 npm install memorits
 ```
 
-### Step 2: Replace Import
+### Step 2: Choose Your Integration Pattern
+
+#### Option A: Drop-in Replacement (OpenAI Compatible)
 
 ```typescript
-// Change this
-import OpenAI from 'openai';
-
-// To this
 import { MemoriOpenAI } from 'memorits';
-```
 
-### Step 3: Update Constructor
-
-```typescript
-// Change this
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
-
-// To this
 const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
   enableChatMemory: true,
   autoInitialize: true
 });
 ```
 
-### Step 4: Use Memory Features
+#### Option B: Provider Factory (Multi-Provider Support)
 
 ```typescript
-// Add memory search capabilities
+import { LLMProviderFactory, ProviderType } from '@memori/providers';
+
+const openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4o-mini',
+  enableMemory: true
+});
+
+const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  model: 'claude-3-5-sonnet-20241022',
+  enableMemory: true
+});
+```
+
+### Step 3: Use Memory Features
+
+```typescript
+// Search across all conversations (works with both patterns)
 const relevantMemories = await client.memory.searchMemories('previous work');
 const context = relevantMemories.map(m => m.content).join('\n');
 
@@ -435,6 +533,10 @@ const response = await client.chat.completions.create({
     { role: 'user', content: userMessage }
   ]
 });
+
+// Multi-provider usage
+const openaiResponse = await openaiProvider.chat.completions.create({...});
+const anthropicResponse = await anthropicProvider.chat.completions.create({...});
 ```
 
 ## Troubleshooting
@@ -495,4 +597,10 @@ const client = new MemoriOpenAI('your-api-key', {
 });
 ```
 
-This integration approach makes it incredibly easy to add sophisticated memory capabilities to existing OpenAI applications with minimal code changes and maximum benefit.
+This integration approach makes it incredibly easy to add sophisticated memory capabilities to existing LLM applications with minimal code changes and maximum benefit.
+
+## Related Documentation
+
+- **[Provider Documentation](../providers/)** - Complete guides for OpenAI, Anthropic, Ollama, and custom providers
+- **[Core API Reference](../api/core-api.md)** - Main Memori class and memory management APIs
+- **[Examples](../../../examples/)** - Real-world usage examples and demos

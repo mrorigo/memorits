@@ -1,6 +1,6 @@
 # Memori TypeScript Examples
 
-This directory contains comprehensive examples demonstrating how to use the Memori TypeScript library for memory-enabled conversations with both OpenAI and Ollama.
+This directory contains comprehensive examples demonstrating how to use the Memori TypeScript library for memory-enabled conversations with multiple AI providers including OpenAI, Ollama, and Anthropic. The examples showcase both the traditional Memori API and the new provider architecture with factory patterns.
 
 ## Prerequisites
 
@@ -92,6 +92,9 @@ npm run example:performance-dashboard
 
 # Memory consolidation demonstration
 npm run example:consolidation
+
+# Multi-provider usage demonstration (NEW)
+npm run example:multi-provider
 ```
 
 ### Running Individual Examples Directly
@@ -119,6 +122,9 @@ npx tsx examples/performance-dashboard.ts
 
 # Memory consolidation
 npx tsx examples/memory-consolidation.ts
+
+# Multi-provider usage
+npx tsx examples/multi-provider-usage.ts
 ```
 
 ## Example Descriptions
@@ -230,6 +236,36 @@ Demonstrates the memory consolidation service:
 - Architecture capabilities demonstration
 - Performance metrics and system capabilities
 - Service design and integration showcase
+
+### 8. Multi-Provider Usage (`multi-provider-usage.ts`) **[NEW]**
+
+Comprehensive demonstration of Memori's multi-provider architecture:
+- **Provider capabilities**: Show available provider types and configurations
+- **Multi-provider memory**: Use multiple providers simultaneously with separate namespaces
+- **Provider switching**: Demonstrate seamless switching between different providers
+- **Factory pattern usage**: Show how to use the provider factory for dynamic provider creation
+- **Cross-provider memory search**: Search memories across different provider namespaces
+
+**Key Features Demonstrated:**
+- **Provider Factory**: Automatic provider registration and creation
+- **Multi-Provider Setup**: Running multiple Memori instances with different providers
+- **Namespace Isolation**: Separate memory spaces for different providers
+- **Provider Detection**: Automatic provider type detection from configuration
+- **Memory Continuity**: Maintaining memory access across provider switches
+
+**Expected Output:**
+- Provider capabilities overview and registration status
+- Multi-provider initialization with separate namespaces
+- Cross-provider conversation recording and memory processing
+- Memory search across different provider namespaces
+- Provider switching demonstration with maintained memory access
+- Best practices for multi-provider applications
+
+**Use Cases:**
+- Applications requiring multiple AI providers for different tasks
+- Development environments with both local (Ollama) and cloud (OpenAI) models
+- A/B testing different providers for performance comparison
+- Failover scenarios with provider backup strategies
 
 ## Expected Output Examples
 
@@ -366,6 +402,57 @@ If you encounter issues:
 3. Ensure all prerequisites are installed
 4. Try running the basic example first to isolate issues
 5. Check the [Memori documentation](../README.md) for more details
+
+## Provider Architecture
+
+### Current Architecture Overview
+
+The Memori library now supports a modern provider architecture that enables:
+
+1. **Multiple Provider Support**: OpenAI, Ollama, and Anthropic providers
+2. **Factory Pattern**: Centralized provider creation and management
+3. **Automatic Provider Detection**: Configuration-based provider selection
+4. **Backward Compatibility**: Existing code continues to work unchanged
+
+### Provider Configuration
+
+#### OpenAI Provider
+```env
+OPENAI_API_KEY="sk-your-openai-key"
+MEMORI_MODEL="gpt-4o-mini"
+# OPENAI_BASE_URL not needed for OpenAI
+```
+
+#### Ollama Provider
+```env
+OPENAI_API_KEY="ollama-local"
+OPENAI_BASE_URL="http://localhost:11434/v1"
+MEMORI_MODEL="llama2"
+```
+
+#### Anthropic Provider
+```env
+OPENAI_API_KEY="sk-ant-api03-your-anthropic-key"
+OPENAI_BASE_URL="https://api.anthropic.com"
+MEMORI_MODEL="claude-3-sonnet-20240229"
+```
+
+### Best Practices
+
+1. **Provider Registration**: The Memori class automatically registers all available providers
+2. **Configuration Validation**: Always validate your provider configuration before use
+3. **Error Handling**: Implement proper error handling for provider-specific issues
+4. **Resource Cleanup**: Always call `await memori.close()` to clean up resources
+5. **Namespace Management**: Use different namespaces for different providers or use cases
+
+### Migration from Legacy Code
+
+If you're updating from older versions:
+
+1. **No API changes required**: Existing `Memori` class usage continues to work
+2. **Automatic provider detection**: The library detects the provider from your configuration
+3. **Enhanced error messages**: Better error reporting for provider issues
+4. **Improved performance**: Optimized provider loading and caching
 
 ## Advanced Configuration
 

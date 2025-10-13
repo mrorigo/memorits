@@ -376,7 +376,7 @@ interface MemoriConfig {
   consciousIngest: boolean;               // Enable conscious processing
   autoIngest: boolean;                    // Enable auto ingestion
   model: string;                          // Default LLM model
-  apiKey: string;                         // OpenAI API key
+  apiKey?: string;                        // LLM provider API key (OpenAI, Anthropic, etc.)
   baseUrl?: string;                       // Custom API base URL
   userContext?: UserContext;              // User-specific context
 }
@@ -497,7 +497,7 @@ class ValidationError extends Error {
 
 ```typescript
 import { Memori, ConfigManager } from 'memorits';
-import { createMemoriOpenAI } from 'memorits/integrations/openai';
+import { MemoriOpenAIClient } from 'memorits/integrations/openai-dropin/client';
 import { SearchStrategy } from 'memorits/core/domain/search/types';
 
 class MemoryEnabledApplication {
@@ -516,7 +516,10 @@ class MemoryEnabledApplication {
       await this.memori.enable();
 
       // Create OpenAI client with memory
-      this.openaiClient = createMemoriOpenAI(this.memori, process.env.OPENAI_API_KEY);
+      this.openaiClient = new MemoriOpenAIClient(process.env.OPENAI_API_KEY!, {
+        enableChatMemory: true,
+        autoInitialize: true,
+      });
 
       console.log('Application initialized with memory capabilities');
     } catch (error) {
@@ -584,8 +587,8 @@ const config = MemoriConfigSchema.parse({
   autoIngest: process.env.MEMORI_AUTO_INGEST === 'true',
   consciousIngest: process.env.MEMORI_CONSCIOUS_INGEST === 'true',
   model: process.env.MEMORI_MODEL || 'gpt-4o-mini',
-  apiKey: process.env.OPENAI_API_KEY || '',
-  baseUrl: process.env.OPENAI_BASE_URL,
+  apiKey: process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || '',
+  baseUrl: process.env.OPENAI_BASE_URL || process.env.ANTHROPIC_BASE_URL,
   userContext: {
     userPreferences: ['dark_mode', 'concise_responses'],
     currentProjects: ['memorits_development'],

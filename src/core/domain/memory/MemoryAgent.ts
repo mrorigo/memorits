@@ -28,7 +28,7 @@
  * ```
  */
 import { z } from 'zod';
-import { OpenAIProvider } from '../../infrastructure/providers/OpenAIProvider';
+import { ILLMProvider } from '../../infrastructure/providers/ILLMProvider';
 import {
   ProcessedLongTermMemorySchema,
   MemoryClassification,
@@ -87,17 +87,17 @@ IMPORTANCE CRITERIA:
 `;
 
 export class MemoryAgent {
-  private openaiProvider: OpenAIProvider;
+  private openaiProvider: ILLMProvider;
   private dbManager?: DatabaseManager;
   private relationshipProcessor?: RelationshipProcessor;
 
-  constructor(openaiProvider: OpenAIProvider, dbManager?: DatabaseManager) {
+  constructor(openaiProvider: ILLMProvider, dbManager?: DatabaseManager) {
     this.openaiProvider = openaiProvider;
     this.dbManager = dbManager;
 
     // Initialize relationship processor if database manager is available
     if (dbManager && openaiProvider) {
-      this.relationshipProcessor = new RelationshipProcessor(dbManager, openaiProvider);
+      this.relationshipProcessor = new RelationshipProcessor(dbManager, openaiProvider as any);
     }
   }
 
@@ -685,8 +685,7 @@ RELATIONSHIP ANALYSIS INSTRUCTIONS:
 Extract and classify this memory, including relationship analysis:`;
 
     try {
-      const response = await this.openaiProvider.getClient().chat.completions.create({
-        model: this.openaiProvider.getModel(),
+      const response = await this.openaiProvider.createChatCompletion({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -695,7 +694,7 @@ Extract and classify this memory, including relationship analysis:`;
         max_tokens: 1000,
       });
 
-      const content = response.choices[0]?.message?.content;
+      const content = response.message?.content;
       if (!content) {
         throw new Error('No response from OpenAI');
       }

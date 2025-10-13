@@ -20,6 +20,7 @@ npm install memorits
 
 ### 1. Basic Setup
 
+// docs/PORTING_PLAN.md
 ```typescript
 import { Memori, ConfigManager, createMemoriOpenAI } from 'memorits';
 

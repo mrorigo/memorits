@@ -66,7 +66,9 @@ console.log('Recalled:', memories);
 ## 2. AI Chatbot with Memory
 
 ```typescript
-import { createMemoriOpenAI, Memori, ConfigManager } from 'memorits';
+import { MemoriOpenAI } from 'memorits';
+import { Memori, ConfigManager } from 'memorits';
+import { LLMProviderFactory, ProviderType } from '@memori/providers';
 
 class MemoryEnabledChatbot {
   private client: any;
@@ -79,8 +81,11 @@ class MemoryEnabledChatbot {
     config.apiKey = apiKey;
     this.memori = new Memori(config);
 
-    // Create OpenAI client with the Memori instance
-    this.client = createMemoriOpenAI(this.memori, apiKey);
+    // Create OpenAI client with memory (drop-in replacement)
+    this.client = new MemoriOpenAI(apiKey, {
+      enableChatMemory: true,
+      autoInitialize: true,
+    });
 
     this.sessionId = this.generateSessionId();
   }
@@ -140,15 +145,72 @@ class MemoryEnabledChatbot {
   }
 }
 
-// Usage
-const chatbot = new MemoryEnabledChatbot(process.env.OPENAI_API_KEY!);
-await chatbot.initialize();
+// Usage - OpenAI drop-in replacement
+const openaiChatbot = new MemoryEnabledChatbot(process.env.OPENAI_API_KEY!);
+await openaiChatbot.initialize();
 
-console.log(await chatbot.chat('My name is Alice and I love programming'));
-console.log(await chatbot.chat('What is my name?'));
+console.log(await openaiChatbot.chat('My name is Alice and I love programming'));
+console.log(await openaiChatbot.chat('What is my name?'));
 
-const history = await chatbot.searchChatHistory('Alice');
+const history = await openaiChatbot.searchChatHistory('Alice');
 console.log('Chat history:', history);
+
+// Multi-provider alternative using Provider Factory
+class MultiProviderChatbot {
+  private openaiProvider: any;
+  private anthropicProvider: any;
+  private memori: Memori;
+
+  constructor() {
+    const config = ConfigManager.loadConfig();
+    this.memori = new Memori(config);
+  }
+
+  async initialize() {
+    await this.memori.enable();
+
+    // Create multiple providers with shared memory
+    this.openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
+      apiKey: process.env.OPENAI_API_KEY,
+      model: 'gpt-4o-mini',
+      enableMemory: true,
+      memoryConfig: {
+        databaseUrl: 'sqlite:./memories.db',
+        namespace: 'multi-provider-chat'
+      }
+    });
+
+    this.anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: 'claude-3-5-sonnet-20241022',
+      enableMemory: true,
+      memoryConfig: {
+        databaseUrl: 'sqlite:./memories.db', // Shared database
+        namespace: 'multi-provider-chat'
+      }
+    });
+  }
+
+  async chatWithOpenAI(message: string) {
+    const response = await this.openaiProvider.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: message }]
+    });
+    return response.choices[0].message.content;
+  }
+
+  async chatWithAnthropic(message: string) {
+    const response = await this.anthropicProvider.chat.completions.create({
+      model: 'claude-3-5-sonnet-20241022',
+      messages: [{ role: 'user', content: message }]
+    });
+    return response.choices[0].message.content;
+  }
+
+  async searchSharedHistory(query: string) {
+    return this.memori.searchMemories(query, { limit: 10 });
+  }
+}
 ```
 
 ## 3. Personal Knowledge Base
@@ -563,22 +625,26 @@ console.log('Areas needing attention:', weakAreas);
 
 ```typescript
 import { Memori, ConfigManager } from 'memorits';
-import { createMemoriOpenAI } from 'memorits/integrations/openai';
+import { MemoriOpenAI } from 'memorits';
+import { LLMProviderFactory, ProviderType } from '@memori/providers';
 
 class ContextAwareAssistant {
   private client: any;
   private memori: Memori;
   private userProfile: any = {};
 
-  constructor(apiKey: string) {
+  constructor(apiKey?: string) {
     // Create Memori instance first
     const config = ConfigManager.loadConfig();
-    config.apiKey = apiKey;
+    if (apiKey) config.apiKey = apiKey;
     config.consciousIngest = true;
     this.memori = new Memori(config);
 
-    // Create OpenAI client with the Memori instance
-    this.client = createMemoriOpenAI(this.memori, apiKey);
+    // Create OpenAI client with memory (drop-in replacement)
+    this.client = new MemoriOpenAI(apiKey || process.env.OPENAI_API_KEY!, {
+      enableChatMemory: true,
+      autoInitialize: true,
+    });
   }
 
   async initialize() {
@@ -714,3 +780,10 @@ console.log('Personalized recommendations:', recommendations);
 ```
 
 These examples demonstrate how Memorits can be used to build sophisticated, memory-enabled applications ranging from simple note-taking systems to advanced AI assistants with persistent context and learning capabilities.
+
+## Related Documentation
+
+- **[Integration Guide](../integration/openai-integration.md)** - Multi-provider integration patterns and drop-in replacements
+- **[Provider Documentation](../providers/)** - Complete guides for OpenAI, Anthropic, Ollama, and custom providers
+- **[Core API Reference](../api/core-api.md)** - Main Memori class and memory management APIs
+- **[Advanced Examples](../../../examples/)** - Additional real-world usage examples and demos

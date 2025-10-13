@@ -2,7 +2,7 @@
 // Core exports (backward compatibility)
 export { Memori } from './core/Memori';
 export { ConfigManager } from './core/infrastructure/config/ConfigManager';
-export { createMemoriOpenAI } from './integrations/openai';
+// createMemoriOpenAI from old integration - DEPRECATED: Use MemoriOpenAIClient factory functions instead
 export { ProcessedLongTermMemorySchema } from './core/types/schemas';
 
 // Search Strategy exports (new architecture)

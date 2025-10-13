@@ -144,9 +144,8 @@ export class MemoriOpenAIFactory implements MemoriOpenAIFactory {
 export const memoriOpenAIFactory = new MemoriOpenAIFactory();
 
 /**
- * Legacy factory function for backward compatibility
- * This function provides a simple way to create MemoriOpenAI instances
- * for existing code that expects a function-based API
+ * Convenience factory function for creating MemoriOpenAI instances
+ * Provides a simple function-based API for users who prefer functional patterns
  */
 export async function createMemoriOpenAI(
   memori: Memori,

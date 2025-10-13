@@ -63,6 +63,7 @@
     "example:performance-dashboard": "tsx examples/performance-dashboard.ts",
     "example:advanced-search": "tsx examples/advanced-memory-search.ts",
     "example:consolidation": "tsx examples/memory-consolidation.ts",
+    "example:multi-provider": "tsx examples/multi-provider-usage.ts",
     "index:health": "tsx examples/scripts/index-health.ts",
     "index:optimize": "tsx examples/scripts/index-optimize.ts",
     "index:backup": "tsx examples/scripts/index-backup.ts"

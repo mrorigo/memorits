@@ -32,7 +32,6 @@ Memorits delivers enterprise-grade memory management for AI applications - featu
   - [Advanced Usage](#advanced-usage)
   - [Configuration](#configuration)
   - [Environment Variables](#environment-variables)
-- [Migration Guide](#migration-guide)
 - [Architecture Overview](#architecture-overview)
 - [Key Features](#key-features)
 - [Enterprise Features](#enterprise-features)
@@ -216,35 +215,6 @@ console.log(`Backup created: ${backup.id}`);
 - **Full Compatibility**: Exact OpenAI SDK v5.x API match
 - **Streaming Support**: Complete memory capture for streaming responses
 
-### Quick Migration
-
-**Before (standard OpenAI):**
-```typescript
-import OpenAI from 'openai';
-
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
-```
-
-**After (MemoriOpenAI drop-in):**
-```typescript
-import { MemoriOpenAI } from 'memorits';
-
-const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-  enableChatMemory: true,
-  autoInitialize: true
-});
-
-// Same API, now with memory!
-const response = await client.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: 'Remember this...' }]
-});
-
-// Search through conversation history
-const memories = await client.memory.searchMemories('conversation');
-```
 
 ### Initialization Patterns
 
@@ -370,22 +340,6 @@ MEMORI_AUTO_INGEST=true
 
 ---
 
-## Migration Guide
-
-### Quick Migration (3 lines)
-
-```typescript
-// Replace this
-import OpenAI from 'openai';
-const client = new OpenAI({ apiKey });
-
-// With this
-import { MemoriOpenAI } from 'memorits';
-const client = new MemoriOpenAI(apiKey, { enableChatMemory: true });
-```
-
-**✅ Zero breaking changes** - Your existing OpenAI code works unchanged!**
-
 ---
 
 ## Architecture Overview
@@ -419,7 +373,7 @@ src/
 
 ### 🔧 **Infrastructure Layer** (`src/core/infrastructure/`)
 - **Database Layer**: Prisma ORM, SQLite backend, repositories, and data access objects
-- **Provider Layer**: OpenAI SDK integration and external service providers
+- **Provider Layer**: Multi-provider LLM integration supporting OpenAI, Anthropic, Ollama, and extensible architecture
 - **Configuration Layer**: Winston logging, configuration management, and utilities
 
 ### 🔗 **Integration Layer** (`src/integrations/`)
@@ -464,12 +418,13 @@ src/
 - **Zod validation** for runtime type checking
 - **Prisma ORM** for type-safe database operations
 
-### 🤖 Seamless OpenAI Integration
+### 🤖 Multi-Provider LLM Integration
 
-- **Drop-in replacement** for OpenAI client
+- **Universal drop-in replacement** supporting OpenAI, Anthropic, Ollama, and custom providers
 - **Automatic memory recording** - no manual intervention needed
 - **Structured memory processing** with intelligent classification
 - **Dual memory modes**: conscious processing vs. automated ingestion
+- **Provider abstraction** - switch between LLM providers with minimal configuration changes
 
 ### ⚡ Performance Optimized
 
@@ -602,9 +557,10 @@ const previousDiscussions = await memori.searchMemories('authentication system',
 - **Zod** - Runtime type validation with detailed error reporting and schema evolution
 
 ### 🔌 **AI Integration Layer**
-- **OpenAI SDK 5.x** - Native compatibility with automatic memory enhancement
-- **Provider Abstraction** - Pluggable AI provider architecture for multiple LLM services
-- **Streaming Support** - Full memory capture for real-time AI interactions
+- **Multi-Provider SDK** - Native compatibility with OpenAI, Anthropic, Ollama, and custom providers
+- **Provider Factory Pattern** - Unified LLMProviderFactory for creating and managing provider instances
+- **Memory-Enabled Providers** - Automatic memory enhancement across all supported LLM services
+- **Streaming Support** - Full memory capture for real-time AI interactions across all providers
 
 ### 📊 **Enterprise Services**
 - **Performance Monitoring** - Real-time metrics collection and alerting
@@ -711,14 +667,16 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 - **[Core Concepts](docs/developer/core-concepts/)** - Memory management, search strategies, and classification systems
 - **[Architecture Deep Dive](docs/developer/architecture/)** - System design, database layer, and search engine implementation
 - **[Advanced Features](docs/developer/advanced-features/)** - Temporal filtering, metadata processing, conscious memory, memory relationships, and consolidation
-- **[API Reference](docs/developer/api-reference/)** - Detailed interface documentation and usage examples
-- **[Integration Guides](docs/developer/integrations/)** - OpenAI integration patterns and custom provider development
+- **[API Reference](docs/developer/api/)** - Detailed interface documentation and usage examples
+- **[Integration Guides](docs/developer/integration/)** - Multi-provider integration patterns and custom provider development
+- **[Provider Documentation](docs/developer/providers/)** - Complete guides for OpenAI, Anthropic, Ollama, and custom providers
+- **[Provider Documentation](docs/developer/providers/)** - Comprehensive guides for OpenAI, Anthropic, Ollama, and custom providers
 
 ---
 
 ## API Reference
 
-📚 **[Complete API Documentation](docs/developer/api/core-api.md)** - Comprehensive API reference with detailed examples.
+📚 **[Complete API Documentation](docs/developer/api/)** - Comprehensive API reference with detailed examples.
 
 ---
 

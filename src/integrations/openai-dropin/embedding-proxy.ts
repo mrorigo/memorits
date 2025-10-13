@@ -203,18 +203,6 @@ export class EmbeddingProxy {
   }
 
   /**
-   * Extract meaningful information from input for memory metadata
-   */
-  private extractInputSummary(input: string | string[]): string {
-    if (Array.isArray(input)) {
-      if (input.length === 0) return '';
-      if (input.length === 1) return String(input[0]);
-      return `${input[0]}... (+${input.length - 1} more items)`;
-    }
-    return input;
-  }
-
-  /**
    * Update embedding proxy enabled state
    */
   setEnabled(enabled: boolean): void {
@@ -262,6 +250,36 @@ export class EmbeddingProxy {
    */
   getMemoryManager(): MemoryManager {
     return this.memoryManager;
+  }
+
+  /**
+   * Extract a human-readable summary from embedding input
+   */
+  private extractInputSummary(input: string | string[] | number[] | number[][]): string {
+    if (!input) {
+      return '';
+    }
+
+    if (typeof input === 'string') {
+      return input;
+    }
+
+    if (Array.isArray(input)) {
+      if (input.length === 0) {
+        return '';
+      }
+
+      if (input.length === 1) {
+        return String(input[0]);
+      }
+
+      // For multiple items, create a summary format
+      const firstItem = String(input[0]);
+      const remainingCount = input.length - 1;
+      return `${firstItem}... (+${remainingCount} more items)`;
+    }
+
+    return String(input);
   }
 }
 

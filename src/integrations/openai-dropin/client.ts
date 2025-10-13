@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Memori } from '../../core/Memori';
 import { MemoryAgent } from '../../core/domain/memory/MemoryAgent';
 import { OpenAIProvider } from '../../core/infrastructure/providers/OpenAIProvider';
+import { MemoryEnabledLLMProvider } from '../../core/infrastructure/providers/MemoryEnabledLLMProvider';
 import { ConfigManager, MemoriConfig } from '../../core/infrastructure/config/ConfigManager';
 import { logInfo, logError } from '../../core/infrastructure/config/Logger';
 import { OpenAIMemoryManager } from './memory-manager';
@@ -76,6 +77,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
   private openaiClient: OpenAI;
   private memori: Memori;
   private memoryManager: OpenAIMemoryManager;
+  private memoryEnabledProvider: MemoryEnabledLLMProvider;
   public config: MemoriOpenAIConfig;
   private enabled: boolean = false;
   public sessionId: string;
@@ -135,18 +137,48 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
       consciousIngest: this.config.consciousIngest,
     });
 
-    // Create OpenAI provider for memory agent
-    const openaiProvider = new OpenAIProvider({
+    // Create OpenAI provider for memory agent (core provider without memory)
+    const coreProvider = new OpenAIProvider({
       apiKey: this.config.apiKey!,
       model: 'gpt-4o-mini',
       baseUrl: this.config.baseUrl,
     });
 
-    // Create memory agent
-    const memoryAgent = new MemoryAgent(openaiProvider);
+    // Create memory agent with core provider
+    const memoryAgent = new MemoryAgent(coreProvider);
 
     // Initialize memory manager with proper architecture
     this.memoryManager = new OpenAIMemoryManager(this.memori, memoryAgent);
+
+    // Create memory-enabled provider for external usage (synchronous initialization)
+    this.memoryEnabledProvider = new MemoryEnabledLLMProvider(
+      coreProvider,
+      {
+        apiKey: this.config.apiKey!,
+        model: 'gpt-4o-mini', // Use default model since config doesn't have model property
+        baseUrl: this.config.baseUrl,
+      },
+      {
+        enableChatMemory: this.config.enableChatMemory ?? true,
+        enableEmbeddingMemory: this.config.enableEmbeddingMemory ?? false,
+        memoryProcessingMode: this.config.memoryProcessingMode || 'auto',
+        minImportanceLevel: this.config.minImportanceLevel || 'all',
+        sessionId: this.sessionId,
+        memoryManager: this.memoryManager,
+      }
+    );
+
+    // Initialize the memory-enabled provider synchronously
+    this.memoryEnabledProvider.initialize({
+      apiKey: this.config.apiKey!,
+      model: 'gpt-4o-mini',
+      baseUrl: this.config.baseUrl,
+    }).catch((error) => {
+      logError('Failed to initialize memory-enabled provider', {
+        component: 'MemoriOpenAIClient',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     // Auto-initialize if configured
     if (this.config.autoInitialize) {
@@ -159,33 +191,124 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
     }
   }
 
-  // OpenAI SDK interface implementation with ChatProxy
+  // OpenAI SDK interface implementation with memory-enabled provider
   get chat(): OpenAI.Chat {
-    // Create ChatProxy with memory recording enabled by default
-    const chatProxy = new ChatProxy(
-      this.openaiClient.chat,
-      this.memoryManager,
-      this.config.enableChatMemory ?? true,
-    );
+    return this.createMemoryEnabledChatInterface();
+  }
+
+  /**
+   * Create OpenAI-compatible chat interface using memory-enabled provider
+   */
+  private createMemoryEnabledChatInterface(): OpenAI.Chat {
+    const originalChat = this.openaiClient.chat;
 
     return {
       completions: {
-        create: chatProxy.create.bind(chatProxy),
+        create: async (params: ChatCompletionCreateParams, options?: OpenAI.RequestOptions) => {
+          // Use memory-enabled provider for chat completions
+          const response = await this.memoryEnabledProvider.createChatCompletion({
+            model: params.model || 'gpt-4o-mini',
+            messages: params.messages as any,
+            temperature: params.temperature ?? undefined,
+            max_tokens: params.max_tokens ?? undefined,
+            top_p: params.top_p ?? undefined,
+            frequency_penalty: params.frequency_penalty ?? undefined,
+            presence_penalty: params.presence_penalty ?? undefined,
+            stop: params.stop ?? undefined,
+            stream: params.stream ?? false,
+            options: params as any,
+          });
+
+          // Convert response back to OpenAI format for compatibility
+          if (params.stream && response.message) {
+            // Handle streaming case - for now return non-streaming response
+            // Full streaming support would require more complex implementation
+            return {
+              id: response.id || 'memori-generated-id',
+              object: 'chat.completion',
+              created: response.created || Date.now(),
+              model: response.model || params.model || 'gpt-4o-mini',
+              choices: [{
+                index: 0,
+                message: {
+                  role: response.message.role,
+                  content: response.message.content || '',
+                },
+                finish_reason: response.finish_reason || 'stop',
+              }],
+              usage: response.usage ? {
+                prompt_tokens: response.usage.prompt_tokens || 0,
+                completion_tokens: response.usage.completion_tokens || 0,
+                total_tokens: response.usage.total_tokens || 0,
+              } : undefined,
+            } as OpenAI.ChatCompletion;
+          }
+
+          // Non-streaming response
+          return {
+            id: response.id || 'memori-generated-id',
+            object: 'chat.completion',
+            created: response.created || Date.now(),
+            model: response.model || params.model || 'gpt-4o-mini',
+            choices: [{
+              index: 0,
+              message: {
+                role: response.message?.role || 'assistant',
+                content: response.message?.content || '',
+              },
+              finish_reason: response.finish_reason || 'stop',
+            }],
+            usage: response.usage ? {
+              prompt_tokens: response.usage.prompt_tokens || 0,
+              completion_tokens: response.usage.completion_tokens || 0,
+              total_tokens: response.usage.total_tokens || 0,
+            } : undefined,
+          } as OpenAI.ChatCompletion;
+        },
       },
     } as OpenAI.Chat;
   }
 
   get embeddings(): OpenAI.Embeddings {
-    // Create EmbeddingProxy with memory recording enabled based on configuration
-    const embeddingProxy = new EmbeddingProxy(
-      this.openaiClient.embeddings,
-      this.memoryManager,
-      this.config.enableEmbeddingMemory ?? false,
-      this.config.enableEmbeddingMemory ?? false,
-    );
+    return this.createMemoryEnabledEmbeddingsInterface();
+  }
 
+  /**
+   * Create OpenAI-compatible embeddings interface using memory-enabled provider
+   */
+  private createMemoryEnabledEmbeddingsInterface(): OpenAI.Embeddings {
     return {
-      create: embeddingProxy.create.bind(embeddingProxy),
+      create: async (params: EmbeddingCreateParams, options?: OpenAI.RequestOptions) => {
+        // Use memory-enabled provider for embeddings
+        // Convert input to string format if needed
+        const input = Array.isArray(params.input)
+          ? params.input.map(item => String(item))
+          : String(params.input);
+
+        const response = await this.memoryEnabledProvider.createEmbedding({
+          model: params.model || 'text-embedding-3-small',
+          input: input,
+          encoding_format: params.encoding_format,
+          dimensions: params.dimensions,
+          user: params.user,
+          options: params as any,
+        });
+
+        // Convert response back to OpenAI format for compatibility
+        return {
+          object: 'list',
+          data: response.data.map((item, index) => ({
+            object: item.object || 'embedding',
+            embedding: item.embedding,
+            index: item.index ?? index,
+          })) as OpenAI.Embedding[],
+          model: response.model || params.model || 'text-embedding-3-small',
+          usage: response.usage ? {
+            prompt_tokens: response.usage.prompt_tokens || 0,
+            total_tokens: response.usage.total_tokens || 0,
+          } : undefined,
+        } as OpenAI.CreateEmbeddingResponse;
+      },
     } as OpenAI.Embeddings;
   }
 
