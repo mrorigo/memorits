@@ -1,7 +1,3 @@
-// src/integrations/openai-dropin/embedding-proxy.ts
-// EmbeddingProxy implementation for OpenAI Drop-in with Embeddings Phase 3 functionality
-// Provides configurable memory recording for embedding requests while maintaining OpenAI API compatibility
-
 import type OpenAI from 'openai';
 import type {
   EmbeddingCreateParams,

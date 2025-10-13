@@ -96,6 +96,4 @@ export type {
   OptionalConfigKeys,
   RequiredConfigKeys,
 
-  // Legacy support types
-  LegacyMemoriOpenAIFactory,
 } from './integrations/openai-dropin/types';

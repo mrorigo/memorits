@@ -1,7 +1,3 @@
-// src/integrations/openai-dropin/chat-proxy.ts
-// ChatProxy implementation for OpenAI Drop-in with transparent memory recording
-// Provides Chat Phase 2 functionality as specified in the design document
-
 import type OpenAI from 'openai';
 import type {
   ChatCompletionCreateParams,

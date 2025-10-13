@@ -1,6 +1,3 @@
-// src/integrations/openai-dropin/types.ts
-// TypeScript type definitions for OpenAI drop-in replacement
-// Provides 100% compatibility with OpenAI SDK v5.x while adding memory functionality
 
 import type OpenAI from 'openai';
 import type {
@@ -624,21 +621,6 @@ export interface MemoriOpenAIEnvironment {
   MEMORI_BUFFER_TIMEOUT?: string;
   MEMORI_MAX_BUFFER_SIZE?: string;
   MEMORI_BACKGROUND_INTERVAL?: string;
-}
-
-// =============================================================================
-// Legacy Support Types
-// =============================================================================
-
-/**
- * Legacy factory function interface for backward compatibility
- */
-export interface LegacyMemoriOpenAIFactory {
-  createMemoriOpenAI(
-    memori: any,
-    apiKey: string,
-    options?: OpenAI.RequestOptions & { baseUrl?: string }
-  ): MemoriOpenAI;
 }
 
 export default MemoriOpenAI;

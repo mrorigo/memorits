@@ -1,7 +1,3 @@
-// src/integrations/openai-dropin/factory.ts
-// Factory functions for different MemoriOpenAI initialization patterns
-// Provides multiple initialization options as specified in the design document
-
 import MemoriOpenAIClient from './client';
 import type { Memori } from '../../core/Memori';
 import { logInfo, logError } from '../../core/infrastructure/config/Logger';

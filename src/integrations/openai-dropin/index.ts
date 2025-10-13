@@ -1,6 +1,3 @@
-// src/integrations/openai-dropin/index.ts
-// Main entry point for OpenAI drop-in replacement
-// Exports all components for easy importing
 
 // Main client implementation
 export { default as MemoriOpenAIClient } from './client';
@@ -59,9 +56,6 @@ export type {
   Chat,
   Embeddings,
 } from './types';
-
-// Legacy support (for backward compatibility)
-export { LegacyMemoriOpenAIFactory } from './types';
 
 // Default export for convenience (re-export the client as MemoriOpenAI)
 import MemoriOpenAIClient from './client';

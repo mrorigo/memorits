@@ -1,5 +1,3 @@
-// Memory Manager implementation for OpenAI Drop-in with Architecture Phase 1 components
-// Provides ConversationRecorder, StreamingBuffer, and comprehensive memory management
 
 import { v4 as uuidv4 } from 'uuid';
 import { Memori } from '../../core/Memori';

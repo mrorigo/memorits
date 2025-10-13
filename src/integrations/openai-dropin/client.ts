@@ -1,7 +1,3 @@
-// src/integrations/openai-dropin/client.ts
-// Main MemoriOpenAIClient implementation with full OpenAI SDK compatibility
-// Provides transparent memory functionality while maintaining exact API compatibility
-
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { Memori } from '../../core/Memori';
