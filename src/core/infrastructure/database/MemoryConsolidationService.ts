@@ -25,20 +25,16 @@ export class MemoryConsolidationService implements ConsolidationService {
   private duplicateManager?: DuplicateManager;
   private namespace: string;
 
-  constructor(repository: IConsolidationRepository);
-  constructor(repository: IConsolidationRepository, namespace: string);
-  constructor(repository: IConsolidationRepository, duplicateManager: DuplicateManager, namespace?: string);
   constructor(
     private repository: IConsolidationRepository,
     duplicateManagerOrNamespace?: DuplicateManager | string,
-    namespaceOrUndefined?: string,
+    namespace?: string,
   ) {
-    // Handle backward compatibility for constructor overloads
     if (duplicateManagerOrNamespace instanceof DuplicateManager) {
       this.duplicateManager = duplicateManagerOrNamespace;
-      this.namespace = namespaceOrUndefined || 'default';
+      this.namespace = namespace || 'default';
     } else {
-      // Legacy constructor: (repository, namespace)
+      // Handle string namespace parameter
       this.namespace = duplicateManagerOrNamespace || 'default';
     }
   }
@@ -403,27 +399,6 @@ export class MemoryConsolidationService implements ConsolidationService {
     }
   }
 
-  /**
-   * Legacy method for backward compatibility - redirects to new consolidateMemories method
-   */
-  async consolidateDuplicateMemories(
-    primaryMemoryId: string,
-    duplicateIds: string[],
-  ): Promise<{ consolidated: number; errors: string[] }> {
-    try {
-      const result = await this.consolidateMemories(primaryMemoryId, duplicateIds);
-
-      return {
-        consolidated: result.consolidatedCount,
-        errors: result.success ? [] : ['Consolidation failed'],
-      };
-    } catch (error) {
-      return {
-        consolidated: 0,
-        errors: [error instanceof Error ? error.message : String(error)],
-      };
-    }
-  }
 
   /**
    * Helper method to calculate importance score for memory consolidation
@@ -505,59 +480,7 @@ export class MemoryConsolidationService implements ConsolidationService {
   }
 
 
- /**
-  * Legacy method for backward compatibility - redirects to new getConsolidationAnalytics method
-  */
- async getConsolidationStats(): Promise<{
-   totalMemories: number;
-   potentialDuplicates: number;
-   consolidatedMemories: number;
-   consolidationRatio: number;
-   lastConsolidation?: Date;
- }> {
-   try {
-     const analytics = await this.getConsolidationAnalytics();
 
-     return {
-       totalMemories: analytics.totalMemories,
-       potentialDuplicates: analytics.duplicateCount,
-       consolidatedMemories: analytics.consolidatedMemories,
-       consolidationRatio: analytics.averageConsolidationRatio,
-       lastConsolidation: analytics.lastConsolidationActivity,
-     };
-   } catch (error) {
-     logError(`Error retrieving consolidation stats`, {
-       component: 'MemoryConsolidationService',
-       namespace: this.namespace,
-       error: error instanceof Error ? error.message : String(error),
-     });
-     throw error;
-   }
- }
-
- /**
-  * Legacy method for backward compatibility - redirects to new cleanupOldConsolidatedMemories method
-  */
- async cleanupConsolidatedMemories(
-   olderThanDays: number = 30,
-   dryRun: boolean = false,
- ): Promise<{ cleaned: number; errors: string[]; skipped: number }> {
-   try {
-     const result = await this.cleanupOldConsolidatedMemories(olderThanDays, dryRun);
-
-     return {
-       cleaned: result.cleaned,
-       errors: result.errors,
-       skipped: result.skipped,
-     };
-   } catch (error) {
-     return {
-       cleaned: 0,
-       errors: [error instanceof Error ? error.message : String(error)],
-       skipped: 0,
-     };
-   }
- }
 
   /**
    * Get detailed consolidation history for a specific memory

@@ -528,6 +528,13 @@ export class Memori {
   }
 
   /**
+   * Get the ConsolidationService instance for advanced consolidation operations
+   */
+  getConsolidationService() {
+    return this.dbManager.getConsolidationService();
+  }
+
+  /**
    * Store processed memory directly (used by memory manager components)
    */
   async storeProcessedMemory(
@@ -629,47 +636,6 @@ export class Memori {
     }
   }
 
-  async consolidateDuplicateMemories(
-    primaryMemoryId: string,
-    duplicateIds: string[],
-    namespace?: string,
-  ): Promise<{ consolidated: number; errors: string[] }> {
-    if (!this.enabled) {
-      throw new Error('Memori is not enabled');
-    }
-
-    const targetNamespace = namespace || this.config.namespace;
-
-    try {
-      // Use ConsolidationService directly for unified consolidation logic
-      const consolidationService = this.dbManager.getConsolidationService();
-      const result = await consolidationService.consolidateMemories(primaryMemoryId, duplicateIds);
-
-      logInfo(`Consolidated ${result.consolidatedCount} duplicate memories`, {
-        component: 'Memori',
-        primaryMemoryId,
-        duplicateCount: duplicateIds.length,
-        namespace: targetNamespace,
-        consolidated: result.consolidatedCount,
-        success: result.success,
-      });
-
-      return {
-        consolidated: result.consolidatedCount,
-        errors: result.success ? [] : ['Consolidation failed'],
-      };
-    } catch (error) {
-      logError('Failed to consolidate duplicate memories', {
-        component: 'Memori',
-        primaryMemoryId,
-        duplicateIds,
-        namespace: targetNamespace,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      throw error;
-    }
-  }
 
   /**
    * Get comprehensive health report for the search index

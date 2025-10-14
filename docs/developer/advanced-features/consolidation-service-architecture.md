@@ -62,7 +62,6 @@ Concrete implementation of the `ConsolidationService` interface, containing pure
 - **Sophisticated Confidence Scoring**: Advanced algorithm considering content length, similarity, and context
 - **FTS-Enhanced Search**: Full-text search integration for high-performance similarity matching
 - **Comprehensive Logging**: Structured metadata logging for debugging and monitoring
-- **Legacy API Support**: Backward compatibility for gradual adoption
 - **Transaction-Safe Operations**: Rollback capabilities with comprehensive validation
 
 ### IConsolidationRepository Interface

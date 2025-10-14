@@ -79,17 +79,33 @@ async function memoryConsolidationExample(): Promise<void> {
         if (searchResults.length >= 2) {
           logInfo('👁️ Demonstrating consolidation process...', { component: 'memory-consolidation-example' });
 
-          // Perform consolidation using the public API
-          const consolidationResult = await memori.consolidateDuplicateMemories(
-            searchResults[0].id,
-            searchResults.slice(1, 3).map(m => m.id)
+          // Use the modern consolidation service API directly
+          const consolidationService = memori.getConsolidationService();
+
+          // Find duplicates for the first memory's content
+          const duplicates = await consolidationService.detectDuplicateMemories(
+            searchResults[0].content + ' ' + (searchResults[0].summary || ''),
+            0.7, // 70% similarity threshold
+            { similarityThreshold: 0.7, maxCandidates: 10 }
           );
 
-          logInfo('✅ Consolidation completed:', {
-            component: 'memory-consolidation-example',
-            consolidated: consolidationResult.consolidated,
-            errors: consolidationResult.errors,
-          });
+          if (duplicates.length > 0) {
+            // Consolidate the duplicates
+            const consolidationResult = await consolidationService.consolidateMemories(
+              searchResults[0].id,
+              duplicates.slice(0, 2).map(d => d.id) // Consolidate top 2 duplicates
+            );
+
+            logInfo('✅ Consolidation completed:', {
+              component: 'memory-consolidation-example',
+              consolidated: consolidationResult.consolidatedCount,
+              success: consolidationResult.success,
+            });
+          } else {
+            logInfo('ℹ️ No duplicates found for consolidation', {
+              component: 'memory-consolidation-example',
+            });
+          }
 
           // 3. Demonstrate the comprehensive consolidation capabilities
           logInfo('🔍 Demonstrating consolidation features...', { component: 'memory-consolidation-example' });

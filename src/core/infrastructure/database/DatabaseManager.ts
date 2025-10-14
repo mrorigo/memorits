@@ -994,51 +994,6 @@ export class DatabaseManager {
 
 
 
-  /**
-   * Clean up consolidated/duplicate memories
-   */
-  async cleanupConsolidatedMemories(
-    olderThanDays: number = 30,
-    namespace: string = 'default',
-    dryRun: boolean = false,
-  ): Promise<{ cleaned: number; errors: string[]; skipped: number }> {
-    try {
-      // Use consolidation service to perform cleanup
-      const result = await this.consolidationService.cleanupOldConsolidatedMemories(olderThanDays, dryRun);
-
-      logInfo(`Cleanup completed for namespace '${namespace}'`, {
-        component: 'DatabaseManager',
-        namespace,
-        cleaned: result.cleaned,
-        skipped: result.skipped,
-        errors: result.errors.length,
-        olderThanDays,
-        dryRun,
-      });
-
-      return {
-        cleaned: result.cleaned,
-        errors: result.errors,
-        skipped: result.skipped,
-      };
-    } catch (error) {
-      const errorMsg = `Error during cleanup of consolidated memories: ${error instanceof Error ? error.message : String(error)}`;
-
-      logError(errorMsg, {
-        component: 'DatabaseManager',
-        namespace,
-        olderThanDays,
-        dryRun,
-        error: error instanceof Error ? error.message : String(error),
-      });
-
-      return {
-        cleaned: 0,
-        errors: [errorMsg],
-        skipped: 0,
-      };
-    }
-  }
 
   // Database Statistics Operations
 

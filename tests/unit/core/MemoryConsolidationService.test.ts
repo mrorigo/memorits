@@ -391,18 +391,18 @@ describe('MemoryConsolidationService (Optimized)', () => {
     });
 
     it('should return consolidation statistics via legacy method', async () => {
-      const stats = await consolidationService.getConsolidationStats();
+      const stats = await consolidationService.getConsolidationAnalytics();
 
       expect(stats).toHaveProperty('totalMemories');
-      expect(stats).toHaveProperty('potentialDuplicates');
+      expect(stats).toHaveProperty('duplicateCount');
       expect(stats).toHaveProperty('consolidatedMemories');
-      expect(stats).toHaveProperty('consolidationRatio');
-      expect(stats).toHaveProperty('lastConsolidation');
+      expect(stats).toHaveProperty('averageConsolidationRatio');
+      expect(stats).toHaveProperty('lastConsolidationActivity');
 
       expect(typeof stats.totalMemories).toBe('number');
-      expect(typeof stats.potentialDuplicates).toBe('number');
+      expect(typeof stats.duplicateCount).toBe('number');
       expect(typeof stats.consolidatedMemories).toBe('number');
-      expect(typeof stats.consolidationRatio).toBe('number');
+      expect(typeof stats.averageConsolidationRatio).toBe('number');
     });
 
     it('should handle empty database gracefully', async () => {
@@ -412,11 +412,11 @@ describe('MemoryConsolidationService (Optimized)', () => {
         RepositoryFactory.createTestConsolidationRepository(prisma),
         uniqueEmptyNamespace
       );
-      const stats = await emptyService.getConsolidationStats();
+      const stats = await emptyService.getConsolidationAnalytics();
 
       expect(stats.totalMemories).toBe(0);
       expect(stats.consolidatedMemories).toBe(0);
-      expect(stats.consolidationRatio).toBe(0);
+      expect(stats.averageConsolidationRatio).toBe(0);
     });
   });
 
@@ -474,7 +474,7 @@ describe('MemoryConsolidationService (Optimized)', () => {
     });
 
     it('should return cleanup result via legacy method', async () => {
-      const result = await consolidationService.cleanupConsolidatedMemories(30, true);
+      const result = await consolidationService.cleanupOldConsolidatedMemories(30, true);
       expect(result).toHaveProperty('cleaned');
       expect(result).toHaveProperty('errors');
       expect(result).toHaveProperty('skipped');
@@ -564,7 +564,7 @@ describe('MemoryConsolidationService (Optimized)', () => {
       });
 
       // Should handle gracefully
-      const stats = await consolidationService.getConsolidationStats();
+      const stats = await consolidationService.getConsolidationAnalytics();
       expect(stats).toBeDefined();
       expect(typeof stats.totalMemories).toBe('number');
     });

@@ -199,18 +199,24 @@ const projectUpdates = await memori.searchMemories('urgent project updates', {
 ### Memory Consolidation
 
 ```typescript
-// Find and consolidate duplicate memories
-const duplicates = await memori.findDuplicateMemories(memories, {
-  similarityThreshold: 0.8
-});
+// Find and consolidate duplicate memories using modern consolidation service
+const consolidationService = memori.getConsolidationService();
 
-for (const duplicateGroup of duplicates) {
-  const result = await memori.consolidateDuplicateMemories(
-    duplicateGroup.primaryId,
-    duplicateGroup.duplicateIds
+// Find duplicate memories for given content
+const duplicates = await consolidationService.detectDuplicateMemories(
+  'content to find duplicates for',
+  0.8, // 80% similarity threshold
+  { similarityThreshold: 0.8, maxCandidates: 10 }
+);
+
+// Consolidate found duplicates
+if (duplicates.length > 0) {
+  const consolidationResult = await consolidationService.consolidateMemories(
+    duplicates[0].id,
+    duplicates.slice(1, 3).map(d => d.id)
   );
 
-  console.log(`Consolidated ${result.consolidated} memories`);
+  console.log(`Consolidated ${consolidationResult.consolidatedCount} memories`);
 }
 ```
 
