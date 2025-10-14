@@ -767,7 +767,7 @@ export class SearchService implements ISearchService {
     const timeout = 5000; // 5 second timeout
 
     return Promise.race([
-      strategy.execute(query, this.dbManager),
+      strategy.search(query),
       new Promise<never>((_, reject) => {
         setTimeout(() => reject(new SearchTimeoutError(
           strategy.name,

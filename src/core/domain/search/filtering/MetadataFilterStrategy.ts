@@ -226,65 +226,6 @@ export class MetadataFilterStrategy implements ISearchStrategy {
     }
   }
 
-  /**
-   * Legacy execute method for backward compatibility
-   */
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
-    const startTime = Date.now();
-
-    try {
-      // Parse and validate metadata filters
-      const metadataQuery = this.parseMetadataQuery(query);
-
-      // Build metadata SQL query
-      const sql = this.buildMetadataSQL(query, metadataQuery);
-
-      // Execute query with performance optimization
-      const rawResults = await this.executeMetadataQuery(sql, this.getQueryParameters(query, metadataQuery));
-
-      // Process and validate results
-      let processedResults = this.processMetadataResults(rawResults, query, metadataQuery);
-
-      // Apply aggregation if requested
-      if (this.shouldApplyAggregation(query)) {
-        processedResults = await this.applyMetadataAggregation(processedResults, query);
-      }
-
-      // Cache results if enabled
-      if (this.config.performance.enableResultCaching) {
-        this.cacheResult(query, processedResults);
-      }
-
-      // Log performance metrics
-      const duration = Date.now() - startTime;
-      logInfo(`Metadata search completed in ${duration}ms, found ${processedResults.length} results`, {
-        component: 'MetadataFilterStrategy',
-        operation: 'search',
-        strategy: this.name,
-        duration: `${duration}ms`,
-        resultCount: processedResults.length
-      });
-
-      return processedResults;
-
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logError(`Metadata search failed after ${duration}ms`, {
-        component: 'MetadataFilterStrategy',
-        operation: 'search',
-        strategy: this.name,
-        query: query.text,
-        duration: `${duration}ms`,
-        error: error instanceof Error ? error.message : String(error)
-      });
-
-      throw new SearchError(
-        `Metadata filter strategy failed: ${error instanceof Error ? error.message : String(error)}`,
-        this.name,
-        { query: query.text, duration: `${duration}ms` }
-      );
-    }
-  }
 
   /**
    * Parse metadata query from search query

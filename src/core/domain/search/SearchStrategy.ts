@@ -180,7 +180,6 @@ export interface ISearchStrategy {
 
   canHandle(query: SearchQuery): boolean;
   search(query: SearchQuery): Promise<SearchResult[]>;
-  execute(query: SearchQuery, dbManager: DatabaseManager): Promise<SearchResult[]>;
   getMetadata(): SearchStrategyMetadata;
   validateConfiguration(): Promise<boolean>;
 }
@@ -205,7 +204,6 @@ export abstract class BaseSearchStrategy implements ISearchStrategy {
 
   abstract canHandle(query: SearchQuery): boolean;
   abstract search(query: SearchQuery): Promise<SearchResult[]>;
-  abstract execute(query: SearchQuery, dbManager: DatabaseManager): Promise<SearchResult[]>;
 
   /**
    * Get metadata about this search strategy

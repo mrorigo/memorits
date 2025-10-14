@@ -121,12 +121,6 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
     }
   }
 
-  /**
-   * Legacy execute method for backward compatibility
-   */
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
-    return this.search(query);
-  }
 
   /**
    * Get metadata about this search strategy

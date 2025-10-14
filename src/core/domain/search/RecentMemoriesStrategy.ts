@@ -112,13 +112,6 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
    * Main search method implementing time-based relevance scoring
    */
   async search(query: SearchQuery): Promise<SearchResult[]> {
-    return this.execute(query, this.databaseManager);
-  }
-
-  /**
-   * Execute search strategy with database manager
-   */
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
     const startTime = Date.now();
 
     try {
@@ -146,6 +139,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
       });
     }
   }
+
 
   /**
    * Build temporal SQL with time-based relevance scoring and filtering

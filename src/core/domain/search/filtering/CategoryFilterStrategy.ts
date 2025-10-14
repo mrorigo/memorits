@@ -160,12 +160,6 @@ export class CategoryFilterStrategy implements ISearchStrategy {
     }
   }
 
-  /**
-   * Legacy execute method for backward compatibility
-   */
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
-    return this.search(query);
-  }
 
   private hasCategoryFilters(query: SearchQuery): boolean {
     const categoryQuery = query as CategoryFilterQuery;

@@ -117,52 +117,6 @@ export class LikeSearchStrategy implements ISearchStrategy {
     }
   }
 
-  /**
-   * Legacy execute method for backward compatibility
-   */
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
-    const startTime = Date.now();
-
-    try {
-      // Build LIKE query with proper escaping and wildcards
-      const likeQuery = this.buildLikeQuery(query.text);
-      const sql = this.buildLikeSQL(query, likeQuery);
-
-      // Execute the query
-      const results = await this.executeLikeQuery(sql);
-      const processedResults = this.processLikeResults(results, query);
-
-      // Log performance metrics
-      const duration = Date.now() - startTime;
-      logInfo(`LIKE search completed in ${duration}ms, found ${processedResults.length} results`, {
-        component: 'LikeSearchStrategy',
-        operation: 'search',
-        strategy: this.name,
-        duration: `${duration}ms`,
-        resultCount: processedResults.length
-      });
-
-      return processedResults;
-
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logError(`LIKE search failed after ${duration}ms`, {
-        component: 'LikeSearchStrategy',
-        operation: 'execute',
-        strategy: this.name,
-        error: error instanceof Error ? error.message : String(error),
-        duration: `${duration}ms`
-      });
-
-      throw new SearchStrategyError(
-        this.name,
-        `LIKE strategy failed: ${error instanceof Error ? error.message : String(error)}`,
-        'like_search',
-        { query: query.text, duration: `${duration}ms` },
-        error instanceof Error ? error : undefined
-      );
-    }
-  }
 
   /**
    * Build optimized LIKE query with proper escaping and wildcards
