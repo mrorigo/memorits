@@ -64,6 +64,7 @@
     "example:advanced-search": "tsx examples/advanced-memory-search.ts",
     "example:consolidation": "tsx examples/memory-consolidation.ts",
     "example:multi-provider": "tsx examples/multi-provider-usage.ts",
+    "example:anthropic": "tsx examples/anthropic-integration.ts",
     "index:health": "tsx examples/scripts/index-health.ts",
     "index:optimize": "tsx examples/scripts/index-optimize.ts",
     "index:backup": "tsx examples/scripts/index-backup.ts"
@@ -82,6 +83,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
     "@prisma/client": "^6.16.2",
     "openai": "^5.23.0",
     "uuid": "^13.0.0",

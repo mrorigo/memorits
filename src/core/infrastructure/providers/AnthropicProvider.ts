@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { ILLMProvider } from './ILLMProvider';
 import { IProviderConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
@@ -8,57 +9,26 @@ import { EmbeddingResponse } from './types/EmbeddingResponse';
 import { ProviderDiagnostics } from './types/ProviderDiagnostics';
 
 /**
- * Anthropic API client types (based on Anthropic SDK)
- */
-interface AnthropicMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string | Array<{ type: string; text?: string; source?: any }>;
-}
-
-interface AnthropicCompletionParams {
-  model: string;
-  messages: AnthropicMessage[];
-  max_tokens?: number;
-  temperature?: number;
-  top_p?: number;
-  top_k?: number;
-  stop_sequences?: string[];
-  stream?: boolean;
-  system?: string;
-  metadata?: Record<string, any>;
-}
-
-interface AnthropicResponse {
-  id: string;
-  type: string;
-  role: string;
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
-  model: string;
-  stop_reason: string | null;
-  stop_sequence: string | null;
-  usage: {
-    input_tokens: number;
-    output_tokens: number;
-  };
-}
-
-/**
- * Anthropic provider implementation
+ * Anthropic provider implementation using official SDK
  * Implements the ILLMProvider interface for Anthropic Claude models
  */
 export class AnthropicProvider implements ILLMProvider {
+  private client: Anthropic;
   private config: IProviderConfig;
   private model: string;
   private isInitialized = false;
-  private baseUrl: string;
 
   constructor(config: IProviderConfig) {
     this.config = config;
-    this.model = config.model || 'claude-sonnet-4-20250514';
-    this.baseUrl = config.baseUrl || 'https://api.anthropic.com/v1';
+    this.model = config.model || 'claude-3-5-sonnet-20241022';
+
+    // Handle dummy API key for testing
+    const apiKey = config.apiKey === 'anthropic-dummy' ? 'sk-ant-api03-dummy-key-for-testing' : config.apiKey;
+
+    this.client = new Anthropic({
+      apiKey: apiKey,
+      baseURL: config.baseUrl,
+    });
   }
 
   getProviderType(): ProviderType {
@@ -72,9 +42,15 @@ export class AnthropicProvider implements ILLMProvider {
   async initialize(config: IProviderConfig): Promise<void> {
     this.config = config;
     this.model = config.model || 'claude-3-5-sonnet-20241022';
-    if (config.baseUrl) {
-      this.baseUrl = config.baseUrl;
-    }
+
+    // Reinitialize client if configuration changed
+    const apiKey = config.apiKey === 'anthropic-dummy' ? 'sk-ant-api03-dummy-key-for-testing' : config.apiKey;
+
+    this.client = new Anthropic({
+      apiKey: apiKey,
+      baseURL: config.baseUrl,
+    });
+
     this.isInitialized = true;
   }
 
@@ -88,15 +64,9 @@ export class AnthropicProvider implements ILLMProvider {
     }
 
     try {
-      // Simple health check - try to list models (if endpoint exists)
-      const response = await fetch(`${this.baseUrl}/models`, {
-        headers: {
-          'x-api-key': this.config.apiKey,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
-        },
-      });
-      return response.ok;
+      // Use the SDK's model listing for health check
+      await this.client.models.list();
+      return true;
     } catch (error) {
       return false;
     }
@@ -111,7 +81,7 @@ export class AnthropicProvider implements ILLMProvider {
       isHealthy,
       model: this.model,
       metadata: {
-        baseUrl: this.baseUrl,
+        baseUrl: this.config.baseUrl,
         hasApiKey: !!this.config.apiKey,
         apiKeyPrefix: this.config.apiKey?.substring(0, 7) + '...',
       },
@@ -129,11 +99,12 @@ export class AnthropicProvider implements ILLMProvider {
     }
 
     try {
-      // Convert messages to Anthropic format
+      // Convert messages to Anthropic SDK format
       const anthropicMessages = this.convertToAnthropicMessages(params.messages);
       const systemMessage = this.extractSystemMessage(params.messages);
 
-      const requestBody: AnthropicCompletionParams = {
+      // Prepare request parameters for SDK
+      const requestParams: Anthropic.MessageCreateParams = {
         model: params.model || this.model,
         messages: anthropicMessages,
         max_tokens: params.max_tokens || 4096,
@@ -145,51 +116,70 @@ export class AnthropicProvider implements ILLMProvider {
         metadata: params.options,
       };
 
-      const response = await fetch(`${this.baseUrl}/messages`, {
-        method: 'POST',
-        headers: {
-          'x-api-key': this.config.apiKey,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        let errorMessage = response.statusText;
-        try {
-          const errorData = await response.json() as { error?: { message: string } };
-          errorMessage = errorData.error?.message || errorMessage;
-        } catch {
-          // Use default error message if JSON parsing fails
-        }
-        throw new Error(`Anthropic API error: ${response.status} - ${errorMessage}`);
-      }
-
-      const anthropicResponse = await response.json() as AnthropicResponse;
-
-      // Handle streaming response
+      // Handle streaming vs non-streaming separately with proper typing
       if (params.stream) {
-        throw new Error('Streaming responses are not yet supported in this provider implementation');
-      }
+        // For streaming, collect the complete response
+        const streamResult = await this.client.messages.create({
+          ...requestParams,
+          stream: true,
+        });
 
-      return {
-        message: {
-          role: anthropicResponse.role as 'user' | 'assistant',
-          content: anthropicResponse.content[0]?.text || '',
-        },
-        finish_reason: this.mapStopReason(anthropicResponse.stop_reason) as 'stop' | 'length' | 'function_call' | 'content_filter' | 'tool_calls' | 'null',
-        usage: {
-          prompt_tokens: anthropicResponse.usage.input_tokens,
-          completion_tokens: anthropicResponse.usage.output_tokens,
-          total_tokens: anthropicResponse.usage.input_tokens + anthropicResponse.usage.output_tokens,
-        },
-        id: anthropicResponse.id,
-        model: anthropicResponse.model,
-        created: Date.now(),
-        metadata: {},
-      };
+        let fullContent = '';
+        let finalUsage: { input_tokens: number; output_tokens: number } | undefined;
+
+        // Process the stream
+        for await (const event of streamResult as AsyncIterable<Anthropic.MessageStreamEvent>) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            fullContent += event.delta.text;
+          } else if (event.type === 'message_delta' && 'usage' in event) {
+            finalUsage = {
+              input_tokens: event.usage.input_tokens || 0,
+              output_tokens: event.usage.output_tokens || 0,
+            };
+          }
+        }
+
+        return {
+          message: {
+            role: 'assistant',
+            content: fullContent,
+          },
+          finish_reason: 'stop',
+          usage: finalUsage ? {
+            prompt_tokens: finalUsage.input_tokens,
+            completion_tokens: finalUsage.output_tokens,
+            total_tokens: finalUsage.input_tokens + finalUsage.output_tokens,
+          } : undefined,
+          id: `stream-${Date.now()}`,
+          model: params.model || this.model,
+          created: Date.now(),
+          metadata: {},
+        };
+      } else {
+        // Non-streaming request using SDK
+        const response = await this.client.messages.create(requestParams) as Anthropic.Message;
+
+        return {
+          message: {
+            role: response.role,
+            content: this.extractTextContent(response.content),
+          },
+          finish_reason: this.mapStopReason(response.stop_reason),
+          usage: response.usage ? {
+            prompt_tokens: response.usage.input_tokens || 0,
+            completion_tokens: response.usage.output_tokens || 0,
+            total_tokens: (response.usage.input_tokens || 0) + (response.usage.output_tokens || 0),
+          } : undefined,
+          id: response.id,
+          model: response.model,
+          created: Date.now(),
+          metadata: {},
+        };
+      }
     } catch (error) {
+      if (error instanceof Anthropic.APIError) {
+        throw new Error(`Anthropic API error: ${error.status} - ${error.message}`);
+      }
       if (error instanceof Error) {
         throw error;
       }
@@ -207,28 +197,23 @@ export class AnthropicProvider implements ILLMProvider {
     throw new Error('Embeddings are not supported by Anthropic API');
   }
 
-  getClient(): any {
-    // Return a mock client for compatibility
-    return {
-      providerType: 'anthropic',
-      model: this.model,
-      baseUrl: this.baseUrl,
-    };
+  getClient(): Anthropic {
+    return this.client;
   }
 
   /**
-   * Convert standard messages to Anthropic format
+   * Convert standard messages to Anthropic SDK format
    */
-  private convertToAnthropicMessages(messages: ChatCompletionParams['messages']): AnthropicMessage[] {
-    const anthropicMessages: AnthropicMessage[] = [];
+  private convertToAnthropicMessages(messages: ChatCompletionParams['messages']): Anthropic.MessageParam[] {
+    const anthropicMessages: Anthropic.MessageParam[] = [];
 
     for (const message of messages) {
-      // Handle system messages separately
+      // Skip system messages - handled separately in SDK
       if (message.role === 'system') {
         continue;
       }
 
-      // Handle function and tool messages by converting to assistant
+      // Handle function messages by converting to assistant content
       if (message.role === 'function') {
         anthropicMessages.push({
           role: 'assistant',
@@ -241,7 +226,7 @@ export class AnthropicProvider implements ILLMProvider {
           content: message.content,
         });
       } else {
-        // Fallback for any other roles (including 'tool' if it exists)
+        // Fallback for any other roles
         anthropicMessages.push({
           role: 'user',
           content: message.content,
@@ -261,18 +246,30 @@ export class AnthropicProvider implements ILLMProvider {
   }
 
   /**
+   * Extract text content from Anthropic content blocks
+   */
+  private extractTextContent(content: Anthropic.Messages.ContentBlock[]): string {
+    return content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('');
+  }
+
+  /**
    * Map Anthropic stop reasons to standard format
    */
-  private mapStopReason(stopReason: string | null): 'stop' | 'length' | 'function_call' | 'content_filter' | null {
+  private mapStopReason(stopReason: string | null): 'stop' | 'length' | 'function_call' | 'content_filter' | 'tool_calls' | 'null' {
     switch (stopReason) {
-      case 'endofturn':
+      case 'end_turn':
         return 'stop';
       case 'max_tokens':
         return 'length';
       case 'stop_sequence':
         return 'stop';
+      case 'tool_use':
+        return 'tool_calls';
       default:
-        return null;
+        return 'null';
     }
   }
 }
