@@ -33,27 +33,25 @@ npm install memorits
 ### Basic Usage
 
 ```typescript
-import { Memori, ConfigManager } from 'memorits';
-import { MemoriOpenAI } from 'memorits';
+import { Memori, OpenAIWrapper } from 'memorits';
 
-// Initialize with configuration
-const config = ConfigManager.loadConfig();
-const memori = new Memori(config);
-await memori.enable();
-
-// Create OpenAI client with automatic memory recording (drop-in replacement)
-const openaiClient = new MemoriOpenAI(config.apiKey, {
-  enableChatMemory: true,
-  autoInitialize: true
+// Create Memori instance with simple configuration
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-openai-api-key',
+  autoMemory: true
 });
 
-// Use normally - conversations are automatically recorded
-const response = await openaiClient.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: 'Remember this for later...' }],
+// Create provider wrapper (direct integration)
+const openai = new OpenAIWrapper(memori);
+
+// Chat normally - memory is recorded automatically
+const response = await openai.chat({
+  messages: [{ role: 'user', content: 'Remember this for later...' }]
 });
 
-// Search through conversation history
+// Search through conversation history (same Memori instance)
 const memories = await memori.searchMemories('urgent meeting notes', {
   minImportance: 'high',
   limit: 10

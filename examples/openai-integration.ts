@@ -1,57 +1,35 @@
 /**
  * OpenAI Integration Example
  *
- * This example demonstrates how to use Memori with OpenAI's API.
- * It shows configuration for OpenAI and demonstrates memory integration with GPT models.
+ * This example demonstrates how to use Memori with OpenAI's API using the unified API.
+ * It shows simple configuration and direct provider integration with automatic memory recording.
  */
 
-import { Memori, ConfigManager } from '../src/index';
+import { Memori, OpenAIWrapper } from '../src/index';
 import { logInfo, logError } from '../src/core/infrastructure/config/Logger';
 
 async function openaiIntegrationExample(): Promise<void> {
   logInfo('🚀 Starting OpenAI Integration Example...\n', { component: 'openai-integration-example' });
 
   let memori: Memori | undefined;
+  let openai: OpenAIWrapper | undefined;
 
   try {
-    // Load configuration - should be configured for OpenAI
-    const config = ConfigManager.loadConfig();
-    logInfo('📋 OpenAI Configuration loaded', {
-      component: 'openai-integration-example',
-      databaseUrl: config.databaseUrl,
-      namespace: config.namespace,
-      model: config.model,
-      baseUrl: config.baseUrl || 'OpenAI default',
-      apiKey: config.apiKey ? '***configured***' : 'Not configured',
-    });
-
-    // Verify OpenAI configuration
-    if (!config.apiKey || config.apiKey === 'your-openai-api-key-here') {
-      logError('❌ Error: OpenAI API key not configured', {
-        component: 'openai-integration-example',
-        hint: 'Please set OPENAI_API_KEY in your .env file',
-        apiKeyUrl: 'https://platform.openai.com/api-keys',
-      });
-      return;
-    }
-
-    if (config.baseUrl && config.baseUrl.includes('11434')) {
-      logInfo('⚠️  Warning: Base URL appears to be configured for Ollama, not OpenAI', {
-        component: 'openai-integration-example',
-        suggestion: 'For OpenAI, remove OPENAI_BASE_URL from .env or set it to empty',
-      });
-    }
-
-    // Initialize Memori instance with auto-ingestion enabled
+    // Create Memori instance with unified configuration
     memori = new Memori({
-      ...config,
-      autoIngest: true, // Enable auto-ingestion to process conversations into searchable memories
+      databaseUrl: 'sqlite:./memories.db',
+      namespace: 'openai-integration',
+      apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key',
+      model: 'gpt-4o-mini',
+      autoIngest: true,
+      consciousIngest: false,
+      enableRelationshipExtraction: true
     });
-    logInfo('✅ Memori instance created with OpenAI backend and auto-ingestion enabled', { component: 'openai-integration-example' });
+    logInfo('✅ Memori instance created with OpenAI integration', { component: 'openai-integration-example' });
 
-    // Enable Memori (initializes database schema)
-    await memori.enable();
-    logInfo('✅ Memori enabled successfully\n', { component: 'openai-integration-example' });
+    // Create provider wrapper (direct integration)
+    openai = new OpenAIWrapper(memori);
+    logInfo('✅ OpenAI wrapper created', { component: 'openai-integration-example' });
 
     // Test conversations with OpenAI context
     const conversations = [
@@ -77,17 +55,18 @@ async function openaiIntegrationExample(): Promise<void> {
 
     for (let i = 0; i < conversations.length; i++) {
       const { user, ai } = conversations[i];
-      const chatId = await memori.recordConversation(user, ai, {
-        model: config.model,
-        metadata: {
-          modelType: 'openai',
-          conversationIndex: i + 1,
-          category: 'programming-concepts',
-        },
+
+      // Use provider wrapper for automatic memory recording
+      const response = await openai!.chat({
+        messages: [
+          { role: 'user', content: user },
+          { role: 'assistant', content: ai }
+        ]
       });
-      logInfo(`✅ Conversation ${i + 1} recorded: ${chatId}`, {
+
+      logInfo(`✅ Conversation ${i + 1} recorded: ${response.chatId}`, {
         component: 'openai-integration-example',
-        chatId,
+        chatId: response.chatId,
         conversationIndex: i + 1,
       });
     }
@@ -98,7 +77,7 @@ async function openaiIntegrationExample(): Promise<void> {
 
     // Search for programming concept memories
     logInfo('\n🔍 Searching memories for "JavaScript"...', { component: 'openai-integration-example' });
-    const jsMemories = await memori.searchMemories('JavaScript', { limit: 5 });
+    const jsMemories = await memori!.searchMemories('JavaScript', { limit: 5 });
 
     if (jsMemories.length > 0) {
       logInfo(`✅ Found ${jsMemories.length} JavaScript-related memories:`, {
@@ -117,7 +96,7 @@ async function openaiIntegrationExample(): Promise<void> {
 
     // Search for async/await memories
     logInfo('\n🔍 Searching memories for "async"...', { component: 'openai-integration-example' });
-    const asyncMemories = await memori.searchMemories('async', { limit: 3 });
+    const asyncMemories = await memori!.searchMemories('async', { limit: 3 });
 
     if (asyncMemories.length > 0) {
       logInfo(`✅ Found ${asyncMemories.length} async-related memories:`, {
@@ -134,7 +113,7 @@ async function openaiIntegrationExample(): Promise<void> {
 
     // Search for React-related memories
     logInfo('\n🔍 Searching memories for "React"...', { component: 'openai-integration-example' });
-    const reactMemories = await memori.searchMemories('React', { limit: 3 });
+    const reactMemories = await memori!.searchMemories('React', { limit: 3 });
 
     if (reactMemories.length > 0) {
       logInfo(`✅ Found ${reactMemories.length} React-related memories:`, {
@@ -160,9 +139,9 @@ async function openaiIntegrationExample(): Promise<void> {
       // Provide helpful troubleshooting for common OpenAI issues
       if (error.message.includes('401') || error.message.includes('Unauthorized')) {
         logInfo('\n🔧 Troubleshooting suggestions:', { component: 'openai-integration-example' });
-        logInfo('1. Check your OPENAI_API_KEY in the .env file', { component: 'openai-integration-example' });
-        logInfo('2. Verify the API key is correct and active', { component: 'openai-integration-example' });
-        logInfo('3. Make sure you have sufficient API credits', { component: 'openai-integration-example' });
+        logInfo('1. Check your API key is valid', { component: 'openai-integration-example' });
+        logInfo('2. Verify the API key has sufficient credits', { component: 'openai-integration-example' });
+        logInfo('3. Make sure the key format starts with "sk-"', { component: 'openai-integration-example' });
       } else if (error.message.includes('429') || error.message.includes('rate limit')) {
         logInfo('\n🔧 Troubleshooting suggestions:', { component: 'openai-integration-example' });
         logInfo('1. You are being rate limited by OpenAI', { component: 'openai-integration-example' });

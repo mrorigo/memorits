@@ -1,49 +1,36 @@
 /**
  * Ollama Integration Example
  *
- * This example demonstrates how to use Memori with Ollama as the backend.
- * It shows configuration for local Ollama server and memory integration.
+ * This example demonstrates how to use Memori with Ollama using the unified API.
+ * It shows simple configuration for local Ollama server and direct memory integration.
  */
 
-import { Memori, ConfigManager } from '../src/index';
+import { Memori, OllamaWrapper } from '../src/index';
 import { logInfo, logError } from '../src/core/infrastructure/config/Logger';
 
 async function ollamaIntegrationExample(): Promise<void> {
   logInfo('🚀 Starting Ollama Integration Example...\n', { component: 'ollama-integration-example' });
 
   let memori: Memori | undefined;
+  let ollama: OllamaWrapper | undefined;
 
   try {
-    // Load configuration - should be configured for Ollama
-    const config = ConfigManager.loadConfig();
-    logInfo('📋 Ollama Configuration loaded', {
-      component: 'ollama-integration-example',
-      databaseUrl: config.databaseUrl,
-      namespace: config.namespace,
-      model: config.model,
-      baseUrl: config.baseUrl || 'Not configured',
+    // Create Memori instance with unified configuration
+    memori = new Memori({
+      databaseUrl: 'sqlite:./memories.db',
+      namespace: 'ollama-integration',
+      apiKey: 'ollama-local',
+      model: 'llama2',
+      baseUrl: 'http://localhost:11434',
+      autoIngest: true,
+      consciousIngest: false,
+      enableRelationshipExtraction: true
     });
+    logInfo('✅ Memori instance created with Ollama integration', { component: 'ollama-integration-example' });
 
-    // Verify Ollama configuration
-    if (!config.baseUrl || !config.baseUrl.includes('11434')) {
-      logInfo('⚠️  Warning: Base URL does not appear to be configured for Ollama', {
-        component: 'ollama-integration-example',
-        expected: 'http://localhost:11434/v1',
-        current: config.baseUrl || 'Not set'
-      });
-    }
-
-    if (!config.apiKey || config.apiKey === 'your-openai-api-key-here') {
-      logInfo('ℹ️  Info: Using Ollama - no API key required', { component: 'ollama-integration-example' });
-    }
-
-    // Initialize Memori instance
-    memori = new Memori(config);
-    logInfo('✅ Memori instance created with Ollama backend', { component: 'ollama-integration-example' });
-
-    // Enable Memori (initializes database schema)
-    await memori.enable();
-    logInfo('✅ Memori enabled successfully\n', { component: 'ollama-integration-example' });
+    // Create provider wrapper (direct integration)
+    ollama = new OllamaWrapper(memori);
+    logInfo('✅ Ollama wrapper created', { component: 'ollama-integration-example' });
 
     // Test conversations with different Ollama models
     const conversations = [
@@ -65,15 +52,19 @@ async function ollamaIntegrationExample(): Promise<void> {
 
     for (let i = 0; i < conversations.length; i++) {
       const { user, ai } = conversations[i];
-      const chatId = await memori.recordConversation(user, ai, {
-        model: config.model,
-        metadata: {
-          modelType: 'ollama',
-          conversationIndex: i + 1,
-          category: 'local-llm-usage',
-        },
+
+      // Use provider wrapper for automatic memory recording
+      const response = await ollama!.chat({
+        messages: [
+          { role: 'user', content: user },
+          { role: 'assistant', content: ai }
+        ]
       });
-      logInfo(`✅ Conversation ${i + 1} recorded: ${chatId}`, { component: 'ollama-integration-example', chatId });
+
+      logInfo(`✅ Conversation ${i + 1} recorded: ${response.chatId}`, {
+        component: 'ollama-integration-example',
+        chatId: response.chatId
+      });
     }
 
     // Wait for memory processing
@@ -82,7 +73,7 @@ async function ollamaIntegrationExample(): Promise<void> {
 
     // Search for local LLM related memories
     logInfo('\n🔍 Searching memories for "local LLM"...', { component: 'ollama-integration-example' });
-    const localLLMMemories = await memori.searchMemories('local LLM', { limit: 5 });
+    const localLLMMemories = await memori!.searchMemories('local LLM', { limit: 5 });
 
     if (localLLMMemories.length > 0) {
       logInfo(`✅ Found ${localLLMMemories.length} memories about local LLMs:`, {
@@ -101,7 +92,7 @@ async function ollamaIntegrationExample(): Promise<void> {
 
     // Search for efficiency-related memories
     logInfo('\n🔍 Searching memories for "efficient"...', { component: 'ollama-integration-example' });
-    const efficiencyMemories = await memori.searchMemories('efficient', { limit: 3 });
+    const efficiencyMemories = await memori!.searchMemories('efficient', { limit: 3 });
 
     if (efficiencyMemories.length > 0) {
       logInfo(`✅ Found ${efficiencyMemories.length} efficiency-related memories:`, {
@@ -118,7 +109,7 @@ async function ollamaIntegrationExample(): Promise<void> {
 
     // Search for programming-related memories
     logInfo('\n🔍 Searching memories for "programming"...', { component: 'ollama-integration-example' });
-    const programmingMemories = await memori.searchMemories('programming', { limit: 3 });
+    const programmingMemories = await memori!.searchMemories('programming', { limit: 3 });
 
     if (programmingMemories.length > 0) {
       logInfo(`✅ Found ${programmingMemories.length} programming-related memories:`, {

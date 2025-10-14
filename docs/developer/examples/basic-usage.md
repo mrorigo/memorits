@@ -5,58 +5,48 @@ This document provides practical examples of using Memorits in real-world applic
 ## 1. Simple Memory Application
 
 ```typescript
-import { Memori, ConfigManager } from 'memorits';
+import { Memori, OpenAIWrapper } from 'memorits';
 
 class SimpleMemoryApp {
   private memori: Memori;
+  private openai: OpenAIWrapper;
 
   constructor() {
-    // Initialize with default configuration
-    const config = ConfigManager.loadConfig();
-    this.memori = new Memori(config);
-  }
+    // Initialize with simple configuration
+    this.memori = new Memori({
+      databaseUrl: 'sqlite:./memories.db',
+      namespace: 'my-app',
+      apiKey: 'your-api-key',
+      autoMemory: true
+    });
 
-  async initialize() {
-    await this.memori.enable();
-    console.log('Memory system ready!');
+    this.openai = new OpenAIWrapper(this.memori);
   }
 
   async rememberSomething(content: string, category: string = 'general') {
-    // Record information for later retrieval
-    const chatId = await this.memori.recordConversation(
-      `Remember: ${content}`,
-      `I'll remember that ${content}`,
-      {
-        model: 'gpt-4o-mini',
-        metadata: { category }
-      }
-    );
+    // Chat normally - memory is recorded automatically
+    const response = await this.openai.chat({
+      messages: [
+        { role: 'user', content: `Remember: ${content}` }
+      ]
+    });
 
-    console.log(`Recorded memory: ${chatId}`);
-    return chatId;
+    console.log(`Recorded memory: ${response.chatId}`);
+    return response.chatId;
   }
 
   async recallInformation(query: string) {
     // Search for relevant memories
     const memories = await this.memori.searchMemories(query, {
-      limit: 5,
-      minImportance: 'medium' as any
+      limit: 5
     });
 
     return memories.map(memory => memory.content);
-  }
-
-  async showMemoryStats() {
-    // Note: Database statistics are available through the DatabaseManager
-    // This would typically be accessed for monitoring and analytics
-    console.log('Memory system is operational');
-    console.log('Use database queries to get detailed statistics');
   }
 }
 
 // Usage
 const app = new SimpleMemoryApp();
-await app.initialize();
 
 await app.rememberSomething('TypeScript is a superset of JavaScript');
 const memories = await app.recallInformation('TypeScript');
@@ -66,39 +56,30 @@ console.log('Recalled:', memories);
 ## 2. AI Chatbot with Memory
 
 ```typescript
-import { MemoriOpenAI } from 'memorits';
-import { Memori, ConfigManager } from 'memorits';
-import { LLMProviderFactory, ProviderType } from '@memori/providers';
+import { Memori, OpenAIWrapper } from 'memorits';
 
 class MemoryEnabledChatbot {
-  private client: any;
   private memori: Memori;
+  private openai: OpenAIWrapper;
   private sessionId: string;
 
   constructor(apiKey: string) {
-    // Create Memori instance first
-    const config = ConfigManager.loadConfig();
-    config.apiKey = apiKey;
-    this.memori = new Memori(config);
-
-    // Create OpenAI client with memory (drop-in replacement)
-    this.client = new MemoriOpenAI(apiKey, {
-      enableChatMemory: true,
-      autoInitialize: true,
+    // Create Memori instance with simple configuration
+    this.memori = new Memori({
+      databaseUrl: 'sqlite:./memories.db',
+      namespace: 'chatbot-app',
+      apiKey: apiKey,
+      autoMemory: true
     });
 
+    this.openai = new OpenAIWrapper(this.memori);
     this.sessionId = this.generateSessionId();
-  }
-
-  async initialize() {
-    await this.memori.enable();
   }
 
   async chat(userMessage: string) {
     try {
-      // Get AI response with memory context
-      const response = await this.client.chat.completions.create({
-        model: 'gpt-4o-mini',
+      // Chat normally - memory is recorded automatically
+      const response = await this.openai.chat({
         messages: [
           {
             role: 'system',
@@ -108,17 +89,7 @@ class MemoryEnabledChatbot {
         ]
       });
 
-      // Record the conversation for future context
-      await this.memori.recordConversation(
-        userMessage,
-        response.choices[0].message.content,
-        {
-          model: 'gpt-4o-mini',
-          metadata: { sessionId: this.sessionId }
-        }
-      );
-
-      return response.choices[0].message.content;
+      return response.content;
 
     } catch (error) {
       console.error('Chat error:', error);
@@ -129,8 +100,7 @@ class MemoryEnabledChatbot {
   async searchChatHistory(query: string) {
     // Search through conversation history
     const memories = await this.memori.searchMemories(query, {
-      limit: 10,
-      includeMetadata: true
+      limit: 10
     });
 
     return memories.map(memory => ({
@@ -145,154 +115,73 @@ class MemoryEnabledChatbot {
   }
 }
 
-// Usage - OpenAI drop-in replacement
-const openaiChatbot = new MemoryEnabledChatbot(process.env.OPENAI_API_KEY!);
-await openaiChatbot.initialize();
+// Usage
+const chatbot = new MemoryEnabledChatbot('your-api-key');
 
-console.log(await openaiChatbot.chat('My name is Alice and I love programming'));
-console.log(await openaiChatbot.chat('What is my name?'));
+console.log(await chatbot.chat('My name is Alice and I love programming'));
+console.log(await chatbot.chat('What is my name?'));
 
-const history = await openaiChatbot.searchChatHistory('Alice');
+const history = await chatbot.searchChatHistory('Alice');
 console.log('Chat history:', history);
-
-// Multi-provider alternative using Provider Factory
-class MultiProviderChatbot {
-  private openaiProvider: any;
-  private anthropicProvider: any;
-  private memori: Memori;
-
-  constructor() {
-    const config = ConfigManager.loadConfig();
-    this.memori = new Memori(config);
-  }
-
-  async initialize() {
-    await this.memori.enable();
-
-    // Create multiple providers with shared memory
-    this.openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
-      apiKey: process.env.OPENAI_API_KEY,
-      model: 'gpt-4o-mini',
-      enableMemory: true,
-      memoryConfig: {
-        databaseUrl: 'sqlite:./memories.db',
-        namespace: 'multi-provider-chat'
-      }
-    });
-
-    this.anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      model: 'claude-3-5-sonnet-20241022',
-      enableMemory: true,
-      memoryConfig: {
-        databaseUrl: 'sqlite:./memories.db', // Shared database
-        namespace: 'multi-provider-chat'
-      }
-    });
-  }
-
-  async chatWithOpenAI(message: string) {
-    const response = await this.openaiProvider.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: message }]
-    });
-    return response.choices[0].message.content;
-  }
-
-  async chatWithAnthropic(message: string) {
-    const response = await this.anthropicProvider.chat.completions.create({
-      model: 'claude-3-5-sonnet-20241022',
-      messages: [{ role: 'user', content: message }]
-    });
-    return response.choices[0].message.content;
-  }
-
-  async searchSharedHistory(query: string) {
-    return this.memori.searchMemories(query, { limit: 10 });
-  }
-}
 ```
 
 ## 3. Personal Knowledge Base
 
 ```typescript
-import { Memori, MemoryClassification, MemoryImportanceLevel } from 'memorits';
+import { Memori, OpenAIWrapper } from 'memorits';
 
 class PersonalKnowledgeBase {
   private memori: Memori;
+  private openai: OpenAIWrapper;
 
   constructor() {
-    const config = ConfigManager.loadConfig();
-    this.memori = new Memori(config);
+    this.memori = new Memori({
+      databaseUrl: 'sqlite:./knowledge.db',
+      namespace: 'knowledge-base',
+      apiKey: 'your-api-key',
+      autoMemory: true
+    });
+
+    this.openai = new OpenAIWrapper(this.memori);
   }
 
-  async initialize() {
-    await this.memori.enable();
+  async addKnowledge(topic: string, content: string) {
+    // Chat normally - knowledge is recorded automatically
+    const response = await this.openai.chat({
+      messages: [
+        { role: 'user', content: `Remember this about ${topic}: ${content}` }
+      ]
+    });
+
+    console.log(`Added knowledge: ${topic} (${response.chatId})`);
+    return response.chatId;
   }
 
-  async addKnowledge(
-    topic: string,
-    content: string,
-    category: MemoryClassification = MemoryClassification.REFERENCE,
-    importance: MemoryImportanceLevel = MemoryImportanceLevel.MEDIUM
-  ) {
-    // Add knowledge with specific classification
-    const chatId = await this.memori.recordConversation(
-      `Knowledge: ${topic}`,
-      content,
-      'manual-entry',
-      {
-        metadata: {
-          topic: topic,
-          category: category,
-          importance: importance,
-          source: 'manual_entry'
-        }
-      }
-    );
-
-    console.log(`Added knowledge: ${topic} (${chatId})`);
-    return chatId;
-  }
-
-  async searchKnowledge(
-    query: string,
-    category?: MemoryClassification,
-    minImportance: MemoryImportanceLevel = MemoryImportanceLevel.LOW
-  ) {
-    // Search knowledge base with filters
-    const searchOptions: any = {
-      limit: 20,
-      minImportance: minImportance,
-      includeMetadata: true
-    };
-
-    if (category) {
-      searchOptions.categories = [category];
-    }
-
-    const results = await this.memori.searchMemories(query, searchOptions);
+  async searchKnowledge(query: string) {
+    // Search knowledge base
+    const results = await this.memori.searchMemories(query, {
+      limit: 20
+    });
 
     return results.map(result => ({
       content: result.content,
-      topic: result.metadata.topic,
-      category: result.metadata.category,
-      importance: result.metadata.importanceScore,
-      confidence: result.metadata.confidenceScore,
-      createdAt: result.metadata.createdAt
+      topic: result.metadata?.topic,
+      category: result.metadata?.category,
+      importance: result.metadata?.importanceScore,
+      confidence: result.metadata?.confidenceScore,
+      createdAt: result.metadata?.createdAt
     }));
   }
 
   async getTopicsByCategory() {
     // Get all unique topics organized by category
     const allMemories = await this.memori.searchMemories('', {
-      limit: 1000,
-      includeMetadata: true
+      limit: 1000
     });
 
     const topicsByCategory = allMemories.reduce((acc, memory) => {
-      const category = memory.metadata.category;
-      const topic = memory.metadata.topic;
+      const category = memory.metadata?.category || 'general';
+      const topic = memory.metadata?.topic;
 
       if (!acc[category]) {
         acc[category] = new Set();
@@ -316,21 +205,16 @@ class PersonalKnowledgeBase {
 
 // Usage
 const knowledgeBase = new PersonalKnowledgeBase();
-await knowledgeBase.initialize();
 
 // Add some knowledge
 await knowledgeBase.addKnowledge(
   'TypeScript',
-  'TypeScript is a strongly typed programming language that builds on JavaScript',
-  MemoryClassification.REFERENCE,
-  MemoryImportanceLevel.HIGH
+  'TypeScript is a strongly typed programming language that builds on JavaScript'
 );
 
 await knowledgeBase.addKnowledge(
   'React Hooks',
-  'React Hooks let you use state and other React features in functional components',
-  MemoryClassification.REFERENCE,
-  MemoryImportanceLevel.HIGH
+  'React Hooks let you use state and other React features in functional components'
 );
 
 // Search knowledge
@@ -345,92 +229,54 @@ console.log('Topics by category:', topics);
 ## 4. Task Reminder System
 
 ```typescript
-import { Memori, MemoryClassification, MemoryImportanceLevel } from 'memorits';
+import { Memori, OpenAIWrapper } from 'memorits';
 
 class TaskReminderSystem {
   private memori: Memori;
+  private openai: OpenAIWrapper;
 
   constructor() {
-    const config = ConfigManager.loadConfig();
-    this.memori = new Memori(config);
+    this.memori = new Memori({
+      databaseUrl: 'sqlite:./tasks.db',
+      namespace: 'task-system',
+      apiKey: 'your-api-key',
+      autoMemory: true
+    });
+
+    this.openai = new OpenAIWrapper(this.memori);
   }
 
-  async initialize() {
-    await this.memori.enable();
-  }
-
-  async addTask(
-    task: string,
-    priority: 'low' | 'medium' | 'high' = 'medium',
-    dueDate?: Date
-  ) {
-    const importance = priority === 'high' ? MemoryImportanceLevel.HIGH :
-                      priority === 'medium' ? MemoryImportanceLevel.MEDIUM :
-                      MemoryImportanceLevel.LOW;
-
+  async addTask(task: string, priority: 'low' | 'medium' | 'high' = 'medium', dueDate?: Date) {
     const taskContent = dueDate
       ? `Task: ${task} (Due: ${dueDate.toISOString()})`
       : `Task: ${task}`;
 
-    const chatId = await this.memori.recordConversation(
-      taskContent,
-      `I'll remind you about: ${task}`,
-      'task-entry',
-      {
-        metadata: {
-          type: 'task',
-          priority: priority,
-          dueDate: dueDate?.toISOString(),
-          status: 'pending'
-        }
-      }
-    );
+    // Chat normally - task is recorded automatically
+    const response = await this.openai.chat({
+      messages: [
+        { role: 'user', content: taskContent }
+      ]
+    });
 
-    console.log(`Added task: ${task} (${chatId})`);
-    return chatId;
+    console.log(`Added task: ${task} (${response.chatId})`);
+    return response.chatId;
   }
 
   async getTasksByPriority(priority?: 'low' | 'medium' | 'high') {
-    const searchOptions: any = {
-      categories: [MemoryClassification.CONVERSATIONAL],
-      limit: 50,
-      includeMetadata: true
-    };
+    const searchQuery = priority ? `Task: ${priority} priority` : 'Task:';
 
-    if (priority) {
-      searchOptions.metadataFilters = {
-        fields: [
-          {
-            key: 'priority',
-            value: priority,
-            operator: 'eq'
-          }
-        ]
-      };
-    }
-
-    const results = await this.memori.searchMemories('Task:', searchOptions);
-
-    return results
-      .filter(result => result.metadata.type === 'task')
-      .map(result => ({
-        id: result.id,
-        task: result.content.replace('Task: ', ''),
-        priority: result.metadata.priority,
-        dueDate: result.metadata.dueDate ? new Date(result.metadata.dueDate) : null,
-        status: result.metadata.status,
-        createdAt: result.metadata.createdAt
-      }));
-  }
-
-  async markTaskComplete(taskId: string) {
-    // Update task status
-    await this.memori.updateMemoryMetadata(taskId, {
-      status: 'completed',
-      completedAt: new Date().toISOString()
+    const results = await this.memori.searchMemories(searchQuery, {
+      limit: 50
     });
 
-    console.log(`Marked task ${taskId} as completed`);
+    return results.map(result => ({
+      id: result.id,
+      task: result.content.replace('Task: ', ''),
+      priority: result.metadata?.priority,
+      dueDate: result.metadata?.dueDate ? new Date(result.metadata.dueDate) : null,
+      status: result.metadata?.status,
+      createdAt: result.metadata?.createdAt
+    }));
   }
 
   async getOverdueTasks() {
@@ -447,7 +293,6 @@ class TaskReminderSystem {
 
 // Usage
 const taskSystem = new TaskReminderSystem();
-await taskSystem.initialize();
 
 // Add tasks
 await taskSystem.addTask('Review project proposal', 'high', new Date('2024-02-01'));
@@ -466,18 +311,21 @@ console.log('Overdue tasks:', overdueTasks);
 ## 5. Learning Progress Tracker
 
 ```typescript
-import { Memori, MemoryClassification, MemoryImportanceLevel } from 'memorits';
+import { Memori, OpenAIWrapper } from 'memorits';
 
 class LearningProgressTracker {
   private memori: Memori;
+  private openai: OpenAIWrapper;
 
   constructor() {
-    const config = ConfigManager.loadConfig();
-    this.memori = new Memori(config);
-  }
+    this.memori = new Memori({
+      databaseUrl: 'sqlite:./learning.db',
+      namespace: 'learning-tracker',
+      apiKey: 'your-api-key',
+      autoMemory: true
+    });
 
-  async initialize() {
-    await this.memori.enable();
+    this.openai = new OpenAIWrapper(this.memori);
   }
 
   async logLearningSession(
@@ -485,72 +333,46 @@ class LearningProgressTracker {
     content: string,
     difficulty: 'beginner' | 'intermediate' | 'advanced' = 'intermediate'
   ) {
-    const importance = difficulty === 'advanced' ? MemoryImportanceLevel.HIGH :
-                      difficulty === 'intermediate' ? MemoryImportanceLevel.MEDIUM :
-                      MemoryImportanceLevel.LOW;
-
-    const sessionId = await this.memori.recordConversation(
-      `Learning: ${topic}`,
-      content,
-      'learning-session',
-      {
-        metadata: {
-          type: 'learning',
-          topic: topic,
-          difficulty: difficulty,
-          sessionDate: new Date().toISOString()
-        }
-      }
-    );
+    // Chat normally - learning session is recorded automatically
+    const response = await this.openai.chat({
+      messages: [
+        { role: 'user', content: `Learning: ${topic} - ${content}` }
+      ]
+    });
 
     console.log(`Logged learning session: ${topic}`);
-    return sessionId;
+    return response.chatId;
   }
 
   async getLearningProgress(topic?: string) {
-    // Get learning sessions with optional topic filter
-    const searchOptions: any = {
-      categories: [MemoryClassification.CONVERSATIONAL],
-      limit: 100,
-      includeMetadata: true
-    };
+    const searchQuery = topic ? `Learning: ${topic}` : 'Learning:';
 
-    if (topic) {
-      searchOptions.metadataFilters = {
-        fields: [
-          {
-            key: 'topic',
-            value: topic,
-            operator: 'eq'
-          }
-        ]
-      };
-    }
+    const results = await this.memori.searchMemories(searchQuery, {
+      limit: 100
+    });
 
-    const results = await this.memori.searchMemories('Learning:', searchOptions);
-
-    return results
-      .filter(result => result.metadata.type === 'learning')
-      .map(result => ({
-        topic: result.metadata.topic,
-        difficulty: result.metadata.difficulty,
-        content: result.content,
-        sessionDate: result.metadata.sessionDate,
-        importance: result.metadata.importanceScore
-      }));
+    return results.map(result => ({
+      topic: result.metadata?.topic,
+      difficulty: result.metadata?.difficulty,
+      content: result.content,
+      sessionDate: result.metadata?.sessionDate,
+      importance: result.metadata?.importanceScore
+    }));
   }
 
   async getTopicsByDifficulty() {
     const allLearning = await this.getLearningProgress();
 
     return allLearning.reduce((acc, session) => {
-      const difficulty = session.difficulty;
+      const difficulty = session.difficulty || 'intermediate';
       const topic = session.topic;
 
       if (!acc[difficulty]) {
         acc[difficulty] = new Set();
       }
-      acc[difficulty].add(topic);
+      if (topic) {
+        acc[difficulty].add(topic);
+      }
 
       return acc;
     }, {} as Record<string, Set<string>>);
@@ -559,16 +381,15 @@ class LearningProgressTracker {
   async findWeakAreas() {
     // Find topics with low importance scores (indicating difficulty)
     const results = await this.memori.searchMemories('Learning:', {
-      limit: 100,
-      includeMetadata: true
+      limit: 100
     });
 
-    const learningSessions = results.filter(r => r.metadata.type === 'learning');
+    const learningSessions = results.filter(r => r.metadata?.type === 'learning');
 
     // Group by topic and calculate average importance
     const topicImportance = learningSessions.reduce((acc, session) => {
-      const topic = session.metadata.topic;
-      const importance = session.metadata.importanceScore;
+      const topic = session.metadata?.topic;
+      const importance = session.metadata?.importanceScore || 0.5;
 
       if (!acc[topic]) {
         acc[topic] = { total: 0, count: 0, sessions: [] };
@@ -597,7 +418,6 @@ class LearningProgressTracker {
 
 // Usage
 const learningTracker = new LearningProgressTracker();
-await learningTracker.initialize();
 
 // Log learning sessions
 await learningTracker.logLearningSession(
@@ -624,43 +444,33 @@ console.log('Areas needing attention:', weakAreas);
 ## 6. Context-Aware AI Assistant
 
 ```typescript
-import { Memori, ConfigManager } from 'memorits';
-import { MemoriOpenAI } from 'memorits';
-import { LLMProviderFactory, ProviderType } from '@memori/providers';
+import { Memori, OpenAIWrapper } from 'memorits';
 
 class ContextAwareAssistant {
-  private client: any;
   private memori: Memori;
+  private openai: OpenAIWrapper;
   private userProfile: any = {};
 
   constructor(apiKey?: string) {
-    // Create Memori instance first
-    const config = ConfigManager.loadConfig();
-    if (apiKey) config.apiKey = apiKey;
-    config.consciousIngest = true;
-    this.memori = new Memori(config);
-
-    // Create OpenAI client with memory (drop-in replacement)
-    this.client = new MemoriOpenAI(apiKey || process.env.OPENAI_API_KEY!, {
-      enableChatMemory: true,
-      autoInitialize: true,
+    // Create Memori instance with simple configuration
+    this.memori = new Memori({
+      databaseUrl: 'sqlite:./assistant.db',
+      namespace: 'context-assistant',
+      apiKey: apiKey || 'your-api-key',
+      autoMemory: true,
+      consciousMemory: true
     });
-  }
 
-  async initialize() {
-    await this.memori.enable();
+    this.openai = new OpenAIWrapper(this.memori);
   }
 
   async learnAboutUser(userInfo: string) {
-    // Learn and remember user information
-    await this.memori.recordConversation(
-      `User info: ${userInfo}`,
-      `I understand: ${userInfo}`,
-      {
-        model: 'user-learning',
-        metadata: { type: 'user-learning' }
-      }
-    );
+    // Chat normally - user info is recorded automatically
+    await this.openai.chat({
+      messages: [
+        { role: 'user', content: `User info: ${userInfo}` }
+      ]
+    });
 
     // Update user profile
     this.userProfile = await this.buildUserProfile();
@@ -669,8 +479,6 @@ class ContextAwareAssistant {
   async buildUserProfile() {
     // Build user profile from memories
     const userMemories = await this.memori.searchMemories('user info', {
-      categories: ['personal' as any, 'conscious-info' as any],
-      minImportance: 'medium' as any,
       limit: 20
     });
 
@@ -704,8 +512,7 @@ class ContextAwareAssistant {
   async answerQuestion(question: string) {
     // Get relevant context
     const context = await this.memori.searchMemories(question, {
-      limit: 3,
-      minImportance: 'medium' as any
+      limit: 3
     });
 
     // Build context-aware prompt
@@ -726,44 +533,32 @@ Question: ${question}
 Please provide a helpful, personalized response based on the user's profile and relevant context.
     `;
 
-    const response = await this.client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }]
+    const response = await this.openai.chat({
+      messages: [
+        { role: 'user', content: prompt }
+      ]
     });
 
-    // Record this interaction
-    await this.memori.recordConversation(
-      question,
-      response.choices[0].message.content,
-      {
-        model: 'gpt-4o-mini'
-      }
-    );
-
-    return response.choices[0].message.content;
+    return response.content;
   }
 
   async getPersonalizedRecommendations() {
     // Get recommendations based on user profile
     const recommendations = await this.memori.searchMemories(
       'recommendations suggestions',
-      {
-        categories: ['essential' as any, 'contextual' as any],
-        limit: 10
-      }
+      { limit: 10 }
     );
 
     return recommendations.map(rec => ({
       content: rec.content,
       relevance: rec.score,
-      category: rec.metadata.category
+      category: rec.metadata?.category
     }));
   }
 }
 
 // Usage
-const assistant = new ContextAwareAssistant(process.env.OPENAI_API_KEY!);
-await assistant.initialize();
+const assistant = new ContextAwareAssistant();
 
 // Learn about user
 await assistant.learnAboutUser('I am a software engineer who loves TypeScript and React');

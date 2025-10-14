@@ -162,7 +162,7 @@ The architecture leverages the **MemoryEnabledLLMProvider** pattern:
 - **Unified Processing Pipeline**: All providers use the same MemoryAgent infrastructure
 - **Single Implementation**: Shared codebase across OpenAI, Anthropic, and Ollama
 - **Consistent Behavior**: Identical memory processing capabilities across all providers
-- **Streamlined Maintenance**: Single codebase for memory functionality
+- **Unified Maintenance**: Single codebase for memory functionality
 
 ## Integration Patterns
 
@@ -551,7 +551,7 @@ interface IProviderConfig {
   baseUrl?: string;                     // Base URL for the provider API
   options?: Record<string, any>;        // Provider-specific configuration options
 
-  // Memory configuration (NEW!)
+  // Memory configuration
   memory?: {
     enableChatMemory?: boolean;         // Enable chat memory recording
     enableEmbeddingMemory?: boolean;    // Enable embedding memory recording

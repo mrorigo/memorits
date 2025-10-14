@@ -1,49 +1,44 @@
 # Memori TypeScript Examples
 
-This directory contains comprehensive examples demonstrating how to use the Memori TypeScript library for memory-enabled conversations with multiple AI providers including OpenAI, Ollama, and Anthropic. The examples showcase both the traditional Memori API and the new provider architecture with factory patterns.
+This directory contains comprehensive examples demonstrating how to use the Memori TypeScript library for memory-enabled conversations with multiple AI providers including OpenAI, Ollama, and Anthropic.
 
 ## Prerequisites
 
 1. **Node.js** (version 16 or higher)
 2. **npm** or **yarn** package manager
-3. **Database**: SQLite (configured by default) or PostgreSQL/MySQL
+3. **Database**: SQLite (default) or PostgreSQL/MySQL
 4. **AI Backend**: Either OpenAI API or Ollama
 
-## Environment Configuration
+## Simple Setup
 
-The examples use the following environment variables (set in `.env`):
+The examples use a simple configuration approach:
 
-```env
-# Database Configuration
-DATABASE_URL="file:./memori.db"
+```typescript
+import { Memori, OpenAIWrapper } from 'memorits';
 
-# Namespace for memory isolation
-MEMORI_NAMESPACE="development"
+// Simple configuration
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-api-key',
+  autoMemory: true
+});
 
-# Memory Processing Settings
-MEMORI_CONSCIOUS_INGEST="false"  # Enable conscious ingestion mode
-MEMORI_AUTO_INGEST="true"        # Enable automatic memory processing
-MEMORI_ENABLE_RELATIONSHIP_EXTRACTION="true"  # Enable relationship extraction
-
-# AI Model Configuration
-MEMORI_MODEL="gpt-4o-mini"
-
-# OpenAI Configuration (for OpenAI backend)
-OPENAI_API_KEY="your-openai-api-key-here"
-
-# Base URL for API calls
-# For OpenAI: leave empty or remove this line
-# For Ollama: http://localhost:11434/v1
-OPENAI_BASE_URL="http://localhost:11434/v1"
+// Provider wrapper with direct integration
+const openai = new OpenAIWrapper(memori);
 ```
 
 ### Setting up OpenAI
 
 1. Get your API key from [OpenAI Platform](https://platform.openai.com/api-keys)
-2. Set the following in your `.env` file:
-   ```env
-   OPENAI_API_KEY="your-actual-api-key"
-   # Remove or comment out OPENAI_BASE_URL for OpenAI
+2. Use it directly in your code:
+   ```typescript
+   const memori = new Memori({
+     databaseUrl: 'sqlite:./memories.db',
+     namespace: 'my-app',
+     apiKey: 'your-openai-api-key',
+     autoMemory: true
+   });
    ```
 
 ### Setting up Ollama
@@ -58,11 +53,15 @@ OPENAI_BASE_URL="http://localhost:11434/v1"
    ollama pull llama2
    ollama pull codellama
    ```
-4. Set the following in your `.env` file:
-   ```env
-   OPENAI_BASE_URL="http://localhost:11434/v1"
-   OPENAI_API_KEY="not-needed-for-ollama"
-   MEMORI_MODEL="llama2"
+4. Use it in your code:
+   ```typescript
+   const memori = new Memori({
+     databaseUrl: 'sqlite:./memories.db',
+     namespace: 'my-app',
+     apiKey: 'ollama-local',
+     baseUrl: 'http://localhost:11434',
+     autoMemory: true
+   });
    ```
 
 ## Running Examples
@@ -75,25 +74,10 @@ The examples can be run using the following npm scripts:
 # Basic usage example
 npm run example:basic
 
-# Ollama-specific integration example
-npm run example:ollama
+# Unified usage example
+npm run example:unified
 
-# OpenAI-specific integration example
-npm run example:openai
-
-# Memory search and retrieval example
-npm run example:search
-
-# Dual memory mode demonstration (includes relationship extraction control)
-npm run example:dual-memory
-
-# Performance dashboard demonstration
-npm run example:performance-dashboard
-
-# Memory consolidation demonstration
-npm run example:consolidation
-
-# Multi-provider usage demonstration (NEW)
+# Multi-provider usage demonstration
 npm run example:multi-provider
 ```
 
@@ -105,23 +89,8 @@ You can also run examples directly with tsx:
 # Basic usage
 npx tsx examples/basic-usage.ts
 
-# Ollama integration
-npx tsx examples/ollama-integration.ts
-
-# OpenAI integration
-npx tsx examples/openai-integration.ts
-
-# Memory search
-npx tsx examples/memory-search.ts
-
-# Dual memory mode
-npx tsx examples/dual-memory-mode.ts
-
-# Performance dashboard
-npx tsx examples/performance-dashboard.ts
-
-# Memory consolidation
-npx tsx examples/memory-consolidation.ts
+# Unified usage (recommended)
+npx tsx examples/unified-usage.ts
 
 # Multi-provider usage
 npx tsx examples/multi-provider-usage.ts

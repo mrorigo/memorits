@@ -20,37 +20,38 @@ npm install memorits
 
 ### 1. Basic Setup
 
-// docs/PORTING_PLAN.md
 ```typescript
-import { Memori, ConfigManager, createMemoriOpenAI } from 'memorits';
+import { Memori, OpenAIWrapper } from 'memorits';
 
-// Initialize with default configuration
-const config = ConfigManager.loadConfig();
-const memori = new Memori(config);
+// Create Memori instance (simple configuration)
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-openai-api-key',
+  autoMemory: true
+});
 
-// Enable memory processing
-await memori.enable();
+// Wrap with provider (direct integration)
+const openai = new OpenAIWrapper(memori);
+
+// Use normally - memory happens automatically
+const response = await openai.chat({
+  messages: [{ role: 'user', content: 'Hello! I am a software engineer who loves TypeScript.' }]
+});
+
+console.log('Response:', response.content);
 console.log('Memorits is ready!');
 ```
 
-### 2. OpenAI Integration
+### 2. Search Memories
 
 ```typescript
-// Replace your OpenAI client with MemoriOpenAI
-const openaiClient = createMemoriOpenAI(memori, config.apiKey);
-
-// Use normally - conversations are automatically recorded!
-const response = await openaiClient.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [
-    { role: 'user', content: 'Remember: I am a software engineer who loves TypeScript.' }
-  ],
+// Search for relevant memories
+const memories = await memori.searchMemories('TypeScript', {
+  limit: 5
 });
 
-// Search for memories
-const memories = await memori.searchMemories('software engineer', {
-  minImportance: 'high'
-});
+console.log(`Found ${memories.length} relevant memories`);
 ```
 
 ### 3. Basic Memory Search
@@ -65,26 +66,30 @@ const relevantMemories = await memori.searchMemories('TypeScript', {
 console.log(`Found ${relevantMemories.length} relevant memories`);
 ```
 
-### 4. Enable Consolidation (Optional)
+### 4. Multiple Providers (Optional)
 
-For production applications, enable automated consolidation to manage duplicate memories:
+Use different AI providers with the same memory pool:
 
 ```typescript
-// Start automated consolidation (recommended for production)
-// Note: Consolidation runs automatically in the background when enabled
-// Use environment variables to configure:
-process.env.MEMORI_ENABLE_CONSOLIDATION = 'true';
-process.env.MEMORI_CONSOLIDATION_INTERVAL_MINUTES = '60';
+import { Memori, OpenAIWrapper, AnthropicWrapper } from 'memorits';
 
-// Or configure programmatically by restarting Memori with new config
-const config = ConfigManager.loadConfig();
-Object.assign(config, {
-  enableConsolidation: true,
-  consolidationIntervalMinutes: 60
+// Same Memori instance, different providers
+const memori = new Memori({
+  databaseUrl: 'postgresql://localhost:5432/memori',
+  namespace: 'multi-provider-app',
+  apiKey: 'your-api-key',
+  autoMemory: true
 });
 
-const memori = new Memori(config);
-await memori.enable();
+const openai = new OpenAIWrapper(memori);
+const claude = new AnthropicWrapper(memori);
+
+// Both record to the same memory
+await openai.chat({ messages: [{ role: 'user', content: 'From OpenAI' }] });
+await claude.chat({ messages: [{ role: 'user', content: 'From Claude' }] });
+
+// Search across all conversations
+const memories = await memori.searchMemories('AI');
 ```
 
 ## Configuration Options
@@ -96,18 +101,12 @@ Create a `.env` file in your project root:
 ```bash
 # OpenAI Configuration
 OPENAI_API_KEY=your-openai-api-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
 
 # Memory Configuration
 DATABASE_URL=sqlite:./memories.db
-MEMORI_NAMESPACE=default
-MEMORI_AUTO_INGEST=true
-MEMORI_CONSCIOUS_INGEST=false
-MEMORI_ENABLE_RELATIONSHIP_EXTRACTION=true
-MEMORI_MODEL=gpt-4o-mini
 ```
 
-### Programmatic Configuration
+### Simple Configuration
 
 ```typescript
 import { Memori } from 'memorits';
@@ -116,108 +115,85 @@ const memori = new Memori({
   databaseUrl: 'sqlite:./my-memories.db',
   namespace: 'my-app',
   apiKey: 'your-openai-api-key',
-  model: 'gpt-4o-mini',
-  autoIngest: true,
-  consciousIngest: false,
-  enableRelationshipExtraction: true
+  autoMemory: true
 });
 ```
 
-## Memory Modes Explained
+## Memory Modes
 
-### Auto-Ingestion Mode (Default)
+### Auto Memory Mode (Default)
 
-**Best for**: Most applications that need dynamic memory retrieval.
-
-- **How it works**: Every conversation is processed and stored
-- **Search behavior**: Dynamic search triggered by each query
-- **Performance**: Optimized for real-time applications
-- **Relationship extraction**: Can be controlled independently (default: enabled)
-- **Use case**: Chat applications, assistants, general AI apps
+**Best for**: Most applications that need automatic memory recording.
 
 ```typescript
-const config = MemoriConfigSchema.parse({
-  autoIngest: true,
-  consciousIngest: false,
-  enableRelationshipExtraction: true  // Enable relationship extraction
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-api-key',
+  autoMemory: true,        // Enable automatic memory recording
+  consciousMemory: false   // Disable conscious processing
 });
 ```
 
-**Relationship Extraction Control**: You can independently control relationship extraction:
+### Conscious Memory Mode
+
+**Best for**: Applications needing background memory processing.
 
 ```typescript
-// Enable auto-ingestion with relationship extraction
-const config = MemoriConfigSchema.parse({
-  autoIngest: true,
-  enableRelationshipExtraction: true
-});
-
-// Enable auto-ingestion WITHOUT relationship extraction
-const config = MemoriConfigSchema.parse({
-  autoIngest: true,
-  enableRelationshipExtraction: false  // Disable relationship extraction
-});
-```
-
-### Conscious Processing Mode
-
-**Best for**: Applications needing persistent context and background learning.
-
-- **How it works**: Background processing with human-like reflection
-- **Search behavior**: One-shot context injection at startup
-- **Performance**: Background processing, minimal runtime overhead
-- **Use case**: Personal assistants, long-term memory applications
-
-```typescript
-const config = MemoriConfigSchema.parse({
-  autoIngest: false,
-  consciousIngest: true
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-api-key',
+  autoMemory: false,       // Disable automatic recording
+  consciousMemory: true    // Enable conscious processing
 });
 ```
 
 ### Combined Mode
 
-**Best for**: Maximum intelligence with both dynamic and persistent memory.
+**Best for**: Maximum intelligence with both memory modes.
 
 ```typescript
-const config = MemoriConfigSchema.parse({
-  autoIngest: true,
-  consciousIngest: true
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-api-key',
+  autoMemory: true,        // Enable both modes
+  consciousMemory: true
 });
 ```
 
 ## Testing Your Setup
 
-### 1. Record Some Conversations
+### 1. Use the Provider Wrapper
 
 ```typescript
-// Record a conversation
-const chatId = await memori.recordConversation(
-  'I am building an AI assistant for developers',
-  'Great! I\'ll help you build an AI assistant. What kind of features do you need?',
-  {
-    model: 'gpt-4o-mini',
-    sessionId: 'dev-session-1'
-  }
-);
+import { OpenAIWrapper } from 'memorits';
 
-console.log('Recorded conversation:', chatId);
+const openai = new OpenAIWrapper(memori);
+
+// Chat normally - memory is recorded automatically
+const response = await openai.chat({
+  messages: [
+    { role: 'user', content: 'I am building an AI assistant for developers' }
+  ]
+});
+
+console.log('Chat ID for memory:', response.chatId);
 ```
 
 ### 2. Search for Memories
 
 ```typescript
-// Wait a moment for processing, then search
-setTimeout(async () => {
-  const memories = await memori.searchMemories('AI assistant', {
-    limit: 5
-  });
+// Search for relevant memories
+const memories = await memori.searchMemories('AI assistant', {
+  limit: 5
+});
 
-  console.log('Found memories:', memories.length);
-  memories.forEach(memory => {
-    console.log(`- ${memory.metadata.summary} (${memory.score})`);
-  });
-}, 2000);
+console.log('Found memories:', memories.length);
+memories.forEach(memory => {
+  console.log(`- ${memory.metadata?.summary} (${memory.score})`);
+});
 ```
 
 ### 3. Verify Database
@@ -267,10 +243,11 @@ const config = MemoriConfigSchema.parse({
 
 ```typescript
 // Ensure memory processing is enabled
-const config = MemoriConfigSchema.parse({
-  autoIngest: true,  // Enable memory processing
-  enableRelationshipExtraction: true,  // Enable relationship extraction (optional)
-  model: 'gpt-4o-mini'  // Ensure model is available
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-api-key',
+  autoMemory: true  // Enable memory processing
 });
 ```
 

@@ -4,47 +4,35 @@ This guide covers the essential usage patterns for Memorits, from simple memory 
 
 ## Core Operations
 
-### 1. Initialize Memorits
+### 1. Initialize Memori
 
 ```typescript
-import { Memori, ConfigManager } from 'memorits';
+import { Memori } from 'memorits';
 
-// Create Memori instance with configuration
-const config = ConfigManager.loadConfig();
-// Override specific settings as needed
-Object.assign(config, {
+// Create Memori instance with simple configuration
+const memori = new Memori({
   databaseUrl: 'sqlite:./memories.db',
   namespace: 'my-app',
   apiKey: 'your-openai-api-key',
-  model: 'gpt-4o-mini',
-  autoIngest: true,
-  consciousIngest: false
+  autoMemory: true
 });
-
-const memori = new Memori(config);
-
-// Enable memory processing
-await memori.enable();
 ```
 
-### 2. Record Conversations
+### 2. Use Provider Wrappers
 
 ```typescript
-// Record a conversation
-const chatId = await memori.recordConversation(
-  'I need help with TypeScript interfaces',
-  'I can help you with TypeScript interfaces. What specific aspect do you need assistance with?',
-  {
-    model: 'gpt-4o-mini',
-    sessionId: 'user-session-123',
-    metadata: {
-      topic: 'programming',
-      difficulty: 'intermediate'
-    }
-  }
-);
+import { OpenAIWrapper } from 'memorits';
 
-console.log('Conversation recorded with ID:', chatId);
+const openai = new OpenAIWrapper(memori);
+
+// Chat normally - memory is recorded automatically
+const response = await openai.chat({
+  messages: [
+    { role: 'user', content: 'I need help with TypeScript interfaces' }
+  ]
+});
+
+console.log('Conversation recorded with ID:', response.chatId);
 ```
 
 ### 3. Search Memories

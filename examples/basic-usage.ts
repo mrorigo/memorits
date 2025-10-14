@@ -1,59 +1,61 @@
 /**
  * Basic Memori Usage Example
  *
- * This example demonstrates the fundamental usage of the Memori TypeScript library.
- * It shows how to initialize Memori, record conversations, and search memories.
+ * This example demonstrates the unified Memori API with comprehensive configuration,
+ * direct provider integration, and automatic memory recording.
  */
 
-import { Memori, ConfigManager } from '../src/index';
+import { Memori, OpenAIWrapper } from '../src/index';
 import { logInfo, logError } from '../src/core/infrastructure/config/Logger';
 
 async function basicUsageExample(): Promise<void> {
   logInfo('🚀 Starting Basic Memori Usage Example', { component: 'basic-usage-example' });
 
   let memori: Memori | undefined;
+  let openai: OpenAIWrapper | undefined;
 
   try {
-    // Load configuration from environment variables
-    const config = ConfigManager.loadConfig();
-    logInfo('📋 Configuration loaded', {
-      component: 'basic-usage-example',
-      databaseUrl: config.databaseUrl,
-      namespace: config.namespace,
-      model: config.model,
-      baseUrl: config.baseUrl || 'OpenAI default',
-    });
-
-    // Initialize Memori instance with auto-ingestion enabled
+    // Create Memori instance with unified configuration
     memori = new Memori({
-      ...config,
-      autoIngest: true, // Enable auto-ingestion to process conversations into searchable memories
+      databaseUrl: 'sqlite:./memories.db',
+      namespace: 'basic-example',
+      apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
+      model: 'gpt-4o-mini',
+      autoIngest: true,
+      consciousIngest: false,
+      enableRelationshipExtraction: true
     });
-    logInfo('✅ Memori instance created with auto-ingestion enabled', { component: 'basic-usage-example' });
+    logInfo('✅ Memori instance created', { component: 'basic-usage-example' });
 
-    // Enable Memori (initializes database schema)
-    await memori.enable();
-    logInfo('✅ Memori enabled successfully', { component: 'basic-usage-example' });
+    // Create provider wrapper (direct integration)
+    openai = new OpenAIWrapper(memori);
+    logInfo('✅ OpenAI wrapper created', { component: 'basic-usage-example' });
 
-    // Simulate a conversation
-    logInfo('💬 Recording conversation...', { component: 'basic-usage-example' });
-    const chatId = await memori.recordConversation(
-      'What is TypeScript and why should I use it?',
-      'TypeScript is a superset of JavaScript that adds static typing. It helps catch errors early, improves code maintainability, and provides better IDE support.',
-    );
-    logInfo(`✅ Conversation recorded with ID: ${chatId}`, { component: 'basic-usage-example', chatId });
+    // Chat normally - memory is recorded automatically
+    logInfo('💬 Starting conversation...', { component: 'basic-usage-example' });
+    const response1 = await openai.chat({
+      messages: [
+        { role: 'user', content: 'What is TypeScript and why should I use it?' }
+      ]
+    });
+    logInfo(`✅ Conversation recorded with ID: ${response1.chatId}`, {
+      component: 'basic-usage-example',
+      chatId: response1.chatId
+    });
 
     // Add more conversations to build memory
     logInfo('💬 Recording more conversations...', { component: 'basic-usage-example' });
-    await memori.recordConversation(
-      'How do I declare variables in TypeScript?',
-      'You can declare variables using let, const, or var. TypeScript also supports type annotations like: let name: string = "John";',
-    );
+    await openai.chat({
+      messages: [
+        { role: 'user', content: 'How do I declare variables in TypeScript?' }
+      ]
+    });
 
-    await memori.recordConversation(
-      'What are interfaces in TypeScript?',
-      'Interfaces define the structure of objects. They help with type checking and can be implemented by classes or used for object shapes.',
-    );
+    await openai.chat({
+      messages: [
+        { role: 'user', content: 'What are interfaces in TypeScript?' }
+      ]
+    });
 
     // Wait a moment for memory processing (asynchronous)
     logInfo('⏳ Waiting for memory processing...', { component: 'basic-usage-example' });
@@ -61,7 +63,7 @@ async function basicUsageExample(): Promise<void> {
 
     // Search for memories
     logInfo('🔍 Searching memories for "TypeScript"...', { component: 'basic-usage-example' });
-    const memories = await memori.searchMemories('TypeScript', { limit: 5 });
+    const memories = await memori!.searchMemories('TypeScript', { limit: 5 });
 
     // Search for specific concepts
     logInfo('🔍 Searching memories for "interfaces"...', { component: 'basic-usage-example' });

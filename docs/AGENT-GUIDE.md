@@ -389,7 +389,7 @@ OPENAI_API_KEY=your-key
 DATABASE_URL=sqlite:./memories.db
 MEMORI_NAMESPACE=default
 
-# Memory modes (NEW!)
+# Memory modes
 MEMORI_SESSION_ID=my-app-session
 MEMORI_PROCESSING_MODE=auto
 MEMORI_MIN_IMPORTANCE_LEVEL=medium

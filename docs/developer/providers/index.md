@@ -36,98 +36,107 @@ Getting started with multiple LLM providers in minutes using the MemoryAgent arc
 - Performance optimization tips for memory-enhanced applications
 - Troubleshooting common issues with advanced memory features
 
-## Quick Start with AI-Powered Memory Processing
+## Quick Start with Memory Processing
 
-### Using Different Providers with MemoryAgent Integration
-
-```typescript
-import { LLMProviderFactory, ProviderType } from 'memorits/core/infrastructure/providers';
-
-// Register default providers with MemoryAgent integration
-LLMProviderFactory.registerDefaultProviders();
-
-// Create OpenAI provider with sophisticated AI-powered memory processing
-const openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4',
-  memory: {
-    enableChatMemory: true,
-    memoryProcessingMode: 'auto', // Leverages MemoryAgent for AI-powered processing
-    sessionId: 'my-app'
-  }
-});
-
-// Create Anthropic provider with unified MemoryAgent architecture
-const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-3-5-sonnet-20241022',
-  memory: {
-    enableChatMemory: true,
-    memoryProcessingMode: 'auto', // Same MemoryAgent processing across all providers
-    sessionId: 'my-app' // Same session for shared AI-enhanced memory
-  }
-});
-
-// Create Ollama provider with local MemoryAgent processing
-const ollamaProvider = await LLMProviderFactory.createProvider(ProviderType.OLLAMA, {
-  baseUrl: 'http://localhost:11434',
-  model: 'llama2:7b',
-  memory: {
-    enableChatMemory: true,
-    memoryProcessingMode: 'auto', // MemoryAgent works locally too!
-    sessionId: 'my-app'
-  }
-});
-
-// All providers now share the same sophisticated MemoryAgent capabilities:
-// 🤖 AI-powered classification and importance scoring
-// 🏷️ Advanced entity extraction and relationship detection
-// 📊 Rich memory analytics and metadata generation
-```
-
-### Testing Providers with Memory Capabilities
+### Using Different Providers
 
 ```typescript
-import { ProviderTestSuite } from 'memorits/core/infrastructure/providers';
+import { Memori, OpenAIWrapper, AnthropicWrapper, OllamaWrapper } from 'memorits';
 
-const testSuite = new ProviderTestSuite(provider, config);
-const results = await testSuite.runTestSuite();
-
-// Tests now include memory processing capabilities
-console.log(`Tests passed: ${results.passedTests}/${results.totalTests}`);
-console.log(`Memory processing: ${results.memoryProcessingTests.passed}/${results.memoryProcessingTests.total}`);
-```
-
-### Benchmarking Performance with Memory Processing
-
-```typescript
-import { ProviderBenchmark } from 'memorits/core/infrastructure/providers';
-
-const benchmark = new ProviderBenchmark(provider, config);
-const results = await benchmark.runBenchmark({
-  iterations: 10,
-  testParams: { messages: [{ role: 'user', content: 'Hello!' }] },
+// Create Memori instance (shared memory for all providers)
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app',
+  apiKey: 'your-api-key',
+  autoMemory: true
 });
 
-// Benchmarking now includes memory processing metrics
-console.log(`Average latency: ${results.summary.averageDuration}ms`);
-console.log(`Memory processing time: ${results.memoryProcessing.averageTime}ms`);
-console.log(`Entity extraction: ${results.memoryProcessing.entityExtractionTime}ms`);
+// Create provider wrappers that integrate directly with Memori
+const openai = new OpenAIWrapper(memori);
+const anthropic = new AnthropicWrapper(memori);
+const ollama = new OllamaWrapper(memori);
+
+// Use any provider - they all share the same memory pool
+const openaiResponse = await openai.chat({
+  messages: [{ role: 'user', content: 'Remember: I love TypeScript' }]
+});
+
+const claudeResponse = await anthropic.chat({
+  messages: [{ role: 'user', content: 'What does the user love?' }]
+});
+
+// Search works across all providers
+const memories = await memori.searchMemories('TypeScript');
 ```
 
-## Provider Selection Guide with MemoryAgent Integration
+### Testing Providers
+
+```typescript
+import { Memori, OpenAIWrapper } from 'memorits';
+
+// Create Memori instance
+const memori = new Memori({
+  databaseUrl: 'sqlite:./test.db',
+  namespace: 'test',
+  apiKey: 'test-key',
+  autoMemory: true
+});
+
+// Create provider wrapper
+const openai = new OpenAIWrapper(memori);
+
+// Test chat functionality
+const response = await openai.chat({
+  messages: [{ role: 'user', content: 'Hello!' }]
+});
+
+console.log('Chat test passed:', response.content.length > 0);
+console.log('Memory recorded:', response.chatId);
+
+// Test memory search
+const memories = await memori.searchMemories('Hello');
+console.log('Memory search test passed:', memories.length > 0);
+```
+
+### Simple Performance Check
+
+```typescript
+import { Memori, OpenAIWrapper } from 'memorits';
+
+const memori = new Memori({
+  databaseUrl: 'sqlite:./benchmark.db',
+  namespace: 'benchmark',
+  apiKey: 'test-key',
+  autoMemory: true
+});
+
+const openai = new OpenAIWrapper(memori);
+
+// Simple performance test
+const startTime = Date.now();
+
+const response = await openai.chat({
+  messages: [{ role: 'user', content: 'Performance test' }]
+});
+
+const duration = Date.now() - startTime;
+console.log(`Response time: ${duration}ms`);
+console.log(`Chat ID: ${response.chatId}`);
+```
+
+## Provider Selection Guide
 
 | Requirement | Recommended Provider | Reason |
 |-------------|-------------------|--------|
-| **Best Quality** | Anthropic | Claude 3.5 Sonnet offers excellent quality with sophisticated MemoryAgent processing |
-| **Lowest Cost** | Anthropic | Competitive pricing with full AI-powered memory capabilities |
-| **Privacy/Local** | Ollama | Complete data privacy, local execution with MemoryAgent processing |
-| **Lowest Latency** | Ollama | Local execution, no network overhead, instant MemoryAgent processing |
-| **Reliability** | OpenAI | Mature infrastructure, high uptime, proven MemoryAgent integration |
-| **Development** | Ollama | Free, fast iteration, no API costs, full MemoryAgent capabilities |
-| **Memory Features** | **All Providers** | **Unified MemoryAgent architecture across all providers** |
+| **Best Quality** | Anthropic | Claude 3.5 Sonnet offers excellent quality with memory processing |
+| **Lowest Cost** | Anthropic | Competitive pricing with full memory capabilities |
+| **Privacy/Local** | Ollama | Complete data privacy, local execution with memory processing |
+| **Lowest Latency** | Ollama | Local execution, no network overhead, instant memory processing |
+| **Reliability** | OpenAI | Mature infrastructure, high uptime, proven memory integration |
+| **Development** | Ollama | Free, fast iteration, no API costs, full memory capabilities |
+| **Memory Features** | **All Providers** | **Unified memory architecture across all providers** |
 
-## Support Matrix with MemoryAgent Integration
+## Support Matrix
 
 | Feature | OpenAI | Anthropic | Ollama |
 |---------|--------|-----------|--------|
@@ -138,39 +147,39 @@ console.log(`Entity extraction: ${results.memoryProcessing.entityExtractionTime}
 | Local Execution | ❌ | ❌ | ✅ |
 | API Costs | ✅ | ✅ | ❌ |
 | Offline Support | ❌ | ❌ | ✅ |
-| **🧠 MemoryAgent Processing** | **✅** | **✅** | **✅** |
-| **🤖 AI-Powered Classification** | **✅** | **✅** | **✅** |
+| **🧠 Memory Processing** | **✅** | **✅** | **✅** |
+| **🤖 Classification** | **✅** | **✅** | **✅** |
 | **⭐ Importance Scoring** | **✅** | **✅** | **✅** |
 | **🏷️ Entity Extraction** | **✅** | **✅** | **✅** |
 | **🔗 Relationship Detection** | **✅** | **✅** | **✅** |
 
-## MemoryAgent Architecture Benefits
+## Memory Architecture Benefits
 
 ### 🚀 **Unified Memory Processing Across All Providers**
 
-The MemoryAgent integration provides unified memory processing across multi-provider LLM applications:
+The memory system provides unified processing across multi-provider applications:
 
 #### **🎯 Consistent Experience**
-- **Identical Memory Processing**: Same sophisticated AI-powered memory capabilities across OpenAI, Anthropic, and Ollama
+- **Identical Memory Processing**: Same memory capabilities across OpenAI, Anthropic, and Ollama
 - **Unified API**: Single memory interface regardless of underlying LLM provider
-- **Shared Memory Pool**: All providers contribute to and access the same enhanced memory system
+- **Shared Memory Pool**: All providers contribute to and access the same memory system
 
-#### **🧠 Advanced Memory Capabilities**
-- **AI-Powered Classification**: Every provider leverages the same intelligent categorization system
-- **Intelligent Importance Scoring**: Consistent importance assessment across all LLM interactions
-- **Advanced Entity Extraction**: Unified entity recognition and relationship detection
-- **Rich Metadata Generation**: Comprehensive analytics and context tracking
+#### **🧠 Memory Capabilities**
+- **Classification**: Intelligent categorization of conversations
+- **Importance Scoring**: Consistent importance assessment across all interactions
+- **Entity Extraction**: Unified entity recognition and relationship detection
+- **Rich Metadata**: Comprehensive analytics and context tracking
 
-#### **🔧 Unified Architecture**
-- **Zero Code Duplication**: Single MemoryAgent implementation serves all providers
-- **Streamlined Integration**: Clean architecture with unified memory processing
-- **Enhanced Maintainability**: Single codebase for memory functionality across providers
+#### **🔧 Simple Architecture**
+- **Direct Integration**: Provider wrappers work directly with Memori instances
+- **Clean Design**: Simple, maintainable memory functionality
+- **Easy to Use**: Obvious patterns for memory operations
 
 #### **📈 Performance & Scalability**
-- **Optimized Processing**: MemoryAgent efficiently handles memory processing for all providers
-- **Resource Efficiency**: Shared processing pipeline reduces overhead
-- **Scalable Architecture**: MemoryAgent design scales with multiple provider usage
-- **Enhanced Analytics**: Unified insights across all provider interactions
+- **Efficient Processing**: Optimized memory handling for all providers
+- **Resource Efficient**: Shared processing reduces overhead
+- **Scalable Design**: Works with multiple provider usage
+- **Unified Insights**: Single source of memory analytics
 
 ## Getting Help
 

@@ -1,4 +1,4 @@
-// src/core/Memori.ts
+// Memori Core Library
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from './infrastructure/database/DatabaseManager';
 import { MemoryAgent } from './domain/memory/MemoryAgent';
@@ -15,6 +15,7 @@ import {
 } from './types/models';
 import { ProcessedLongTermMemory, MemoryClassification, MemoryImportanceLevel, MemoryRelationship } from './types/schemas';
 import { SearchStrategy, SearchQuery } from './domain/search/types';
+
 
 export class Memori {
   private dbManager: DatabaseManager;
@@ -36,10 +37,44 @@ export class Memori {
     this.sessionId = uuidv4();
     this.dbManager = new DatabaseManager(this.config.databaseUrl);
 
-    // Register all default providers with the factory
-    LLMProviderFactory.registerProvider(ProviderType.OPENAI, OpenAIProvider);
-    LLMProviderFactory.registerProvider(ProviderType.OLLAMA, OllamaProvider);
-    LLMProviderFactory.registerProvider(ProviderType.ANTHROPIC, AnthropicProvider);
+    // Register all default providers with the factory (optimized - only register once)
+    this.registerProvidersIfNeeded();
+  }
+
+  /**
+   * Optimized provider registration - only register if not already registered
+   */
+  private registerProvidersIfNeeded(): void {
+    try {
+      if (!LLMProviderFactory.isProviderRegistered(ProviderType.OPENAI)) {
+        LLMProviderFactory.registerProvider(ProviderType.OPENAI, OpenAIProvider);
+      }
+      if (!LLMProviderFactory.isProviderRegistered(ProviderType.OLLAMA)) {
+        LLMProviderFactory.registerProvider(ProviderType.OLLAMA, OllamaProvider);
+      }
+      if (!LLMProviderFactory.isProviderRegistered(ProviderType.ANTHROPIC)) {
+        LLMProviderFactory.registerProvider(ProviderType.ANTHROPIC, AnthropicProvider);
+      }
+    } catch (error) {
+      // Providers might already be registered, continue silently
+      logInfo('Provider registration check completed', {
+        component: 'Memori',
+        sessionId: this.sessionId
+      });
+    }
+  }
+
+
+  /**
+   * Get default model for provider type
+   */
+  private getDefaultModel(providerType: ProviderType): string {
+    switch (providerType) {
+      case ProviderType.OPENAI: return 'gpt-4o-mini';
+      case ProviderType.ANTHROPIC: return 'claude-3-5-sonnet-20241022';
+      case ProviderType.OLLAMA: return 'llama2';
+      default: return 'gpt-4o-mini';
+    }
   }
 
   /**

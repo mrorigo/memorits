@@ -1,6 +1,31 @@
-// src/index.ts
-// Core exports (backward compatibility)
+// Memori Library - Unified API exports
 export { Memori } from './core/Memori';
+
+// Provider wrappers (the main API)
+export { OpenAIWrapper } from './providers/openai/wrapper';
+export { AnthropicWrapper } from './providers/anthropic/wrapper';
+export { OllamaWrapper } from './providers/ollama/wrapper';
+
+// Essential types for the unified API
+export type {
+  ProviderName,
+  ChatMessage,
+  ChatResponse,
+  EmbeddingResponse,
+  MemoriError
+} from './providers/types';
+
+// MemoriConfig is now the single unified configuration interface
+
+// Validation utilities
+export {
+  validateConfig,
+  detectProvider,
+  createMemoriError,
+  ErrorCodes
+} from './providers/validation';
+
+// Legacy exports (backward compatibility)
 export { ConfigManager } from './core/infrastructure/config/ConfigManager';
 
 // Search Strategy enum and types for public API access
