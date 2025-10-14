@@ -11,7 +11,6 @@ import { MemoryManager } from './MemoryManager';
 import { SearchManager } from './SearchManager';
 import { RelationshipManager } from './RelationshipManager';
 import { RelationshipService } from './RelationshipService';
-import { StateService } from './StateService';
 import { PerformanceService } from './PerformanceService';
 import { DuplicateManager } from './DuplicateManager';
 import { StatisticsManager } from './StatisticsManager';
@@ -143,7 +142,6 @@ export class DatabaseManager {
   private searchManager: SearchManager;
   private relationshipManager: RelationshipManager;
   private relationshipService?: RelationshipService;
-  private stateService?: StateService;
   private performanceService?: PerformanceService;
   private duplicateManager: DuplicateManager;
   private statisticsManager: StatisticsManager;
@@ -238,7 +236,6 @@ export class DatabaseManager {
 
     this.relationshipManager = new RelationshipManager(this.databaseContext);
     this.relationshipService = new RelationshipService(this.databaseContext, this.relationshipManager);
-    this.stateService = new StateService(this.databaseContext, this.stateManager!);
     this.performanceService = new PerformanceService(this.databaseContext.getPerformanceMonitoringConfig());
     this.statisticsManager = new StatisticsManager(this.databaseContext);
     this.consciousMemoryManager = new ConsciousMemoryManager(
@@ -670,21 +667,21 @@ export class DatabaseManager {
     namespace: string = 'default',
     limit?: number,
   ): Promise<string[]> {
-    return this.stateService!.getMemoriesByState(state, namespace, limit);
+    return this.stateManager!.getMemoriesByState(state, namespace, limit);
   }
 
   /**
    * Get memory processing state
    */
   async getMemoryState(memoryId: string): Promise<MemoryProcessingState | undefined> {
-    return this.stateService!.getMemoryState(memoryId);
+    return this.stateManager!.getMemoryState(memoryId);
   }
 
   /**
    * Get memory state history
    */
   async getMemoryStateHistory(memoryId: string): Promise<MemoryStateTransition[]> {
-    return this.stateService!.getMemoryStateHistory(memoryId);
+    return this.stateManager!.getMemoryStateHistory(memoryId);
   }
 
   /**
@@ -702,14 +699,14 @@ export class DatabaseManager {
       force?: boolean;
     },
   ): Promise<boolean> {
-    return this.stateService!.transitionMemoryState(memoryId, toState, options);
+    return this.stateManager!.transitionMemoryState(memoryId, toState, options);
   }
 
   /**
    * Get processing state statistics
    */
   async getProcessingStateStats(namespace?: string): Promise<Record<MemoryProcessingState, number>> {
-    return this.stateService!.getProcessingStateStats(namespace);
+    return this.stateManager!.getProcessingStateStats(namespace);
   }
 
   /**
@@ -719,21 +716,21 @@ export class DatabaseManager {
     memoryId: string,
     initialState: MemoryProcessingState = MemoryProcessingState.PENDING,
   ): Promise<void> {
-    await this.stateService!.initializeExistingMemoryState(memoryId, initialState);
+    await this.stateManager!.initializeExistingMemoryState(memoryId, initialState);
   }
 
   /**
    * Get all memory states
    */
   async getAllMemoryStates(): Promise<Record<string, MemoryProcessingState>> {
-    return this.stateService!.getAllMemoryStates();
+    return this.stateManager!.getAllMemoryStates();
   }
 
   /**
    * Check if memory can transition to specific state
    */
   async canMemoryTransitionTo(memoryId: string, toState: MemoryProcessingState): Promise<boolean> {
-    return this.stateService!.canMemoryTransitionTo(memoryId, toState);
+    return this.stateManager!.canMemoryTransitionTo(memoryId, toState);
   }
 
   /**
@@ -744,14 +741,14 @@ export class DatabaseManager {
     targetState: MemoryProcessingState,
     options?: { maxRetries?: number; delayMs?: number },
   ): Promise<boolean> {
-    return this.stateService!.retryMemoryStateTransition(memoryId, targetState, options);
+    return this.stateManager!.retryMemoryStateTransition(memoryId, targetState, options);
   }
 
   /**
    * Get processing metrics
    */
   async getProcessingMetrics(): Promise<Record<string, number>> {
-    return this.stateService!.getProcessingMetrics();
+    return this.stateManager!.getProcessingMetrics();
   }
 
   /**
