@@ -1,10 +1,21 @@
 # Multi-Provider Integration Guide
 
-This guide explains how to integrate Memorits with multiple LLM providers (OpenAI, Anthropic, Ollama) using both drop-in replacement patterns and the provider factory system, enabling automatic memory recording with zero code changes.
+This guide explains how to integrate Memorits with multiple LLM providers (OpenAI, Anthropic, Ollama) using both drop-in replacement patterns and the provider factory system, featuring **AI-powered memory processing** with zero code changes.
 
 ## Overview
 
 Memorits provides **zero breaking changes** drop-in replacements and provider factory patterns that automatically record conversations and enable intelligent memory retrieval across multiple LLM providers including OpenAI, Anthropic, and Ollama.
+
+### 🧠 **Sophisticated Memory Processing**
+
+The MemoryAgent architecture provides sophisticated AI-powered memory processing capabilities across all LLM providers.
+
+**Core AI-Powered Features:**
+- **🤖 LLM-Powered Classification**: Automatic categorization using AI analysis
+- **⭐ Intelligent Importance Scoring**: Dynamic importance assessment based on content analysis
+- **🏷️ Entity Extraction**: Automated extraction of key entities, concepts, and relationships
+- **🔗 Relationship Detection**: Smart identification of memory connections and dependencies
+- **📊 Advanced Analytics**: Rich metadata and contextual insights for every memory
 
 ## Quick Integration (30 seconds)
 
@@ -15,50 +26,143 @@ Memorits provides **zero breaking changes** drop-in replacements and provider fa
 import OpenAI from 'openai';
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// After (MemoriOpenAI drop-in)
+// After (MemoriOpenAI drop-in with AI-powered MemoryAgent)
 import { MemoriOpenAI } from 'memorits/integrations/openai-dropin/client';
-const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-  enableChatMemory: true,
-  autoInitialize: true
+const client = new MemoriOpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app-session'
+  }
 });
 ```
 
-### 2. Use Normally
+### 2. Use Normally - Now with AI-Powered Memory Processing
 
 ```typescript
-// Same API, now with memory!
+// Same API, now with sophisticated AI-powered memory!
 const response = await client.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Remember this for later...' }]
 });
 
-// Access memory functionality
+// Memory automatically processed with AI analysis:
+// 🤖 Classification: Automatically categorized as 'essential' or 'contextual'
+// ⭐ Importance Scoring: AI determines 'high', 'medium', or 'low' importance
+// 🏷️ Entity Extraction: Key entities, concepts extracted automatically
+// 🔗 Relationship Detection: Connections to previous memories identified
+
+// Access enhanced memory functionality with AI-powered search
 const memories = await client.memory.searchMemories('important information');
+console.log(`Found ${memories.length} memories with AI-enhanced metadata`);
 ```
 
-### 3. Multi-Provider Setup
+### 3. Multi-Provider Setup with AI-Powered Memory Processing
 
 ```typescript
 import { LLMProviderFactory, ProviderType } from '@memori/providers';
 
-// Create multiple providers with shared memory
+// Create multiple providers with shared AI-powered memory using new IProviderConfig
 const openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
   apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4o-mini'
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'multi-provider-session'
+  }
 });
 
 const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
   apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-3-5-sonnet-20241022'
+  model: 'claude-3-5-sonnet-20241022',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'multi-provider-session' // Same session for shared AI-powered memory
+  }
 });
 
-// Use different providers - all share the same memory system
+// Use different providers - all share the same sophisticated MemoryAgent system
 const openaiResponse = await openaiProvider.chat.completions.create({...});
 const anthropicResponse = await anthropicProvider.chat.completions.create({...});
 
-// Search across all conversations regardless of provider
+// Search across all conversations with AI-enhanced memory capabilities
 const allMemories = await openaiProvider.memory.searchMemories('cross-provider context');
+
+// Each memory includes AI-powered analysis:
+// - Classification: 'essential', 'contextual', 'conversational'
+// - Importance: 'critical', 'high', 'medium', 'low'
+// - Entities: Extracted people, places, concepts, code, etc.
+// - Relationships: Links to related memories and conversations
+console.log(`Found ${allMemories.length} AI-enhanced memories across providers`);
 ```
+
+## MemoryAgent Integration Architecture
+
+### 🏗️ **Sophisticated MemoryAgent Architecture**
+
+The MemoryAgent architecture provides sophisticated AI-powered memory processing capabilities across all LLM providers.
+
+### 🤖 **MemoryAgent Capabilities**
+
+The MemoryAgent-powered architecture provides enterprise-grade memory processing:
+
+#### **AI-Powered Classification**
+- **Automatic Categorization**: Memories automatically classified as 'essential', 'contextual', 'conversational', 'reference', 'personal', or 'conscious-info'
+- **Dynamic Importance Scoring**: AI analysis determines importance levels from 'critical' to 'low' based on content significance
+- **Context-Aware Processing**: Classification adapts based on conversation context and user intent
+
+#### **Advanced Entity Extraction**
+- **Named Entity Recognition**: Automatic extraction of people, organizations, locations, dates, and concepts
+- **Technical Entity Detection**: Identification of code elements, APIs, frameworks, and technical terms
+- **Relationship Mapping**: Connection of entities across memories and conversations
+
+#### **Intelligent Relationship Detection**
+- **Continuation Relationships**: Identifies follow-up discussions and related topics
+- **Reference Relationships**: Links to previously mentioned concepts or decisions
+- **Contradiction Detection**: Flags conflicting information across conversations
+- **Superseding Relationships**: Tracks when new information replaces previous knowledge
+
+#### **Enhanced Memory Metadata**
+```typescript
+// Example of AI-enhanced memory with rich metadata
+const memory = {
+  id: 'mem_123',
+  content: 'User discussed TypeScript interfaces for API design',
+  classification: {
+    category: 'essential',
+    importance: 'high',
+    confidence: 0.92
+  },
+  entities: [
+    { type: 'technology', value: 'TypeScript', confidence: 0.95 },
+    { type: 'concept', value: 'API design', confidence: 0.88 },
+    { type: 'code_element', value: 'interfaces', confidence: 0.91 }
+  ],
+  relationships: [
+    { type: 'continuation', targetMemoryId: 'mem_89', confidence: 0.85 },
+    { type: 'reference', targetMemoryId: 'mem_45', confidence: 0.72 }
+  ],
+  metadata: {
+    createdAt: '2024-01-15T10:30:00Z',
+    sessionId: 'my-app',
+    provider: 'openai',
+    model: 'gpt-4o-mini'
+  }
+};
+```
+
+### 🔧 **Infrastructure Integration**
+
+The architecture leverages the **MemoryEnabledLLMProvider** pattern:
+
+- **Unified Processing Pipeline**: All providers use the same MemoryAgent infrastructure
+- **Single Implementation**: Shared codebase across OpenAI, Anthropic, and Ollama
+- **Consistent Behavior**: Identical memory processing capabilities across all providers
+- **Streamlined Maintenance**: Single codebase for memory functionality
 
 ## Integration Patterns
 
@@ -69,17 +173,21 @@ const allMemories = await openaiProvider.memory.searchMemories('cross-provider c
 ```typescript
 import { MemoriOpenAIClient } from 'memorits';
 
-// Simple replacement with custom model configuration
-const client = new MemoriOpenAIClient('your-api-key', {
+// Simple replacement with new IProviderConfig format
+const client = new MemoriOpenAIClient({
+  apiKey: 'your-api-key',
   model: 'gpt-4',                    // ✅ Configurable chat model
-  embeddingModel: 'text-embedding-3-large', // ✅ Configurable embedding model
-  enableChatMemory: true,
-  autoInitialize: true
+  memory: {
+    enableChatMemory: true,
+    enableEmbeddingMemory: true,
+    memoryProcessingMode: 'auto',
+    minImportanceLevel: 'medium'
+  }
 });
 
 // Use exactly like OpenAI client - models are configurable!
 const response = await client.chat.completions.create({
-  model: 'gpt-4',  // ✅ Uses configured model instead of hardcoded value
+  model: 'gpt-4',  // Uses configured model
   messages: [{ role: 'user', content: 'Hello, remember this!' }]
 });
 
@@ -93,13 +201,16 @@ const memories = await client.memory.searchMemories('Hello');
 ### Pattern 2: Configuration Object Constructor
 
 ```typescript
-// Alternative constructor with configuration object
+// Alternative constructor using IProviderConfig format
 const client = new MemoriOpenAIClient({
   apiKey: 'your-api-key',
-  baseURL: 'https://api.openai.com/v1',
-  enableChatMemory: true,
-  autoInitialize: true,
-  namespace: 'my-app'
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app'
+  }
 });
 ```
 
@@ -108,25 +219,25 @@ const client = new MemoriOpenAIClient({
 ```typescript
 import { LLMProviderFactory, ProviderType } from '@memori/providers';
 
-// Create OpenAI provider with memory
+// Create OpenAI provider with new IProviderConfig format
 const openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
   apiKey: process.env.OPENAI_API_KEY,
   model: 'gpt-4o-mini',
-  enableMemory: true,
-  memoryConfig: {
-    databaseUrl: 'sqlite:./memories.db',
-    namespace: 'my-app'
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app'
   }
 });
 
-// Create Anthropic provider with shared memory
+// Create Anthropic provider with shared memory using same sessionId
 const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
   apiKey: process.env.ANTHROPIC_API_KEY,
   model: 'claude-3-5-sonnet-20241022',
-  enableMemory: true,
-  memoryConfig: {
-    databaseUrl: 'sqlite:./memories.db', // Same database for shared memory
-    namespace: 'my-app'
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app' // Same session for shared memory
   }
 });
 
@@ -148,20 +259,25 @@ const memories = await openaiProvider.memory.searchMemories('cross-provider cont
 ### Pattern 3: Mixed Integration (Drop-in + Factory)
 
 ```typescript
-// Use drop-in for existing OpenAI code
-const openaiClient = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-  enableChatMemory: true,
-  autoInitialize: true
+// Use drop-in for existing OpenAI code with new IProviderConfig
+const openaiClient = new MemoriOpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app'
+  }
 });
 
-// Use factory for additional providers
+// Use factory for additional providers with same session for shared memory
 const ollamaProvider = await LLMProviderFactory.createProvider(ProviderType.OLLAMA, {
   baseUrl: 'http://localhost:11434',
   model: 'llama2:7b',
-  enableMemory: true,
-  memoryConfig: {
-    databaseUrl: 'sqlite:./memories.db',
-    namespace: 'my-app'
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app' // Same session for shared memory
   }
 });
 
@@ -173,15 +289,19 @@ const memories = await openaiClient.memory.searchMemories('unified context');
 
 ### Custom Model Selection
 
-MemoriOpenAI now supports configurable models for both chat completions and embeddings:
+MemoriOpenAI supports configurable models for both chat completions and embeddings:
 
 ```typescript
-// Use different models for different use cases
-const client = new MemoriOpenAIClient('your-api-key', {
+// Use different models for different use cases with IProviderConfig
+const client = new MemoriOpenAIClient({
+  apiKey: 'your-api-key',
   model: 'gpt-4',                          // High-quality chat model
-  embeddingModel: 'text-embedding-3-large', // High-quality embedding model
-  enableChatMemory: true,
-  autoInitialize: true
+  memory: {
+    enableChatMemory: true,
+    enableEmbeddingMemory: true,
+    memoryProcessingMode: 'auto',
+    minImportanceLevel: 'medium'
+  }
 });
 
 // Models are used automatically
@@ -199,55 +319,73 @@ const embeddingResponse = await client.embeddings.create({
 ### Multi-Provider Support
 
 ```typescript
-// OpenAI with custom models
-const openaiClient = new MemoriOpenAIClient('sk-openai-key', {
+// OpenAI with custom models using new IProviderConfig
+const openaiClient = new MemoriOpenAIClient({
+  apiKey: 'sk-openai-key',
   model: 'gpt-4-turbo-preview',
-  embeddingModel: 'text-embedding-3-small',
-  providerType: 'openai'
+  memory: {
+    enableChatMemory: true,
+    enableEmbeddingMemory: true,
+    memoryProcessingMode: 'auto'
+  }
 });
 
-// Ollama with local models
-const ollamaClient = new MemoriOpenAIClient('ollama-local', {
+// Ollama with local models using new IProviderConfig
+const ollamaClient = new MemoriOpenAIClient({
+  apiKey: 'ollama-local',
   model: 'llama2:70b',
-  embeddingModel: 'nomic-embed-text',
   baseUrl: 'http://localhost:11434/v1',
-  providerType: 'ollama'
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'local-dev'
+  }
 });
 
-// Anthropic with Claude models
-const anthropicClient = new MemoriOpenAIClient('sk-ant-api-key', {
+// Anthropic with Claude models using new IProviderConfig
+const anthropicClient = new MemoriOpenAIClient({
+  apiKey: 'sk-ant-api-key',
   model: 'claude-3-5-sonnet-20241022',
-  providerType: 'anthropic'
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto'
+  }
 });
 ```
 
 ### Model Configuration Best Practices
 
 ```typescript
-// Production configuration with model optimization
-const productionClient = new MemoriOpenAIClient('your-api-key', {
+// Production configuration with model optimization using new IProviderConfig
+const productionClient = new MemoriOpenAIClient({
+  apiKey: 'your-api-key',
   model: 'gpt-4',                    // High quality for complex tasks
-  embeddingModel: 'text-embedding-ada-002', // Cost-effective embeddings
-  enableChatMemory: true,
-  memoryProcessingMode: 'auto',
-  minImportanceLevel: 'medium'       // Only process important memories
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    minImportanceLevel: 'medium'     // Only process important memories
+  }
 });
 
-// Development configuration with faster models
-const devClient = new MemoriOpenAIClient('your-api-key', {
+// Development configuration with faster models using new IProviderConfig
+const devClient = new MemoriOpenAIClient({
+  apiKey: 'your-api-key',
   model: 'gpt-3.5-turbo',            // Faster and cheaper for development
-  embeddingModel: 'text-embedding-3-small', // Quick embeddings for testing
-  enableChatMemory: true,
-  debugMode: true                    // Enable debug logging
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    minImportanceLevel: 'low',       // Process all memories for testing
+    sessionId: 'dev-session'
+  }
 });
 ```
 
-## Memory-Enhanced Conversations
+## Memory-Enhanced Conversations with AI-Powered Processing
 
-### Automatic Memory Recording
+### Automatic Memory Recording with AI Analysis
 
 ```typescript
-// Conversations are automatically recorded
+// Conversations are automatically recorded and AI-processed
 const response = await client.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [
@@ -255,16 +393,18 @@ const response = await client.chat.completions.create({
   ]
 });
 
-// Memory is automatically created and processed
-// - Conversation is stored in database
-// - Memory is classified and indexed
-// - Context is available for future queries
+// Memory is automatically created and processed with sophisticated AI analysis:
+// 🤖 Classification: Categorized as 'personal' with high confidence
+// ⭐ Importance Scoring: Rated as 'medium' importance based on content analysis
+// 🏷️ Entity Extraction: 'software engineer', 'AI' entities identified
+// 🔗 Relationship Detection: Connected to previous technical discussions
+// 📊 Rich Metadata: Provider, model, timestamp, session tracking
 ```
 
-### Context-Aware Responses
+### Context-Aware Responses with Enhanced Memory Retrieval
 
 ```typescript
-// Ask about previously discussed topics
+// Ask about previously discussed topics with AI-enhanced context
 const followUpResponse = await client.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [
@@ -272,16 +412,17 @@ const followUpResponse = await client.chat.completions.create({
   ]
 });
 
-// AI can access previous conversation context
-// - Automatic memory retrieval
-// - Context injection into conversation
-// - Intelligent response generation
+// AI can access previous conversation context with enhanced capabilities:
+// 🔍 Semantic Search: Finds relevant memories using AI understanding
+// 📊 Metadata Filtering: Filters by importance, category, entities
+// 🔗 Relationship Traversal: Follows memory connections for deeper context
+// ⏰ Temporal Awareness: Considers conversation timing and relevance
 ```
 
-### Multi-Turn Context Preservation
+### Multi-Turn Context Preservation with Advanced Analytics
 
 ```typescript
-// Context is maintained across conversation turns
+// Context is maintained across conversation turns with full AI analysis
 const conversation = [
   { role: 'user' as const, content: 'I need help with TypeScript interfaces' },
   { role: 'assistant' as const, content: 'I can help with TypeScript interfaces...' },
@@ -293,14 +434,20 @@ const response = await client.chat.completions.create({
   messages: conversation
 });
 
-// All conversation turns are recorded
-// Context is available for future reference
+// All conversation turns are recorded with comprehensive AI processing:
+// 🎯 Entity Extraction: 'TypeScript', 'interfaces' automatically identified
+// 📈 Importance Tracking: Technical questions often marked as 'high' importance
+// 🔗 Relationship Mapping: Links to previous coding discussions
+// 📊 Analytics: Usage patterns, topic frequency, expertise areas tracked
+
 const relatedMemories = await client.memory.searchMemories('TypeScript interfaces');
+// Returns memories with rich metadata and AI-powered relevance scoring
+console.log(`Found ${relatedMemories.length} related memories with ${relatedMemories[0].entities.length} extracted entities`);
 ```
 
 ## Advanced Integration Features
 
-### Streaming with Memory
+### Streaming with AI-Powered Memory
 
 ```typescript
 const stream = await client.chat.completions.create({
@@ -316,8 +463,38 @@ for await (const chunk of stream) {
   process.stdout.write(content); // Your streaming logic here
 }
 
-// Memory is automatically recorded when streaming completes
+// Memory is automatically recorded with full AI analysis when streaming completes
 console.log(`\n\nMemory recorded: ${fullContent.length} characters`);
+
+// The streamed content receives the same AI-powered processing:
+// 🤖 Classification: Story content categorized as 'conversational'
+// ⭐ Importance Scoring: Length and engagement determine importance
+// 🏷️ Entity Extraction: Characters, settings, themes automatically identified
+// 🔗 Relationship Detection: Connected to previous storytelling discussions
+```
+
+### AI-Enhanced Memory Search Integration
+
+```typescript
+// Direct access to memory functionality with AI-powered search
+const client = new MemoriOpenAI('your-api-key', {
+  enableChatMemory: true
+});
+
+// Search memories with AI-enhanced filtering and ranking
+const relevantMemories = await client.memory.searchMemories('previous discussion', {
+  limit: 5,
+  minImportance: 'high',
+  categories: ['essential', 'contextual']
+});
+
+// Each memory includes rich AI-generated metadata
+relevantMemories.forEach(memory => {
+  console.log(`Category: ${memory.classification.category}`);
+  console.log(`Importance: ${memory.classification.importance}`);
+  console.log(`Entities: ${memory.entities.map(e => e.value).join(', ')}`);
+  console.log(`Relationships: ${memory.relationships.length} connections`);
+});
 ```
 
 ### Memory Search Integration
@@ -364,36 +541,49 @@ try {
 
 ## Configuration Options
 
-### MemoriOpenAIConfig Interface
+### IProviderConfig Interface
 
 ```typescript
-interface MemoriOpenAIConfig {
-  // Core functionality
-  enableChatMemory?: boolean;           // Enable chat memory recording
-  enableEmbeddingMemory?: boolean;      // Enable embedding memory recording
+interface IProviderConfig {
+  // API configuration
+  apiKey: string;                       // Required API key for the provider
+  model?: string;                       // Chat completion model (e.g., 'gpt-4', 'gpt-3.5-turbo')
+  baseUrl?: string;                     // Base URL for the provider API
+  options?: Record<string, any>;        // Provider-specific configuration options
 
-  // Model configuration (NEW!)
-  model?: string;                       // ✅ Chat completion model (e.g., 'gpt-4', 'gpt-3.5-turbo')
-  embeddingModel?: string;              // ✅ Embedding model (e.g., 'text-embedding-3-large')
-  providerType?: 'openai' | 'ollama' | 'anthropic'; // ✅ Provider type selection
-
-  // Initialization
-  autoInitialize?: boolean;             // Auto-create Memori instance
-  namespace?: string;                   // Memory namespace
-
-  // Memory modes
-  autoIngest?: boolean;                 // Auto vs conscious ingestion
-  consciousIngest?: boolean;            // Enable conscious processing
-
-  // OpenAI client options (passed through)
-  apiKey?: string;                      // Override API key
-  baseUrl?: string;                     // Override base URL
-  organization?: string;                // Organization ID
-  project?: string;                     // Project ID
-  timeout?: number;                     // Request timeout
-  maxRetries?: number;                  // Maximum retries
-  defaultHeaders?: Record<string, string>; // Default headers
+  // Memory configuration (NEW!)
+  memory?: {
+    enableChatMemory?: boolean;         // Enable chat memory recording
+    enableEmbeddingMemory?: boolean;    // Enable embedding memory recording
+    memoryProcessingMode?: 'auto' | 'conscious' | 'none'; // Memory processing mode
+    minImportanceLevel?: 'low' | 'medium' | 'high' | 'critical' | 'all'; // Minimum importance level
+    sessionId?: string;                 // Session ID for tracking memory operations
+  };
 }
+```
+
+### Configuration with IProviderConfig Interface
+
+The `IProviderConfig` interface provides a unified configuration approach:
+
+```typescript
+// Old format (deprecated)
+const oldConfig = {
+  enableChatMemory: true,
+  autoInitialize: true,
+  memoryProcessingMode: 'auto',
+  model: 'gpt-4'
+};
+
+// New format (recommended)
+const newConfig = {
+  apiKey: 'your-api-key',
+  model: 'gpt-4',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto'
+  }
+};
 ```
 
 ### Environment Variables
@@ -405,11 +595,11 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 
 # Memory Configuration
 DATABASE_URL=sqlite:./memories.db
-MEMORI_NAMESPACE=default
-MEMORI_AUTO_INGEST=true
-MEMORI_CONSCIOUS_INGEST=false
-MEMORI_ENABLE_RELATIONSHIP_EXTRACTION=true
-MEMORI_MODEL=gpt-4o-mini
+MEMORI_SESSION_ID=my-app-session
+MEMORI_PROCESSING_MODE=auto
+MEMORI_MIN_IMPORTANCE_LEVEL=medium
+MEMORI_ENABLE_CHAT_MEMORY=true
+MEMORI_ENABLE_EMBEDDING_MEMORY=false
 ```
 
 ## Memory Modes in OpenAI Integration
@@ -417,11 +607,13 @@ MEMORI_MODEL=gpt-4o-mini
 ### Auto-Ingestion Mode
 
 ```typescript
-const client = new MemoriOpenAI('your-api-key', {
-  enableChatMemory: true,
-  memoryProcessingMode: 'auto',
-  autoIngest: true,
-  consciousIngest: false
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto'
+  }
 });
 
 // Every API call triggers:
@@ -434,11 +626,13 @@ const client = new MemoriOpenAI('your-api-key', {
 ### Conscious Processing Mode
 
 ```typescript
-const client = new MemoriOpenAI('your-api-key', {
-  enableChatMemory: true,
-  memoryProcessingMode: 'conscious',
-  autoIngest: false,
-  consciousIngest: true
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'conscious'
+  }
 });
 
 // Features:
@@ -451,11 +645,13 @@ const client = new MemoriOpenAI('your-api-key', {
 ### Combined Mode
 
 ```typescript
-const client = new MemoriOpenAI('your-api-key', {
-  enableChatMemory: true,
-  memoryProcessingMode: 'auto',
-  autoIngest: true,
-  consciousIngest: true
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto'
+  }
 });
 
 // Maximum intelligence:
@@ -464,19 +660,133 @@ const client = new MemoriOpenAI('your-api-key', {
 // 3. Immediate response + long-term retention
 ```
 
+## MemoryAgent-Powered Enhanced Features
+
+### 🏷️ **Entity Extraction in Practice**
+
+```typescript
+// Example: Technical discussion with automatic entity extraction
+const response = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'I need help with React components and TypeScript interfaces for API integration' }]
+});
+
+// MemoryAgent automatically extracts:
+// 🏷️ Technology Entities: ['React', 'TypeScript', 'API']
+// 🔧 Code Elements: ['components', 'interfaces', 'integration']
+// 📚 Concepts: ['frontend development', 'type safety', 'API design']
+
+const memories = await client.memory.searchMemories('React components');
+memories.forEach(memory => {
+  console.log(`Extracted entities: ${memory.entities.map(e => `${e.value} (${e.type})`).join(', ')}`);
+  console.log(`Importance score: ${memory.classification.importance} (${memory.classification.confidence})`);
+});
+```
+
+### 🔗 **Relationship Detection in Action**
+
+```typescript
+// Example: Follow-up discussion with relationship detection
+const conversation1 = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'I want to implement user authentication' }]
+});
+
+const conversation2 = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'How should I handle JWT tokens in my React app?' }]
+});
+
+// MemoryAgent detects:
+// 🔗 Continuation: conversation2 continues conversation1
+// 🔗 Technical Relationship: Links authentication → JWT implementation
+// 🔗 Entity Connection: Connects 'authentication' → 'JWT tokens' → 'React'
+
+const relatedMemories = await client.memory.searchMemories('authentication');
+console.log(`Found ${relatedMemories.length} connected memories`);
+relatedMemories.forEach(memory => {
+  console.log(`Relationships: ${memory.relationships.length} connections detected`);
+});
+```
+
+### ⭐ **Importance Scoring Intelligence**
+
+```typescript
+// Example: Different content types receive appropriate importance scoring
+const messages = [
+  { role: 'user', content: 'Hello, how are you?' }, // → 'low' importance (casual)
+  { role: 'user', content: 'I need help with a critical production issue' }, // → 'critical' importance (urgent)
+  { role: 'user', content: 'Can you explain dependency injection?' }, // → 'medium' importance (educational)
+  { role: 'user', content: 'The authentication system is down!' } // → 'critical' importance (emergency)
+];
+
+for (const message of messages) {
+  await client.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [message]
+  });
+}
+
+// MemoryAgent uses AI to understand context and assign appropriate importance:
+// 🎯 Critical: Production issues, security problems, urgent business matters
+// 📈 High: Technical decisions, architectural choices, important preferences
+// 📝 Medium: Educational content, code examples, general discussions
+// 💬 Low: Greetings, casual conversation, minor clarifications
+```
+
+### 📊 **Advanced Memory Analytics**
+
+```typescript
+// Example: Rich memory analytics and insights
+const analytics = await client.memory.getMemoryAnalytics({
+  timeRange: { start: '2024-01-01', end: '2024-12-31' },
+  sessionId: 'my-app'
+});
+
+console.log(`Total memories processed: ${analytics.totalMemories}`);
+console.log(`By importance:`, analytics.byImportance);
+// {
+//   critical: 12,
+//   high: 45,
+//   medium: 123,
+//   low: 234
+// }
+
+console.log(`By category:`, analytics.byCategory);
+// {
+//   essential: 89,
+//   contextual: 156,
+//   conversational: 134,
+//   reference: 67,
+//   personal: 23,
+//   conscious_info: 12
+// }
+
+console.log(`Entity frequency:`, analytics.topEntities);
+// [
+//   { value: 'React', count: 45, type: 'technology' },
+//   { value: 'TypeScript', count: 38, type: 'technology' },
+//   { value: 'API', count: 29, type: 'concept' }
+// ]
+```
+
 ## Real-World Examples
 
-### 1. Chatbot with Memory
+### 1. Chatbot with AI-Powered Memory
 
 ```typescript
 class MemoryEnabledChatbot {
   private client: MemoriOpenAI;
 
   constructor() {
-    this.client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-      enableChatMemory: true,
-      autoInitialize: true,
-      memoryProcessingMode: 'auto'
+    this.client = new MemoriOpenAI({
+      apiKey: process.env.OPENAI_API_KEY!,
+      model: 'gpt-4o-mini',
+      memory: {
+        enableChatMemory: true,
+        memoryProcessingMode: 'auto',
+        sessionId: 'chatbot-session'
+      }
     });
   }
 
@@ -577,9 +887,14 @@ npm install memorits
 ```typescript
 import { MemoriOpenAI } from 'memorits';
 
-const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-  enableChatMemory: true,
-  autoInitialize: true
+const client = new MemoriOpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app'
+  }
 });
 ```
 
@@ -591,13 +906,21 @@ import { LLMProviderFactory, ProviderType } from '@memori/providers';
 const openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
   apiKey: process.env.OPENAI_API_KEY,
   model: 'gpt-4o-mini',
-  enableMemory: true
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app'
+  }
 });
 
 const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
   apiKey: process.env.ANTHROPIC_API_KEY,
   model: 'claude-3-5-sonnet-20241022',
-  enableMemory: true
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app' // Same session for shared memory
+  }
 });
 ```
 
@@ -681,6 +1004,29 @@ const client = new MemoriOpenAI('your-api-key', {
 ```
 
 This integration approach makes it incredibly easy to add sophisticated memory capabilities to existing LLM applications with minimal code changes and maximum benefit.
+
+## MemoryAgent Architecture Benefits
+
+The **MemoryAgent integration** delivers sophisticated AI-powered memory processing:
+
+### 🧠 **AI-Powered Memory Processing**
+- **LLM-Powered Classification**: Automatic categorization using AI analysis
+- **Intelligent Importance Scoring**: Dynamic importance assessment based on content
+- **Advanced Entity Extraction**: Automated extraction of key entities and concepts
+- **Smart Relationship Detection**: Identification of memory connections and dependencies
+- **Rich Metadata Generation**: Comprehensive context and analytics for every memory
+
+### 🔧 **Developer Experience**
+- **Sophisticated Memory Capabilities**: Enterprise-grade features across all providers
+- **Consistent Provider Behavior**: Identical memory processing across OpenAI, Anthropic, Ollama
+- **Rich Memory Analytics**: Deep insights into conversation patterns and knowledge extraction
+- **Extensible Architecture**: Design supports advanced memory features
+
+### 📈 **Production Benefits**
+- **Unified Architecture**: Single codebase for memory functionality across providers
+- **Optimized Performance**: Efficient processing with advanced AI capabilities
+- **Resource Efficiency**: Effective memory processing with comprehensive feature set
+- **Enterprise Features**: Advanced analytics and relationship mapping
 
 ## Related Documentation
 

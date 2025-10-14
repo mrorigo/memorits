@@ -1,5 +1,6 @@
 /**
  * Base configuration interface for LLM providers
+ * Extended with memory configuration options for unified configuration management
  */
 export interface IProviderConfig {
   /** API key for the provider */
@@ -10,4 +11,17 @@ export interface IProviderConfig {
   baseUrl?: string;
   /** Provider-specific configuration options */
   options?: Record<string, any>;
+  /** Memory configuration options */
+  memory?: {
+    /** Whether to enable chat memory recording */
+    enableChatMemory?: boolean;
+    /** Whether to enable embedding memory recording */
+    enableEmbeddingMemory?: boolean;
+    /** Memory processing mode */
+    memoryProcessingMode?: 'auto' | 'conscious' | 'none';
+    /** Minimum importance level for memory storage */
+    minImportanceLevel?: 'low' | 'medium' | 'high' | 'critical' | 'all';
+    /** Session ID for tracking memory operations */
+    sessionId?: string;
+  };
 }

@@ -47,7 +47,7 @@ export {
 
 // OpenAI Drop-in Replacement exports
 // Main client and types
-export { default as MemoriOpenAIClient, MemoriOpenAI, MemoriOpenAIConfig } from './integrations/openai-dropin/client';
+export { default as MemoriOpenAIClient, MemoriOpenAI } from './integrations/openai-dropin/client';
 
 // Factory functions and classes
 export { MemoriOpenAIFactory, memoriOpenAIFactory } from './integrations/openai-dropin/factory';
@@ -92,7 +92,6 @@ export type {
 
   // Factory and configuration types
   MemoriOpenAIConstructorOptions,
-  MemoriOpenAIEnvironment,
 
   // Memory manager types
   MemoryManager,

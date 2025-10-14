@@ -2,9 +2,9 @@
 
 # 🎯 Memorits: Production-Ready Memory Engine for AI Applications
 
-**Enterprise-grade conversational memory with advanced search, intelligent consolidation, and comprehensive monitoring.**
+**Enterprise-grade conversational memory with AI-powered processing, advanced search, intelligent consolidation, and comprehensive monitoring.**
 
-Memorits delivers enterprise-grade memory management for AI applications - featuring comprehensive observability, advanced memory processing capabilities, and architecture designed to scale from development to enterprise deployment.
+Memorits delivers enterprise-grade memory management for AI applications - featuring **sophisticated MemoryAgent integration** with AI-powered classification, importance scoring, entity extraction, and relationship detection across all LLM providers.
 
 <div align="center">
   <p>
@@ -101,30 +101,43 @@ const memories = await memori.searchMemories('TypeScript', {
 console.log(`Found ${memories.length} relevant memories`);
 ```
 
-### OpenAI Drop-in Replacement
+### OpenAI Drop-in Replacement with AI-Powered Memory
 
-**Transform your existing OpenAI code with zero breaking changes:**
+**Transform your OpenAI code with zero breaking changes and AI-powered memory processing:**
 
 ```typescript
 import { MemoriOpenAI } from 'memorits';
 
-// Replace your OpenAI client - conversations auto-recorded!
-const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-  enableChatMemory: true,
-  autoInitialize: true
+// Replace your OpenAI client - conversations auto-processed with MemoryAgent!
+const client = new MemoriOpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto', // 🤖 AI-powered analysis enabled
+    sessionId: 'my-app'
+  }
 });
 
-// Use exactly like OpenAI SDK
+// Use exactly like OpenAI SDK - now with sophisticated memory processing!
 const response = await client.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Remember this for later...' }]
 });
 
-// Search through conversation history
+// Every conversation is automatically processed with:
+// 🤖 AI-Powered Classification: 'essential', 'contextual', 'conversational'
+// ⭐ Intelligent Importance Scoring: 'critical', 'high', 'medium', 'low'
+// 🏷️ Advanced Entity Extraction: People, places, concepts, code elements
+// 🔗 Smart Relationship Detection: Memory connections and dependencies
+// 📊 Rich Metadata Generation: Provider, model, context, analytics
+
+// Search through AI-enhanced conversation history
 const memories = await client.memory.searchMemories('later');
+console.log(`Found ${memories.length} AI-processed memories`);
 ```
 
-**That's it!** Your AI now has perfect memory with zero configuration.
+**That's it!** Your AI now has **enterprise-grade memory** with AI analysis and zero configuration.
 
 ---
 
@@ -137,9 +150,7 @@ import { Memori } from 'memorits';
 
 const memori = new Memori({
   databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  autoIngest: true,
-  consciousIngest: false
+  namespace: 'my-app'
 });
 
 await memori.enable();
@@ -323,12 +334,13 @@ console.log(`Saved ${optimization.spaceSaved} bytes`);
 ```typescript
 import { MemoriOpenAI } from 'memorits';
 
-const client = new MemoriOpenAI('your-api-key', {
-  enableChatMemory: true,
-  autoInitialize: true,
-  databaseConfig: {
-    type: 'sqlite',
-    url: 'sqlite:./memories.db'
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app'
   }
 });
 ```
@@ -338,20 +350,36 @@ const client = new MemoriOpenAI('your-api-key', {
 ```typescript
 import { memoriOpenAIFactory } from 'memorits';
 
-// From configuration
-const client1 = await memoriOpenAIFactory.fromConfig('api-key', {
-  enableChatMemory: true,
-  memoryProcessingMode: 'auto'
+// From configuration using new IProviderConfig
+const client1 = await memoriOpenAIFactory.fromConfig({
+  apiKey: 'api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app'
+  }
 });
 
-// From environment
-const client2 = await memoriOpenAIFactory.fromEnv('api-key');
+// From environment with new IProviderConfig
+const client2 = await memoriOpenAIFactory.fromEnv({
+  apiKey: 'api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto'
+  }
+});
 
-// From database URL
-const client3 = await memoriOpenAIFactory.fromDatabaseUrl(
-  'api-key',
-  'sqlite:./memories.db'
-);
+// From database URL with new IProviderConfig
+const client3 = await memoriOpenAIFactory.fromDatabaseUrl({
+  apiKey: 'api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto'
+  }
+});
 ```
 
 ### Advanced Usage
@@ -394,33 +422,21 @@ console.log(`Total: ${stats.totalMemories}`);
 ### Configuration
 
 ```typescript
-interface MemoriOpenAIConfig {
-  // Core functionality
-  enableChatMemory?: boolean;
-  enableEmbeddingMemory?: boolean;
-  memoryProcessingMode?: 'auto' | 'conscious' | 'none';
-
-  // Initialization
-  autoInitialize?: boolean;
-  databaseConfig?: {
-    type: 'sqlite' | 'postgresql';
-    url: string;
-    namespace?: string;
-  };
-  namespace?: string;
-
-  // Memory settings
-  autoIngest?: boolean;
-  consciousIngest?: boolean;
-  minImportanceLevel?: 'low' | 'medium' | 'high' | 'critical';
-
-  // OpenAI options
-  apiKey?: string;
+interface IProviderConfig {
+  // API configuration
+  apiKey: string;
+  model?: string;
   baseUrl?: string;
-  organization?: string;
-  project?: string;
-  timeout?: number;
-  maxRetries?: number;
+  options?: Record<string, any>;
+
+  // Memory configuration (NEW!)
+  memory?: {
+    enableChatMemory?: boolean;
+    enableEmbeddingMemory?: boolean;
+    memoryProcessingMode?: 'auto' | 'conscious' | 'none';
+    minImportanceLevel?: 'low' | 'medium' | 'high' | 'critical' | 'all';
+    sessionId?: string;
+  };
 }
 ```
 
@@ -434,8 +450,9 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 # Memory Configuration
 MEMORI_DATABASE_URL=sqlite:./memories.db
 MEMORI_NAMESPACE=default
+MEMORI_SESSION_ID=my-app-session
 MEMORI_PROCESSING_MODE=auto
-MEMORI_AUTO_INGEST=true
+MEMORI_MIN_IMPORTANCE_LEVEL=medium
 ```
 
 ---
@@ -524,10 +541,10 @@ src/
 ### 🤖 Multi-Provider LLM Integration
 
 - **Universal drop-in replacement** supporting OpenAI, Anthropic, Ollama, and custom providers
-- **Automatic memory recording** - no manual intervention needed
-- **Structured memory processing** with intelligent classification
-- **Dual memory modes**: conscious processing vs. automated ingestion
-- **Provider abstraction** - switch between LLM providers with minimal configuration changes
+- **AI-powered memory processing** with sophisticated MemoryAgent integration
+- **Advanced entity extraction** and relationship detection across all providers
+- **Intelligent importance scoring** and classification using AI analysis
+- **Unified architecture** - single MemoryAgent implementation serves all providers
 
 ### ⚡ Performance Optimized
 
@@ -565,6 +582,7 @@ src/
 - **Horizontal Scalability**: Database-level scaling with read replicas and connection pooling
 - **Resource Optimization**: Memory-efficient processing with configurable buffer management
 - **Background Processing**: Non-blocking operations with intelligent queue management
+- **Unified Memory Processing**: Single MemoryAgent implementation across all LLM providers
 
 ### 📊 Enterprise Observability
 

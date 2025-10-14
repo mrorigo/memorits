@@ -1,10 +1,9 @@
 import MemoriOpenAIClient from './client';
 import type { Memori } from '../../core/Memori';
 import { logInfo, logError } from '../../core/infrastructure/config/Logger';
-import { ConfigUtils } from './utils/ConfigUtils';
+import type { IProviderConfig } from '../../core/infrastructure/providers/IProviderConfig';
 import type {
   MemoriOpenAI,
-  MemoriOpenAIConfig,
 } from './types';
 
 /**
@@ -13,22 +12,49 @@ import type {
  */
 export class MemoriOpenAIFactory implements MemoriOpenAIFactory {
   /**
-   * Create MemoriOpenAI instance with explicit Memori instance
-   * Pattern 1: Explicit Memori Instance (Current)
+   * Create MemoriOpenAI instance using IProviderConfig (Recommended)
+   * Modern factory method using the consolidated configuration interface
+   */
+  async createWithProviderConfig(
+    providerConfig: IProviderConfig,
+  ): Promise<MemoriOpenAI> {
+    try {
+      logInfo('Creating MemoriOpenAI with IProviderConfig', {
+        component: 'MemoriOpenAIFactory',
+        apiKey: providerConfig.apiKey ? '[REDACTED]' : undefined,
+        model: providerConfig.model,
+        baseUrl: providerConfig.baseUrl,
+        memoryConfig: providerConfig.memory,
+      });
+
+      const client = new MemoriOpenAIClient(providerConfig);
+      return client;
+    } catch (error) {
+      logError('Failed to create MemoriOpenAI with IProviderConfig', {
+        component: 'MemoriOpenAIFactory',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Create MemoriOpenAI instance with explicit Memori instance and IProviderConfig
+   * Pattern 1: Explicit Memori Instance (Updated)
    */
   async createWithMemori(
     memori: Memori,
-    apiKey: string,
-    options: MemoriOpenAIConfig = {},
+    providerConfig: IProviderConfig,
   ): Promise<MemoriOpenAI> {
     try {
       logInfo('Creating MemoriOpenAI with explicit Memori instance', {
         component: 'MemoriOpenAIFactory',
-        apiKey: apiKey ? '[REDACTED]' : undefined,
+        apiKey: providerConfig.apiKey ? '[REDACTED]' : undefined,
+        model: providerConfig.model,
       });
 
       // For now, create a new client - in a future version we could reuse the Memori instance
-      const client = new MemoriOpenAIClient(apiKey, options);
+      const client = new MemoriOpenAIClient(providerConfig);
       return client;
     } catch (error) {
       logError('Failed to create MemoriOpenAI with explicit Memori instance', {
@@ -40,26 +66,26 @@ export class MemoriOpenAIFactory implements MemoriOpenAIFactory {
   }
 
   /**
-   * Create MemoriOpenAI instance from configuration object
+   * Create MemoriOpenAI instance from IProviderConfig
    * Pattern 2: Automatic Initialization
    */
   async fromConfig(
-    apiKey: string,
-    config: MemoriOpenAIConfig,
+    providerConfig: IProviderConfig,
   ): Promise<MemoriOpenAI> {
     try {
-      logInfo('Creating MemoriOpenAI from configuration', {
+      logInfo('Creating MemoriOpenAI from IProviderConfig', {
         component: 'MemoriOpenAIFactory',
-        apiKey: apiKey ? '[REDACTED]' : undefined,
-        enableChatMemory: config.enableChatMemory,
-        enableEmbeddingMemory: config.enableEmbeddingMemory,
-        memoryProcessingMode: config.memoryProcessingMode,
+        apiKey: providerConfig.apiKey ? '[REDACTED]' : undefined,
+        model: providerConfig.model,
+        enableChatMemory: providerConfig.memory?.enableChatMemory,
+        enableEmbeddingMemory: providerConfig.memory?.enableEmbeddingMemory,
+        memoryProcessingMode: providerConfig.memory?.memoryProcessingMode,
       });
 
-      const client = new MemoriOpenAIClient(apiKey, config);
+      const client = new MemoriOpenAIClient(providerConfig);
       return client;
     } catch (error) {
-      logError('Failed to create MemoriOpenAI from configuration', {
+      logError('Failed to create MemoriOpenAI from IProviderConfig', {
         component: 'MemoriOpenAIFactory',
         error: error instanceof Error ? error.message : String(error),
       });
@@ -73,20 +99,38 @@ export class MemoriOpenAIFactory implements MemoriOpenAIFactory {
    */
   async fromEnv(
     apiKey?: string,
-    config: Partial<MemoriOpenAIConfig> = {},
+    config: Partial<IProviderConfig> = {},
   ): Promise<MemoriOpenAI> {
     try {
-      const envConfig = ConfigUtils.ConfigBuilder.fromEnvironment(apiKey, config);
+      // Create provider config from environment and merge with provided config
+      const baseConfig: IProviderConfig = {
+        apiKey: apiKey || process.env.OPENAI_API_KEY || '',
+        model: 'gpt-3.5-turbo',
+        baseUrl: process.env.OPENAI_BASE_URL,
+        options: {
+          organization: process.env.OPENAI_ORGANIZATION,
+          project: process.env.OPENAI_PROJECT,
+        },
+        memory: {
+          enableChatMemory: true,
+          enableEmbeddingMemory: false,
+          memoryProcessingMode: 'auto',
+          minImportanceLevel: 'all',
+          sessionId: config.memory?.sessionId,
+          ...config.memory,
+        },
+        ...config,
+      };
 
       logInfo('Creating MemoriOpenAI from environment', {
         component: 'MemoriOpenAIFactory',
-        apiKey: envConfig.apiKey ? '[REDACTED]' : undefined,
-        databaseUrl: envConfig.databaseConfig?.url,
-        namespace: envConfig.namespace,
-        memoryProcessingMode: envConfig.memoryProcessingMode,
+        apiKey: baseConfig.apiKey ? '[REDACTED]' : undefined,
+        model: baseConfig.model,
+        baseUrl: baseConfig.baseUrl,
+        memoryProcessingMode: baseConfig.memory?.memoryProcessingMode,
       });
 
-      const client = new MemoriOpenAIClient(envConfig.apiKey!, envConfig);
+      const client = new MemoriOpenAIClient(baseConfig);
       return client;
     } catch (error) {
       logError('Failed to create MemoriOpenAI from environment', {
@@ -104,19 +148,20 @@ export class MemoriOpenAIFactory implements MemoriOpenAIFactory {
   async fromDatabaseUrl(
     apiKey: string,
     databaseUrl: string,
-    options: Partial<MemoriOpenAIConfig> = {},
+    options: Partial<IProviderConfig> = {},
   ): Promise<MemoriOpenAI> {
     try {
-      const config: MemoriOpenAIConfig = {
+      const config: IProviderConfig = {
         apiKey,
-        databaseConfig: ConfigUtils.DatabaseConfigBuilder.fromDatabaseUrl(
-          databaseUrl,
-          options.namespace || 'memori-openai'
-        ),
-        enableChatMemory: true,
-        enableEmbeddingMemory: false,
-        memoryProcessingMode: 'auto',
-        autoInitialize: true,
+        model: 'gpt-3.5-turbo',
+        memory: {
+          enableChatMemory: true,
+          enableEmbeddingMemory: false,
+          memoryProcessingMode: 'auto',
+          minImportanceLevel: 'all',
+          sessionId: options.memory?.sessionId,
+          ...options.memory,
+        },
         ...options,
       };
 
@@ -124,10 +169,11 @@ export class MemoriOpenAIFactory implements MemoriOpenAIFactory {
         component: 'MemoriOpenAIFactory',
         apiKey: apiKey ? '[REDACTED]' : undefined,
         databaseUrl,
-        namespace: config.namespace,
+        model: config.model,
+        memoryProcessingMode: config.memory?.memoryProcessingMode,
       });
 
-      const client = new MemoriOpenAIClient(apiKey, config);
+      const client = new MemoriOpenAIClient(config);
       return client;
     } catch (error) {
       logError('Failed to create MemoriOpenAI with database URL', {
@@ -144,26 +190,35 @@ export class MemoriOpenAIFactory implements MemoriOpenAIFactory {
 export const memoriOpenAIFactory = new MemoriOpenAIFactory();
 
 /**
- * Convenience factory function for creating MemoriOpenAI instances
- * Provides a simple function-based API for users who prefer functional patterns
+ * Convenience factory function for creating MemoriOpenAI instances using IProviderConfig
+ * Modern factory function using the consolidated configuration interface
  */
-export async function createMemoriOpenAI(
-  memori: Memori,
-  apiKey: string,
-  options?: MemoriOpenAIConfig,
+export async function createMemoriOpenAIWithProviderConfig(
+  providerConfig: IProviderConfig,
 ): Promise<MemoriOpenAI> {
-  return memoriOpenAIFactory.createWithMemori(memori, apiKey, options);
+  return memoriOpenAIFactory.createWithProviderConfig(providerConfig);
 }
 
 /**
- * Create MemoriOpenAI instance from configuration (convenience function)
+ * Convenience factory function for creating MemoriOpenAI instances
+ * Provides a simple function-based API for users who prefer functional patterns
+ * @deprecated Consider using createMemoriOpenAIWithProviderConfig for new code
+ */
+export async function createMemoriOpenAI(
+  memori: Memori,
+  providerConfig: IProviderConfig,
+): Promise<MemoriOpenAI> {
+  return memoriOpenAIFactory.createWithMemori(memori, providerConfig);
+}
+
+/**
+ * Create MemoriOpenAI instance from IProviderConfig (convenience function)
  * Pattern 2: Automatic Initialization
  */
 export async function MemoriOpenAIFromConfig(
-  apiKey: string,
-  config: MemoriOpenAIConfig,
+  providerConfig: IProviderConfig,
 ): Promise<MemoriOpenAI> {
-  return memoriOpenAIFactory.fromConfig(apiKey, config);
+  return memoriOpenAIFactory.fromConfig(providerConfig);
 }
 
 /**
@@ -172,7 +227,7 @@ export async function MemoriOpenAIFromConfig(
  */
 export async function MemoriOpenAIFromEnv(
   apiKey?: string,
-  config?: Partial<MemoriOpenAIConfig>,
+  config?: Partial<IProviderConfig>,
 ): Promise<MemoriOpenAI> {
   return memoriOpenAIFactory.fromEnv(apiKey, config);
 }
@@ -184,11 +239,11 @@ export async function MemoriOpenAIFromEnv(
 export async function MemoriOpenAIFromDatabase(
   apiKey: string,
   databaseUrl: string,
-  options?: Partial<MemoriOpenAIConfig>,
+  options?: Partial<IProviderConfig>,
 ): Promise<MemoriOpenAI> {
   return memoriOpenAIFactory.fromDatabaseUrl(apiKey, databaseUrl, options);
 }
 
 // Export types for external usage
-export type { MemoriOpenAI, MemoriOpenAIConfig } from './types';
+export type { MemoriOpenAI } from './types';
 export default MemoriOpenAIFactory;

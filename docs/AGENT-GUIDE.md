@@ -1,10 +1,11 @@
 # Memorits AI Agent Integration Guide
 
 ## Core Architecture
-- **Memori Class**: Main memory management system
+- **Memori Class**: Main memory management system with **MemoryAgent integration**
 - **Manager Pattern**: Specialized managers for different operations
 - **Search Strategies**: Multiple search algorithms with automatic selection
 - **Configuration**: Environment-based configuration with runtime updates
+- **MemoryAgent Processing**: **AI-powered classification, importance scoring, entity extraction, and relationship detection**
 
 ## Essential Setup
 
@@ -33,9 +34,9 @@ MEMORI_CONSCIOUS_INGEST=false
 
 ## Memory Operations
 
-### Store Conversations
+### Store Conversations with MemoryAgent Processing
 ```typescript
-// Record conversation for memory processing
+// Record conversation for AI-powered memory processing
 const chatId = await memori.recordConversation(
   'User question or statement',
   'AI response or action taken',
@@ -45,21 +46,42 @@ const chatId = await memori.recordConversation(
     metadata: { topic: 'category', importance: 'high' }
   }
 );
+
+// MemoryAgent automatically processes with:
+// 🤖 AI-Powered Classification: 'essential', 'contextual', 'conversational'
+// ⭐ Intelligent Importance Scoring: 'critical', 'high', 'medium', 'low'
+// 🏷️ Advanced Entity Extraction: People, places, concepts, code elements
+// 🔗 Smart Relationship Detection: Memory connections and dependencies
+// 📊 Rich Metadata Generation: Provider, model, context, analytics
 ```
 
-### Search Memories
+### Search Memories with AI-Enhanced Results
 ```typescript
-// Basic search
+// Basic search with MemoryAgent-powered results
 const memories = await memori.searchMemories('query text', {
   limit: 5,
   minImportance: 'medium',
   categories: ['essential', 'contextual']
 });
 
-// Advanced filtering
+// Each result includes AI-powered enhancements:
+// 🤖 Classification: AI-categorized as 'essential', 'contextual', etc.
+// ⭐ Importance: AI-scored as 'critical', 'high', 'medium', 'low'
+// 🏷️ Entities: Extracted people, places, concepts, code elements
+// 🔗 Relationships: Detected connections to other memories
+// 📊 Metadata: Rich context and analytics
+
+// Advanced filtering with AI-enhanced metadata
 const filtered = await memori.searchMemories('specific topic', {
   filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
   includeMetadata: true
+});
+
+// Access AI-generated insights
+filtered.forEach(memory => {
+  console.log(`Category: ${memory.classification.category} (${memory.classification.confidence})`);
+  console.log(`Entities: ${memory.entities.map(e => e.value).join(', ')}`);
+  console.log(`Relationships: ${memory.relationships.length} connections`);
 });
 ```
 
@@ -77,28 +99,105 @@ const fts5Results = await memori.searchMemoriesWithStrategy(
 const recentResults = await memori.searchRecentMemories(5, true);
 ```
 
+## MemoryAgent AI-Powered Features
+
+### 🤖 **Advanced Memory Processing Capabilities**
+
+The MemoryAgent integration provides enterprise-grade AI-powered memory processing:
+
+#### **AI-Powered Classification**
+- **Automatic Categorization**: Memories classified as 'essential', 'contextual', 'conversational', 'reference', 'personal', or 'conscious-info'
+- **Confidence Scoring**: AI provides confidence levels for each classification decision
+- **Dynamic Adaptation**: Classification adapts based on conversation context and user intent
+
+#### **Intelligent Importance Scoring**
+- **Multi-Level Importance**: 'critical', 'high', 'medium', 'low' importance levels
+- **Context-Aware Assessment**: Importance determined by content significance, urgency, and relevance
+- **Business Logic Integration**: Importance scoring considers business context and user preferences
+
+#### **Advanced Entity Extraction**
+- **Named Entity Recognition**: Automatic extraction of people, organizations, locations, dates
+- **Technical Entity Detection**: Identification of code elements, APIs, frameworks, technologies
+- **Concept Recognition**: Extraction of abstract concepts, methodologies, and domain knowledge
+- **Confidence Scoring**: Each extracted entity includes confidence scores for reliability
+
+#### **Smart Relationship Detection**
+- **Continuation Relationships**: Identifies follow-up discussions and related topics
+- **Reference Relationships**: Links to previously mentioned concepts or decisions
+- **Contradiction Detection**: Flags conflicting information across conversations
+- **Superseding Relationships**: Tracks when new information replaces previous knowledge
+
+#### **Rich Memory Metadata**
+```typescript
+// Example of MemoryAgent-enhanced memory structure
+const enhancedMemory = {
+  id: 'mem_123',
+  content: 'User discussed React components for API integration',
+  classification: {
+    category: 'essential',
+    importance: 'high',
+    confidence: 0.92,
+    reason: 'Technical implementation discussion with business impact'
+  },
+  entities: [
+    { value: 'React', type: 'technology', confidence: 0.95 },
+    { value: 'API', type: 'concept', confidence: 0.88 },
+    { value: 'components', type: 'code_element', confidence: 0.91 }
+  ],
+  relationships: [
+    { type: 'continuation', targetMemoryId: 'mem_89', confidence: 0.85 },
+    { type: 'reference', targetMemoryId: 'mem_45', confidence: 0.72 }
+  ],
+  metadata: {
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    processingTimestamp: '2024-01-15T10:30:00Z',
+    sessionId: 'my-app'
+  }
+};
+```
+
 ## Memory Modes
 
-### Auto-Ingestion (Default)
+### Auto-Ingestion (Default) with MemoryAgent Processing
 ```typescript
-// Automatic memory processing during conversations
-const config = ConfigManager.loadConfig();
-Object.assign(config, {
-  autoIngest: true,
-  consciousIngest: false
+// Automatic memory processing during conversations with AI-powered analysis
+// Note: Memory processing modes are now configured via IProviderConfig.memory
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app'
 });
-const memori = new Memori(config);
+
+// Configure via LLM provider with IProviderConfig format
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto' // 🤖 MemoryAgent AI processing enabled
+  }
+});
+
+// Every conversation receives comprehensive AI analysis
 ```
 
 ### Conscious Processing
 ```typescript
 // Background processing with reflection
-const config = ConfigManager.loadConfig();
-Object.assign(config, {
-  autoIngest: false,
-  consciousIngest: true
+const memori = new Memori({
+  databaseUrl: 'sqlite:./memories.db',
+  namespace: 'my-app'
 });
-const memori = new Memori(config);
+
+// Configure via LLM provider with conscious processing mode
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'conscious'
+  }
+});
 
 // Manual processing trigger
 await memori.checkForConsciousContextUpdates();
@@ -193,26 +292,39 @@ console.log(`Backup size: ${backup.indexSize}`);
 const restored = await memori.restoreIndexFromBackup(backup.id);
 ```
 
-## OpenAI Integration
+## OpenAI Integration with MemoryAgent
 
-### Drop-in Replacement
+### Drop-in Replacement with AI-Powered Memory
 ```typescript
 import { MemoriOpenAI } from 'memorits/integrations/openai-dropin/client';
 
-// Replace OpenAI with zero code changes
-const client = new MemoriOpenAI('your-api-key', {
-  enableChatMemory: true,
-  autoInitialize: true
+// Replace OpenAI with zero code changes using MemoryAgent processing
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto', // 🤖 MemoryAgent AI processing enabled
+    sessionId: 'my-app'
+  }
 });
 
-// Conversations automatically recorded
+// Conversations automatically processed with MemoryAgent AI analysis
 const response = await client.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Remember this...' }]
 });
 
-// Access memory directly
+// Every conversation receives AI-powered processing:
+// 🤖 Classification: AI-categorized as 'essential', 'contextual', etc.
+// ⭐ Importance Scoring: AI-determined 'critical', 'high', 'medium', 'low'
+// 🏷️ Entity Extraction: Automatic identification of key concepts
+// 🔗 Relationship Detection: Smart connection mapping
+// 📊 Rich Metadata: Comprehensive context and analytics
+
+// Access AI-enhanced memory directly
 const memories = await client.memory.searchMemories('important');
+console.log(`Found ${memories.length} AI-processed memories`);
 ```
 
 ### Factory Pattern
@@ -225,11 +337,15 @@ const client = MemoriOpenAIFromEnv();
 // Or from database URL
 const client = MemoriOpenAIFromDatabase('postgresql://localhost/memories');
 
-// Or from configuration object
+// Or from configuration object using new IProviderConfig
 const client = MemoriOpenAIFromConfig({
   apiKey: 'your-key',
-  enableChatMemory: true,
-  autoIngest: true
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'my-app'
+  }
 });
 ```
 
@@ -273,13 +389,14 @@ OPENAI_API_KEY=your-key
 DATABASE_URL=sqlite:./memories.db
 MEMORI_NAMESPACE=default
 
-# Memory modes
-MEMORI_AUTO_INGEST=true
-MEMORI_CONSCIOUS_INGEST=false
-MEMORI_ENABLE_RELATIONSHIP_EXTRACTION=true
+# Memory modes (NEW!)
+MEMORI_SESSION_ID=my-app-session
+MEMORI_PROCESSING_MODE=auto
+MEMORI_MIN_IMPORTANCE_LEVEL=medium
+MEMORI_ENABLE_CHAT_MEMORY=true
+MEMORI_ENABLE_EMBEDDING_MEMORY=false
 
 # Performance
-MEMORI_MODEL=gpt-4o-mini
 MEMORI_ENABLE_CONSOLIDATION=true
 MEMORI_CONSOLIDATION_INTERVAL_MINUTES=60
 ```
@@ -290,9 +407,11 @@ MEMORI_CONSOLIDATION_INTERVAL_MINUTES=60
 const config = ConfigManager.loadConfig();
 Object.assign(config, {
   namespace: 'production-app',
-  autoIngest: true,
   enableRelationshipExtraction: true
 });
+
+Note: LLM provider configuration uses IProviderConfig format
+// See provider documentation for OpenAI, Anthropic, or Ollama setup
 
 const memori = new Memori(config);
 ```
@@ -305,11 +424,22 @@ const memori = new Memori(config);
 const config = ConfigManager.loadConfig();
 Object.assign(config, {
   databaseUrl: ':memory:',  // SQLite in-memory database
-  autoIngest: false  // Disable for predictable tests
+  namespace: 'test-namespace'  // Use test namespace for isolation
 });
 
 const memori = new Memori(config);
 await memori.enable();
+
+// Note: For OpenAI integration testing, use IProviderConfig format
+const testClient = new MemoriOpenAI({
+  apiKey: 'test-key',
+  model: 'gpt-3.5-turbo',  // Faster model for testing
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'test-session'
+  }
+});
 ```
 
 ### Test Patterns
@@ -337,14 +467,21 @@ assert(memories.length > 0);
 // Wait for processing
 await new Promise(resolve => setTimeout(resolve, 1000));
 
-// Check if auto-ingestion is enabled
-console.log('Auto mode:', memori.isAutoModeEnabled());
-console.log('Conscious mode:', memori.isConsciousModeEnabled());
+// Check memory processing configuration
+// Note: Memory modes are configured via IProviderConfig.memory
+console.log('Memori enabled:', memori.isEnabled());
 
-// Try manual processing if conscious mode
-if (memori.isConsciousModeEnabled()) {
-  await memori.checkForConsciousContextUpdates();
-}
+// Check LLM provider configuration for memory settings
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto'
+  }
+});
+
+// Try manual processing if using conscious mode
+await memori.checkForConsciousContextUpdates();
 ```
 
 **Memory Not Recording**
@@ -352,9 +489,14 @@ if (memori.isConsciousModeEnabled()) {
 // Verify system is enabled
 console.log('Enabled:', memori.isEnabled());
 
-// Check configuration
-const config = ConfigManager.loadConfig();
-console.log('Auto ingest:', config.autoIngest);
+// Check LLM provider configuration for memory settings
+const client = new MemoriOpenAI({
+  apiKey: 'your-api-key',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto'
+  }
+});
 
 // Enable if needed
 await memori.enable();
@@ -431,8 +573,8 @@ if (cache.has(cacheKey)) {
 - `memori.getAvailableSearchStrategies()` - List available strategies
 
 ### Memory Modes
-- **Auto-Ingestion**: `autoIngest: true` - Process conversations immediately
-- **Conscious Processing**: `consciousIngest: true` - Background processing
+- **Auto-Ingestion**: Configure via `IProviderConfig.memory.memoryProcessingMode: 'auto'`
+- **Conscious Processing**: Configure via `IProviderConfig.memory.memoryProcessingMode: 'conscious'`
 
 ### Search Options
 - `limit?: number` - Result count limit
@@ -444,5 +586,10 @@ if (cache.has(cacheKey)) {
 ### Status Checks
 - `memori.isEnabled()` - Check if system is ready
 - `memori.getSessionId()` - Get current session ID
-- `memori.isAutoModeEnabled()` - Check auto-ingestion status
-- `memori.isConsciousModeEnabled()` - Check conscious processing status
+
+### IProviderConfig Memory Options
+- `memory.enableChatMemory?: boolean` - Enable chat memory recording
+- `memory.enableEmbeddingMemory?: boolean` - Enable embedding memory recording
+- `memory.memoryProcessingMode?: 'auto' | 'conscious' | 'none'` - Memory processing mode
+- `memory.minImportanceLevel?: 'low' | 'medium' | 'high' | 'critical' | 'all'` - Minimum importance level
+- `memory.sessionId?: string` - Session ID for tracking memory operations

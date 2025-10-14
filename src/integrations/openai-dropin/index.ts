@@ -14,7 +14,6 @@ export {
 // Type definitions
 export type {
   MemoriOpenAI,
-  MemoriOpenAIConfig,
   MemoryManager,
   MemoryRecordingResult,
   OpenAIMemoryMetadata,
@@ -35,7 +34,6 @@ export type {
   StreamingBufferConfig,
   ConversationRecorder,
   StreamingBuffer,
-  MemoriOpenAIEnvironment,
   MemoriOpenAIConstructorOptions,
   DeepPartial,
   OptionalConfigKeys,

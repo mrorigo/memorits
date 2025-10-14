@@ -18,11 +18,13 @@ async function basicDropInExample() {
   logInfo('=== Basic Drop-in Example ===', { component: 'OpenAIExample', example: 'basicDropIn' });
 
   // Pattern 1: Traditional configuration object (current pattern)
-  const client = new MemoriOpenAI('your-api-key', {
-    enableChatMemory: true,
-    autoInitialize: true,
-    baseUrl: 'https://api.openai.com/v1', // Supports baseURL option
-  });
+   const client = new MemoriOpenAI({
+     apiKey: 'your-api-key',
+     memory: {
+       enableChatMemory: true,
+     },
+     baseUrl: 'https://api.openai.com/v1', // Supports baseURL option
+   });
 
   try {
     // Use exactly like OpenAI client - memory recording happens automatically
@@ -73,7 +75,9 @@ async function environmentExample() {
 
   try {
     const client = await MemoriOpenAIFromEnv('your-api-key', {
-      enableChatMemory: true,
+      memory: {
+        enableChatMemory: true,
+      },
     });
 
     const response = await client.chat.completions.create({
@@ -110,9 +114,10 @@ async function databaseExample() {
       'your-api-key',
       'sqlite:./custom-memori.db',
       {
-        enableChatMemory: true,
-        namespace: 'custom-session',
-        memoryProcessingMode: 'conscious',
+        memory: {
+          enableChatMemory: true,
+          memoryProcessingMode: 'conscious',
+        },
       },
     );
 
@@ -146,21 +151,15 @@ async function advancedExample() {
   logInfo('=== Advanced Configuration Example ===', { component: 'OpenAIExample', example: 'advanced' });
 
   try {
-    const client = await MemoriOpenAIFromConfig('your-api-key', {
-      enableChatMemory: true,
-      enableEmbeddingMemory: false,
-      memoryProcessingMode: 'auto',
-      databaseConfig: {
-        type: 'sqlite',
-        url: 'sqlite:./advanced-memori.db',
-        namespace: 'advanced-session',
+    const client = await MemoriOpenAIFromConfig({
+      apiKey: 'your-api-key',
+      memory: {
+        enableChatMemory: true,
+        enableEmbeddingMemory: false,
+        memoryProcessingMode: 'auto',
+        minImportanceLevel: 'medium' as any,
       },
-      autoIngest: true,
-      consciousIngest: false,
-      minImportanceLevel: 'medium' as any,
-      maxMemoryAge: 30, // Keep memories for 30 days
-      bufferTimeout: 15000, // 15 second streaming timeout
-      debugMode: true,
+      model: 'gpt-4o-mini',
     });
 
     const response = await client.chat.completions.create({
@@ -212,9 +211,11 @@ async function migrationExample() {
   */
 
   // AFTER (just change the import and constructor):
-  const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-    enableChatMemory: true,
-    autoInitialize: true,
+  const client = new MemoriOpenAI({
+    apiKey: process.env.OPENAI_API_KEY!,
+    memory: {
+      enableChatMemory: true,
+    },
   });
 
   try {
@@ -246,8 +247,11 @@ async function errorHandlingExample() {
   logInfo('=== Error Handling Example ===', { component: 'OpenAIExample', example: 'errorHandling' });
 
   try {
-    const client = new MemoriOpenAI('invalid-api-key', {
-      enableChatMemory: true,
+    const client = new MemoriOpenAI({
+      apiKey: 'invalid-api-key',
+      memory: {
+        enableChatMemory: true,
+      },
     });
 
     // This will fail with authentication error
@@ -278,11 +282,14 @@ async function openaiSDKPatternExample() {
     // Pattern 2: OpenAI SDK style constructor with baseURL support
     const client = new MemoriOpenAI({
       apiKey: 'your-api-key',
-      baseURL: 'https://api.openai.com/v1', // Direct baseURL support
-      organization: 'your-org-id',
-      project: 'your-project-id',
-      enableChatMemory: true,
-      autoInitialize: true,
+      baseUrl: 'https://api.openai.com/v1', // Direct baseURL support
+      options: {
+        organization: 'your-org-id',
+        project: 'your-project-id',
+      },
+      memory: {
+        enableChatMemory: true,
+      },
     });
 
     const response = await client.chat.completions.create({
@@ -315,9 +322,11 @@ async function memorySearchExample() {
   logInfo('=== Memory Search Example ===', { component: 'OpenAIExample', example: 'memorySearch' });
 
   try {
-    const client = new MemoriOpenAI('your-api-key', {
-      enableChatMemory: true,
-      autoInitialize: true,
+    const client = new MemoriOpenAI({
+      apiKey: 'your-api-key',
+      memory: {
+        enableChatMemory: true,
+      },
     });
 
     // Have a conversation to create memories

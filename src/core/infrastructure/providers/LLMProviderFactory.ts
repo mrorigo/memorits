@@ -1,5 +1,8 @@
+import { AnthropicProvider } from './AnthropicProvider';
 import { ILLMProvider } from './ILLMProvider';
 import { IProviderConfig } from './IProviderConfig';
+import { OllamaProvider } from './OllamaProvider';
+import { OpenAIProvider } from './OpenAIProvider';
 import { ProviderType } from './ProviderType';
 
 /**
@@ -137,30 +140,9 @@ export class LLMProviderFactory {
    * Should be called during module initialization
    */
   static registerDefaultProviders(): void {
-    // Import providers synchronously - they should be available at runtime
-    // Note: This requires the provider files to be properly exported
-    try {
-      // Use dynamic imports but don't await them - let them register in background
-      import('./OpenAIProvider').then(({ OpenAIProvider }) => {
-        LLMProviderFactory.registerProvider(ProviderType.OPENAI, OpenAIProvider);
-      }).catch(() => {
-        // Provider may not be available
-      });
-
-      import('./AnthropicProvider').then(({ AnthropicProvider }) => {
-        LLMProviderFactory.registerProvider(ProviderType.ANTHROPIC, AnthropicProvider);
-      }).catch(() => {
-        // Provider may not be available
-      });
-
-      import('./OllamaProvider').then(({ OllamaProvider }) => {
-        LLMProviderFactory.registerProvider(ProviderType.OLLAMA, OllamaProvider);
-      }).catch(() => {
-        // Provider may not be available
-      });
-    } catch (error) {
-      // If dynamic imports fail, providers may not be available in this environment
-    }
+    LLMProviderFactory.registerProvider(ProviderType.OPENAI, OpenAIProvider);
+    LLMProviderFactory.registerProvider(ProviderType.ANTHROPIC, AnthropicProvider);
+    LLMProviderFactory.registerProvider(ProviderType.OLLAMA, OllamaProvider);
   }
 
   /**
@@ -170,9 +152,6 @@ export class LLMProviderFactory {
   static async getRegisteredProviderTypesAsync(): Promise<ProviderType[]> {
     // First ensure default providers are registered
     LLMProviderFactory.registerDefaultProviders();
-
-    // Wait a bit for async registration to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
 
     return LLMProviderFactory.getRegisteredProviderTypes();
   }

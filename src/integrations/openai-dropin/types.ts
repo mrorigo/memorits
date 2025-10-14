@@ -8,6 +8,7 @@ import type {
   MemorySearchResult,
 } from '../../core/types/models';
 import type { ConversationContext } from '../../core/types/schemas';
+import type { IProviderConfig } from '../../core/infrastructure/providers/IProviderConfig';
 
 // =============================================================================
 // OpenAI SDK Type Re-exports (100% Compatibility)
@@ -192,85 +193,6 @@ export interface MemoryRecordingResult {
 // Configuration Interface
 // =============================================================================
 
-/**
- * Comprehensive configuration interface for MemoriOpenAI
- * Supports all initialization patterns and configuration options
- */
-export interface MemoriOpenAIConfig {
-  // Core functionality
-  /** Enable chat memory recording */
-  enableChatMemory?: boolean;
-  /** Enable embedding memory recording */
-  enableEmbeddingMemory?: boolean;
-  /** Memory processing mode */
-  memoryProcessingMode?: MemoryProcessingMode;
-
-  // Model configuration
-  /** Model for chat completions */
-  model?: string;
-  /** Model for embeddings */
-  embeddingModel?: string;
-  /** Provider type to use */
-  providerType?: 'openai' | 'ollama' | 'anthropic';
-
-  // Initialization
-  /** Auto-create Memori instance */
-  autoInitialize?: boolean;
-  /** Database configuration */
-  databaseConfig?: DatabaseConfig;
-  /** Memory namespace */
-  namespace?: string;
-
-  // Memory filtering
-  /** Minimum importance level for memory storage */
-  minImportanceLevel?: MemoryImportanceFilter;
-  /** Maximum age of memories to keep (days) */
-  maxMemoryAge?: number;
-  /** Auto ingestion mode */
-  autoIngest?: boolean;
-  /** Conscious ingestion mode */
-  consciousIngest?: boolean;
-
-  // Performance tuning
-  /** Streaming buffer timeout in milliseconds */
-  bufferTimeout?: number;
-  /** Maximum streaming buffer size in characters */
-  maxBufferSize?: number;
-  /** Background processing interval for conscious mode */
-  backgroundUpdateInterval?: number;
-
-  // OpenAI client options
-  /** Override API key */
-  apiKey?: string;
-  /** Override base URL */
-  baseUrl?: string;
-  /** Organization ID */
-  organization?: string;
-  /** Project ID */
-  project?: string;
-  /** Request timeout */
-  timeout?: number;
-  /** Maximum number of retries */
-  maxRetries?: number;
-  /** Default headers */
-  defaultHeaders?: Record<string, string>;
-
-  // Advanced options
-  /** Custom memory processing function */
-  customMemoryProcessor?: (
-    userInput: string,
-    aiOutput: string,
-    metadata: OpenAIMemoryMetadata
-  ) => Promise<MemoryRecordingResult>;
-  /** Custom error handler */
-  customErrorHandler?: (error: Error, context: Record<string, unknown>) => void;
-  /** Enable debug logging */
-  debugMode?: boolean;
-  /** Enable metrics collection */
-  enableMetrics?: boolean;
-  /** Metrics collection interval */
-  metricsInterval?: number;
-}
 
 // =============================================================================
 // Factory Function Interfaces
@@ -286,7 +208,7 @@ export interface MemoriOpenAIFactory {
   createWithMemori(
     memori: any, // Will be typed as Memori when available
     apiKey: string,
-    options?: MemoriOpenAIConfig
+    options?: IProviderConfig
   ): Promise<MemoriOpenAI>;
 
   /**
@@ -294,7 +216,7 @@ export interface MemoriOpenAIFactory {
    */
   fromConfig(
     apiKey: string,
-    config: MemoriOpenAIConfig
+    config: IProviderConfig
   ): Promise<MemoriOpenAI>;
 
   /**
@@ -302,7 +224,7 @@ export interface MemoriOpenAIFactory {
    */
   fromEnv(
     apiKey?: string,
-    config?: Partial<MemoriOpenAIConfig>
+    config?: Partial<IProviderConfig>
   ): Promise<MemoriOpenAI>;
 
   /**
@@ -311,14 +233,14 @@ export interface MemoriOpenAIFactory {
   fromDatabaseUrl(
     apiKey: string,
     databaseUrl: string,
-    options?: Partial<MemoriOpenAIConfig>
+    options?: Partial<IProviderConfig>
   ): Promise<MemoriOpenAI>;
 }
 
 /**
  * Constructor options for MemoriOpenAI
  */
-export interface MemoriOpenAIConstructorOptions extends MemoriOpenAIConfig {
+export interface MemoriOpenAIConstructorOptions extends IProviderConfig {
   /** API key for OpenAI */
   apiKey: string;
   /** Additional OpenAI client options */
@@ -537,7 +459,7 @@ export interface MemoriOpenAI {
   readonly memory: MemoryManager;
 
   // Configuration and control
-  readonly config: MemoriOpenAIConfig;
+  readonly config: IProviderConfig;
   readonly isEnabled: boolean;
   readonly sessionId: string;
 
@@ -549,7 +471,7 @@ export interface MemoriOpenAI {
   // Utility methods
   getMetrics(): Promise<OpenAIMetrics>;
   resetMetrics(): Promise<void>;
-  updateConfig(config: Partial<MemoriOpenAIConfig>): Promise<void>;
+  updateConfig(config: Partial<IProviderConfig>): Promise<void>;
 }
 
 /**
@@ -606,29 +528,5 @@ export type OptionalConfigKeys = 'autoInitialize' | 'debugMode' | 'enableMetrics
  */
 export type RequiredConfigKeys = 'apiKey';
 
-/**
- * Environment variables interface for configuration
- */
-export interface MemoriOpenAIEnvironment {
-  // OpenAI configuration
-  OPENAI_API_KEY?: string;
-  OPENAI_BASE_URL?: string;
-  OPENAI_ORGANIZATION?: string;
-  OPENAI_PROJECT?: string;
-
-  // Memory configuration
-  MEMORI_DATABASE_URL?: string;
-  MEMORI_NAMESPACE?: string;
-  MEMORI_PROCESSING_MODE?: MemoryProcessingMode;
-  MEMORI_AUTO_INGEST?: string;
-  MEMORI_CONSCIOUS_INGEST?: string;
-  MEMORI_MIN_IMPORTANCE?: MemoryImportanceLevel;
-  MEMORI_MAX_AGE?: string;
-
-  // Performance configuration
-  MEMORI_BUFFER_TIMEOUT?: string;
-  MEMORI_MAX_BUFFER_SIZE?: string;
-  MEMORI_BACKGROUND_INTERVAL?: string;
-}
 
 export default MemoriOpenAI;

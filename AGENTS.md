@@ -4,7 +4,7 @@ This file provides guidance to agents when working with code in this repository.
 
 ## Build/Lint/Test Commands
 
-- Run single test: `npm test -- --testPathPattern=tests/unit/core/MemoryAgent.test.ts` (uses custom Jest config with ts-jest)
+- Run single test: `npm test -- --testPathPatterns=tests/unit/core/MemoryAgent.test.ts` (uses custom Jest config with ts-jest)
 - Lint with auto-fix: `npm run lint:fix` (applies different rules for tests, examples, and main code)
 - Database commands: `npm run prisma:push` followed by `npm run prisma:generate` (required sequence)
 - Example scripts: Use `npm run example:*` (tsx-based execution, not standard node)
@@ -18,6 +18,10 @@ This file provides guidance to agents when working with code in this repository.
 - **Interface-first**: All public APIs should use clean interfaces from models.ts for better IDE support
 - **Module system**: CommonJS required (non-standard for TypeScript, affects import/export patterns)
 - **DDD Architecture**: Follow domain/infrastructure separation - business logic in domain/, technical concerns in infrastructure/
+- **MemoryAgent Integration**: Leverage MemoryAgent for AI-powered memory processing across all LLM providers
+- **AI-Powered Classification**: Use MemoryAgent for automatic categorization and importance scoring
+- **Entity Extraction**: Implement entity extraction patterns for people, places, concepts, and code elements
+- **Relationship Detection**: Follow MemoryAgent patterns for smart relationship identification and mapping
 - **Memory relationships**: Follow established patterns for relationship extraction, confidence scoring, and validation
 - **Search strategies**: Implement proper error handling, timeout management, and fallback mechanisms for all search strategies
 - **State management**: Use ProcessingStateManager for memory workflow states with proper transition validation
@@ -34,6 +38,10 @@ This file provides guidance to agents when working with code in this repository.
 - **Session management**: All operations require sessionId tracking for proper memory association
 - **OpenAI drop-in**: MemoriOpenAI provides zero breaking changes replacement for OpenAI SDK with automatic memory recording
 - **Factory patterns**: Multiple initialization patterns (constructor, environment, database URL, advanced config) for different use cases
+- **MemoryAgent Integration**: Leverage MemoryAgent for AI-powered memory processing across all LLM providers
+- **AI-Powered Classification**: Use MemoryAgent for automatic categorization and importance scoring
+- **Entity Extraction**: Implement entity extraction patterns for people, places, concepts, and code elements
+- **Relationship Detection**: Follow MemoryAgent patterns for smart relationship identification and mapping
 - **Memory relationships**: Extract relationships during MemoryAgent processing with proper confidence scoring and validation
 - **Search strategies**: Implement ISearchStrategy interface with proper error handling, timeout management, and fallback mechanisms
 - **Temporal search**: Enhanced searchRecentMemories API supports time windows, relative expressions, and temporal filtering
@@ -45,11 +53,12 @@ This file provides guidance to agents when working with code in this repository.
 ## Critical Gotchas
 
 - **Ollama integration**: Set OPENAI_BASE_URL and use 'ollama-local' as API key (automatic dummy key assignment)
+- **MemoryAgent processing**: All LLM providers now use MemoryAgent for AI-powered memory processing with classification, importance scoring, entity extraction, and relationship detection
 - **Memory processing**: Conscious mode disables auto-ingestion - requires manual triggering
 - **Test isolation**: Database tests create temporary SQLite instances with automatic cleanup
 - **Module exports**: Main exports are in src/index.ts but actual implementation is in src/core/Memori.ts
 - **Logging**: All log calls must include component metadata or will fail validation
-- **OpenAI drop-in**: MemoriOpenAI requires specific configuration for memory recording (enableChatMemory: true, autoInitialize: true)
+- **OpenAI drop-in**: MemoriOpenAI requires new IProviderConfig format with memory.enableChatMemory: true and memory.memoryProcessingMode: 'auto'
 - **Drop-in initialization**: Multiple factory patterns available - choose based on use case (constructor vs environment vs database URL)
 - **Memory operations**: Drop-in client provides direct memory access via client.memory.searchMemories() and other methods
 - **Streaming support**: Full memory capture for streaming responses with configurable buffer settings
@@ -60,3 +69,7 @@ This file provides guidance to agents when working with code in this repository.
 - **Index optimization**: SearchIndexManager runs automated maintenance - monitor performance impact during large operations
 - **Consolidation safety**: Duplicate consolidation uses database transactions - ensure proper transaction handling in custom implementations
 - **Import paths**: Use domain-driven imports (e.g., `../../infrastructure/config/Logger`, `../types/models`) following DDD separation
+- **Provider configuration**: Use new IProviderConfig interface with nested memory options (memory.enableChatMemory, memory.memoryProcessingMode, memory.sessionId)
+- **Session management**: All providers now use sessionId in memory configuration for proper multi-user memory isolation
+- **Unified configuration**: Single IProviderConfig interface for all LLM providers (OpenAI, Anthropic, Ollama) with consistent memory options
+- **MemoryAgent capabilities**: All providers share identical MemoryAgent processing for AI-powered classification, entity extraction, importance scoring, and relationship detection

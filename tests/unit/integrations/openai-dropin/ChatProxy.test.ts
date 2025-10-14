@@ -329,111 +329,98 @@ describe('ChatProxy', () => {
         });
     });
 
-    describe('Memory Recording Logic', () => {
+    describe('Memory Recording Integration', () => {
         let chatProxy: ChatProxy;
 
         beforeEach(() => {
             chatProxy = new ChatProxy(mockOpenAI.chat, mockMemoryManager, true);
         });
 
-        describe('shouldRecordMemory()', () => {
-            it('should record memory for valid user messages', () => {
-                const params = {
+        describe('MemoryAgent Integration', () => {
+            it('should delegate memory processing to MemoryAgent via MemoryManager', async () => {
+                const params = TestFixtures.createBasicChatParams();
+
+                const mockResponse = {
+                    id: 'chatcmpl-memory-test',
+                    object: 'chat.completion',
+                    created: 1234567890,
                     model: 'gpt-4o-mini',
-                    messages: [
-                        { role: 'user', content: 'Hello, this is a valid message for testing.' },
+                    choices: [
+                        {
+                            index: 0,
+                            message: {
+                                role: 'assistant',
+                                content: 'Hello! How can I help you today?',
+                                refusal: null,
+                            },
+                            logprobs: null,
+                            finish_reason: 'stop',
+                        },
                     ],
-                    temperature: 0.7,
-                    max_tokens: 1000,
-                    stream: false,
+                    usage: {
+                        prompt_tokens: 11.75,
+                        completion_tokens: 8,
+                        total_tokens: 19.75,
+                    },
                 };
 
-                // Access private method through type assertion
-                const shouldRecord = (chatProxy as any).shouldRecordMemory(params);
-                expect(shouldRecord).toBe(true);
+                mockOpenAI.chat.completions.create = jest.fn().mockResolvedValue(mockResponse);
+                const recordChatCompletionSpy = jest.spyOn(mockMemoryManager, 'recordChatCompletion');
+
+                const result = await chatProxy.create(params);
+
+                expect(result).toBeDefined();
+                // MemoryAgent processing should be delegated to MemoryManager
+                expect(recordChatCompletionSpy).toHaveBeenCalled();
+                expect(recordChatCompletionSpy).toHaveBeenCalledWith(
+                    params,
+                    expect.any(Object), // Response object
+                    expect.objectContaining({
+                        forceRecording: false,
+                        isStreaming: false,
+                    })
+                );
             });
 
-            it('should not record memory for empty messages', () => {
-                const params = {
-                    model: 'gpt-4o-mini',
-                    messages: [],
-                    temperature: 0.7,
-                    max_tokens: 1000,
-                    stream: false,
-                };
+            it('should handle MemoryAgent processing errors gracefully', async () => {
+                const params = TestFixtures.createBasicChatParams();
 
-                const shouldRecord = (chatProxy as any).shouldRecordMemory(params);
-                expect(shouldRecord).toBe(false);
-            });
+                // Mock memory manager to throw error during MemoryAgent processing
+                const recordChatCompletionSpy = jest.spyOn(mockMemoryManager, 'recordChatCompletion')
+                    .mockRejectedValue(new Error('MemoryAgent processing failed'));
 
-            it('should not record memory for system-only conversations', () => {
-                const params = {
+                const mockResponse = {
+                    id: 'chatcmpl-error-test',
+                    object: 'chat.completion',
+                    created: 1234567890,
                     model: 'gpt-4o-mini',
-                    messages: [
-                        { role: 'system', content: 'You are a helpful assistant.' },
+                    choices: [
+                        {
+                            index: 0,
+                            message: {
+                                role: 'assistant',
+                                content: 'Hello! How can I help you today?',
+                                refusal: null,
+                            },
+                            logprobs: null,
+                            finish_reason: 'stop',
+                        },
                     ],
-                    temperature: 0.7,
-                    max_tokens: 1000,
-                    stream: false,
+                    usage: {
+                        prompt_tokens: 11.75,
+                        completion_tokens: 8,
+                        total_tokens: 19.75,
+                    },
                 };
 
-                const shouldRecord = (chatProxy as any).shouldRecordMemory(params);
-                expect(shouldRecord).toBe(false);
+                mockOpenAI.chat.completions.create = jest.fn().mockResolvedValue(mockResponse);
+
+                const result = await chatProxy.create(params);
+
+                // Main response should still succeed despite MemoryAgent error
+                expect(result).toBeDefined();
+                expect(recordChatCompletionSpy).toHaveBeenCalled();
             });
-
-            it('should not record memory for very short messages', () => {
-                const params = {
-                    model: 'gpt-4o-mini',
-                    messages: [
-                        { role: 'user', content: 'Hi' }, // Very short message
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 1000,
-                    stream: false,
-                };
-
-                const shouldRecord = (chatProxy as any).shouldRecordMemory(params);
-                expect(shouldRecord).toBe(false);
-            });
-
-           it('should extract user content correctly from message arrays', () => {
-               const params = {
-                   model: 'gpt-4o-mini',
-                   messages: [
-                       { role: 'system', content: 'System prompt' },
-                       { role: 'user', content: 'User message' },
-                       { role: 'assistant', content: 'Assistant response' },
-                       { role: 'user', content: 'Latest user message' }, // Should be extracted
-                   ],
-                   temperature: 0.7,
-                   max_tokens: 1000,
-                   stream: false,
-               };
-
-               const userContent = (chatProxy as any).extractUserContent(params.messages);
-               expect(userContent).toBe('Latest user message');
-           });
-
-           it('should handle array content blocks', () => {
-               const params = {
-                   model: 'gpt-4o-mini',
-                   messages: [
-                       {
-                           role: 'user',
-                           content: [
-                               { type: 'text', text: 'First part' },
-                               { type: 'text', text: 'Second part' },
-                           ],
-                       },
-                   ],
-                   temperature: 0.7,
-                   max_tokens: 1000,
-                   stream: false,
-               };
-
-               const userContent = (chatProxy as any).extractUserContent(params.messages);
-               expect(userContent).toBe('First part Second part');
-           });
         });
     });
 

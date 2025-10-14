@@ -1,10 +1,10 @@
 # Core API Reference
 
-The Memorits Core API provides the primary interface for memory management, search, and retrieval operations. This comprehensive API enables developers to build sophisticated AI agents with advanced memory capabilities.
+The Memorits Core API provides the primary interface for **AI-powered memory management**, search, and retrieval operations featuring sophisticated **MemoryAgent integration**. This comprehensive API enables developers to build enterprise-grade AI agents with advanced memory capabilities including classification, importance scoring, entity extraction, and relationship detection.
 
 ## Memori Class
 
-The main class that orchestrates all memory operations:
+The main class that orchestrates **AI-powered memory operations** using sophisticated **MemoryAgent integration**:
 
 ```typescript
 import { Memori } from 'memorits';
@@ -31,7 +31,7 @@ class Memori {
 constructor(config?: Partial<MemoriConfig>)
 ```
 
-Creates a new Memori instance with optional configuration.
+Creates a new Memori instance with optional configuration, leveraging **MemoryAgent architecture** for sophisticated AI-powered memory processing.
 
 **Parameters:**
 - `config` (optional): Partial configuration object
@@ -41,11 +41,10 @@ Creates a new Memori instance with optional configuration.
 const memori = new Memori({
   databaseUrl: 'sqlite:./memories.db',
   namespace: 'my-app',
-  apiKey: 'your-openai-api-key',
-  model: 'gpt-4o-mini',
-  autoIngest: true,
-  consciousIngest: false,
-  enableRelationshipExtraction: true
+  // MemoryAgent automatically processes conversations with:
+  // 🤖 AI-powered classification and importance scoring
+  // 🏷️ Advanced entity extraction and relationship detection
+  // 📊 Rich metadata generation and analytics
 });
 ```
 
@@ -76,7 +75,14 @@ async recordConversation(
 ): Promise<string>
 ```
 
-Records a conversation and processes it into memory based on the configured mode.
+Records a conversation and processes it into **AI-powered memory** using sophisticated **MemoryAgent analysis**.
+
+**MemoryAgent Processing:**
+- **🤖 AI-Powered Classification**: Automatically categorizes as 'essential', 'contextual', 'conversational', etc.
+- **⭐ Intelligent Importance Scoring**: AI determines 'critical', 'high', 'medium', or 'low' importance
+- **🏷️ Advanced Entity Extraction**: Identifies people, places, concepts, code elements, and technical terms
+- **🔗 Smart Relationship Detection**: Identifies connections to previous memories and conversations
+- **📊 Rich Metadata Generation**: Captures provider, model, timestamp, and contextual information
 
 **Parameters:**
 - `userInput`: The user's message/input
@@ -88,13 +94,20 @@ Records a conversation and processes it into memory based on the configured mode
 **Example:**
 ```typescript
 const chatId = await memori.recordConversation(
-  "What's the best sorting algorithm?",
-  "For most applications, I'd recommend quicksort...",
+  "I need help with React components and TypeScript interfaces for API integration",
+  "I'll help you create well-typed React components with proper TypeScript interfaces...",
   {
     model: 'gpt-4o-mini',
-    metadata: { topic: 'algorithms' }
+    metadata: { topic: 'frontend-development' }
   }
 );
+
+// MemoryAgent automatically processes the conversation:
+// 🤖 Classification: 'essential' (technical implementation discussion)
+// ⭐ Importance: 'high' (complex technical topic requiring focus)
+// 🏷️ Entities: ['React', 'TypeScript', 'API', 'components', 'interfaces']
+// 🔗 Relationships: Connected to previous frontend development discussions
+// 📊 Metadata: Provider info, model used, technical context captured
 ```
 
 ### searchMemories()
@@ -106,21 +119,37 @@ async searchMemories(
 ): Promise<MemorySearchResult[]>
 ```
 
-Searches through stored memories using advanced filtering and ranking.
+Searches through **AI-enhanced memories** using advanced filtering, ranking, and **MemoryAgent-powered analysis**.
+
+**Enhanced Search Capabilities:**
+- **🔍 Semantic Understanding**: AI-powered search across memory content and metadata
+- **🏷️ Entity-Based Filtering**: Search by extracted entities, concepts, and technical terms
+- **🔗 Relationship Traversal**: Follow memory connections and related conversations
+- **⭐ Importance-Aware Ranking**: Prioritize by AI-assessed importance levels
+- **📊 Rich Metadata Access**: Comprehensive context and analytics for each memory
 
 **Parameters:**
 - `query`: Search query string
 - `options` (optional): Search configuration options
 
-**Returns:** Array of matching memory results
+**Returns:** Array of matching memory results with **AI-enhanced metadata**
 
 **Example:**
 ```typescript
-const results = await memori.searchMemories('urgent meeting notes', {
+const results = await memori.searchMemories('React components API integration', {
   minImportance: 'high',
   categories: ['essential'],
   limit: 10,
   includeMetadata: true
+});
+
+// Each result includes AI-powered enhancements:
+results.forEach(result => {
+  console.log(`Category: ${result.classification.category} (${result.classification.confidence})`);
+  console.log(`Importance: ${result.classification.importance}`);
+  console.log(`Entities: ${result.entities.map(e => e.value).join(', ')}`);
+  console.log(`Relationships: ${result.relationships.length} connections`);
+  console.log(`Search relevance: ${result.metadata?.searchScore}`);
 });
 ```
 
@@ -144,18 +173,13 @@ await memori.close();
 ```typescript
 interface MemoriConfig {
   // Core functionality
-  autoIngest?: boolean;
-  consciousIngest?: boolean;
   namespace?: string;
   enableRelationshipExtraction?: boolean;
 
   // Database configuration
   databaseUrl?: string;
-  apiKey?: string;
-  model?: string;
-  baseUrl?: string;
 
-  // User context
+  // User context (for enhanced memory processing)
   userContext?: {
     userPreferences?: string[];
     currentProjects?: string[];
@@ -167,18 +191,16 @@ interface MemoriConfig {
 ### Configuration Options
 
 #### Core Functionality
-- `autoIngest` (boolean, default: true): Enable automatic memory processing
-- `consciousIngest` (boolean, default: false): Enable conscious/background processing
 - `namespace` (string, default: 'default'): Memory namespace for multi-tenancy
 
 #### Database Configuration
 - `databaseUrl` (string): Database connection URL (SQLite, PostgreSQL, etc.)
-- `apiKey` (string): OpenAI API key for memory processing
-- `model` (string, default: 'gpt-4o-mini'): Model for memory processing
-- `baseUrl` (string): Custom API base URL
 
 #### Relationship Extraction
 - `enableRelationshipExtraction` (boolean, default: true): Enable relationship extraction during memory processing
+
+#### LLM Provider Configuration
+LLM provider configuration (OpenAI, Anthropic, Ollama) now uses the `IProviderConfig` interface. See [Provider Documentation](../providers/) for configuration details.
 
 ## Search API
 
@@ -273,19 +295,33 @@ interface MemorySearchResult {
   id: string;
   content: string;
   summary: string;
-  classification: MemoryClassification;
-  importance: MemoryImportanceLevel;
+  classification: MemoryClassification;  // 🤖 AI-powered categorization
+  importance: MemoryImportanceLevel;     // ⭐ AI-assessed importance level
   topic?: string;
-  entities: string[];
+  entities: string[];                    // 🏷️ Extracted entities and concepts
   keywords: string[];
-  confidenceScore: number;
-  classificationReason: string;
+  confidenceScore: number;               // 📊 AI confidence in classification
+  classificationReason: string;          // 🤖 Explanation of AI classification
   metadata?: {
-    searchScore?: number;
-    searchStrategy?: string;
-    memoryType?: string;
-    category?: string;
-    importanceScore?: number;
+    searchScore?: number;                // 🔍 Relevance score from search
+    searchStrategy?: string;             // 🔍 Strategy used for this result
+    memoryType?: string;                 // 📋 Type of memory (chat, processed, etc.)
+    category?: string;                   // 📂 Memory category
+    importanceScore?: number;            // ⭐ Numeric importance score
+    // AI-enhanced metadata fields:
+    extractedEntities?: Array<{         // 🏷️ Detailed entity information
+      value: string;
+      type: 'person' | 'organization' | 'location' | 'technology' | 'concept' | 'code_element';
+      confidence: number;
+    }>;
+    relationships?: Array<{             // 🔗 Detected memory relationships
+      type: 'continuation' | 'reference' | 'related' | 'superseding' | 'contradiction';
+      targetMemoryId: string;
+      confidence: number;
+    }>;
+    processingTimestamp?: string;       // ⏰ When MemoryAgent processed this memory
+    provider?: string;                  // 🤖 LLM provider used
+    model?: string;                     // 🤖 Model that generated the content
   };
 }
 ```
@@ -484,19 +520,38 @@ detailedResults.forEach(result => {
 
 ## Integration Helper Functions
 
-### OpenAI Integration
+### OpenAI Integration with MemoryAgent
 
 ```typescript
-import { createMemoriOpenAI } from 'memorits';
+import { MemoriOpenAI } from 'memorits/integrations/openai-dropin';
 
-// Create OpenAI client with automatic memory recording
-const openaiClient = createMemoriOpenAI(memori, apiKey);
+// Create OpenAI client with AI-powered MemoryAgent processing using new IProviderConfig
+const openaiClient = new MemoriOpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto', // Leverages sophisticated MemoryAgent for AI analysis
+    sessionId: 'my-app'
+  }
+});
 
-// Use exactly like regular OpenAI client
+// Use exactly like regular OpenAI client - now with sophisticated memory processing!
 const response = await openaiClient.chat.completions.create({
   model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: 'Remember this...' }]
+  messages: [{ role: 'user', content: 'Remember this for later...' }]
 });
+
+// MemoryAgent automatically processes every conversation with:
+// 🤖 AI-Powered Classification: 'essential', 'contextual', etc.
+// ⭐ Intelligent Importance Scoring: 'critical', 'high', 'medium', 'low'
+// 🏷️ Advanced Entity Extraction: People, places, concepts, code elements
+// 🔗 Smart Relationship Detection: Connections to previous memories
+// 📊 Rich Metadata Generation: Provider, model, timestamp, context
+
+// Access enhanced memory with AI-powered search
+const memories = await openaiClient.memory.searchMemories('important information');
+console.log(`Found ${memories.length} AI-enhanced memories`);
 ```
 
 ### Configuration Management
@@ -514,6 +569,79 @@ const customConfig = ConfigManager.mergeConfig(config, {
 });
 ```
 
+## MemoryAgent Architecture Benefits
+
+### 🏗️ **Sophisticated MemoryAgent Architecture**
+
+The **MemoryAgent integration** delivers sophisticated AI-powered memory processing:
+
+#### **🚀 Unified Architecture**
+- **Single Implementation**: MemoryAgent implementation across all providers
+- **Unified Processing Pipeline**: Consistent behavior across OpenAI, Anthropic, Ollama
+
+#### **🧠 AI-Powered Memory Processing**
+- **LLM-Powered Classification**: Automatic categorization using AI analysis
+- **Intelligent Importance Scoring**: Dynamic importance assessment based on content
+- **Advanced Entity Extraction**: Automated extraction of key entities and concepts
+- **Smart Relationship Detection**: Identification of memory connections and dependencies
+- **Rich Metadata Generation**: Comprehensive context and analytics for every memory
+
+#### **🔧 Developer Experience**
+- **Sophisticated Memory Capabilities**: Enterprise-grade features in unified architecture
+- **Consistent Provider Behavior**: Identical memory processing across all LLM providers
+- **Rich Memory Analytics**: Deep insights into conversation patterns and knowledge extraction
+- **Extensible Architecture**: Design supports advanced memory features
+
+### 📊 **Memory Analytics & Insights**
+
+```typescript
+// Access comprehensive memory analytics
+const analytics = await memori.getMemoryAnalytics({
+  timeRange: { start: '2024-01-01', end: '2024-12-31' },
+  sessionId: 'my-app'
+});
+
+console.log(`Total memories processed: ${analytics.totalMemories}`);
+console.log(`By importance:`, analytics.byImportance);
+// {
+//   critical: 12,    // 🔥 Mission-critical information
+//   high: 45,        // 📈 Important technical decisions
+//   medium: 123,     // 📝 Educational content and examples
+//   low: 234         // 💬 Casual conversation and greetings
+// }
+
+console.log(`Top entities:`, analytics.topEntities);
+// [
+//   { value: 'React', count: 45, type: 'technology' },
+//   { value: 'TypeScript', count: 38, type: 'technology' },
+//   { value: 'API', count: 29, type: 'concept' }
+// ]
+
+console.log(`Memory relationships: ${analytics.relationshipStats.totalConnections}`);
+```
+
+### 🏷️ **Entity Extraction & Relationship Mapping**
+
+```typescript
+// Search results now include rich entity and relationship data
+const results = await memori.searchMemories('React components', {
+  includeMetadata: true,
+  includeRelatedMemories: true
+});
+
+results.forEach(result => {
+  // Access extracted entities with confidence scores
+  result.metadata?.extractedEntities?.forEach(entity => {
+    console.log(`${entity.value} (${entity.type}): ${entity.confidence}`);
+  });
+
+  // Explore memory relationships
+  result.metadata?.relationships?.forEach(rel => {
+    console.log(`${rel.type} → ${rel.targetMemoryId} (${rel.confidence})`);
+  });
+});
+```
+
 ## Best Practices
 
 ### 1. Configuration Setup
@@ -523,12 +651,11 @@ const customConfig = ConfigManager.mergeConfig(config, {
 const productionConfig = {
   databaseUrl: process.env.DATABASE_URL || 'sqlite:./memories.db',
   namespace: process.env.MEMORI_NAMESPACE || 'default',
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4o-mini',
-  autoIngest: true,
-  consciousIngest: false,
   enableRelationshipExtraction: true
 };
+
+// Note: LLM provider configuration now uses IProviderConfig format
+// See provider documentation for OpenAI, Anthropic, or Ollama setup
 ```
 
 ### 2. Error Handling

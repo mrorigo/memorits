@@ -51,8 +51,8 @@ export class ChatProxy implements ChatProxyInterface {
       // Call the actual OpenAI API
       const response = await this.openaiChat.completions.create(params, options);
 
-      // Record memory if enabled and memory recording is configured
-      if (this.enabled && this.shouldRecordMemory(params)) {
+      // Record memory if enabled - MemoryAgent now handles all sophisticated processing
+      if (this.enabled) {
         try {
           const recordingResult = await this.memoryManager.recordChatCompletion(
             params,
@@ -63,17 +63,19 @@ export class ChatProxy implements ChatProxyInterface {
             },
           );
 
-          logInfo('Memory recording completed', {
+          logInfo('MemoryAgent processing completed', {
             component: 'ChatProxy',
             requestId,
             chatId: recordingResult.chatId,
             wasStreaming: recordingResult.wasStreaming,
             duration: recordingResult.duration,
             success: recordingResult.success,
+            classification: recordingResult.classification,
+            importance: recordingResult.importance,
           });
         } catch (memoryError) {
-          // Memory recording failures should not break the main functionality
-          logError('Memory recording failed, but chat completion succeeded', {
+          // MemoryAgent processing failures should not break the main functionality
+          logError('MemoryAgent processing failed, but chat completion succeeded', {
             component: 'ChatProxy',
             requestId,
             error: memoryError instanceof Error ? memoryError.message : String(memoryError),
@@ -82,10 +84,9 @@ export class ChatProxy implements ChatProxyInterface {
           });
         }
       } else {
-        logInfo('Memory recording skipped', {
+        logInfo('MemoryAgent processing skipped - ChatProxy disabled', {
           component: 'ChatProxy',
           requestId,
-          reason: this.enabled ? 'Memory recording disabled for this request' : 'ChatProxy disabled',
         });
       }
 
@@ -113,73 +114,6 @@ export class ChatProxy implements ChatProxyInterface {
     }
   }
 
-  /**
-   * Determine if memory should be recorded for this request
-   */
-  private shouldRecordMemory(params: ChatCompletionCreateParams): boolean {
-    // Don't record memory for requests with empty messages
-    if (!params.messages || params.messages.length === 0) {
-      return false;
-    }
-
-    // Don't record memory for system-only conversations (no user messages)
-    const hasUserMessage = params.messages.some(msg => msg.role === 'user');
-    if (!hasUserMessage) {
-      return false;
-    }
-
-    // Don't record memory for very short messages (likely test/debug messages)
-    const userContent = this.extractUserContent(params.messages);
-    if (userContent.length < 10) {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * Extract user content from messages array
-   */
-  private extractUserContent(messages: ChatCompletionMessageParam[]): string {
-    const lastUserMessage = messages
-      .slice()
-      .reverse()
-      .find(msg => msg.role === 'user');
-
-    if (!lastUserMessage || !lastUserMessage.content) {
-      return '';
-    }
-
-    if (typeof lastUserMessage.content === 'string') {
-      return lastUserMessage.content;
-    }
-
-    // Handle array of content blocks with proper type safety
-    return lastUserMessage.content
-      .map(block => this.extractTextFromContentBlock(block))
-      .join(' ');
-  }
-
-  /**
-   * Safely extract text from a content block using proper OpenAI SDK types
-   */
-  private extractTextFromContentBlock(block: unknown): string {
-    // Handle string content blocks
-    if (typeof block === 'string') {
-      return block;
-    }
-
-    // Handle content part objects with proper type checking
-    if (block && typeof block === 'object' && 'type' in block && 'text' in block) {
-      const contentPart = block as OpenAI.ChatCompletionContentPart;
-      if (contentPart.type === 'text' && typeof contentPart.text === 'string') {
-        return contentPart.text;
-      }
-    }
-
-    // Fallback for unknown content types
-    return '';
-  }
 
   /**
    * Update chat proxy enabled state

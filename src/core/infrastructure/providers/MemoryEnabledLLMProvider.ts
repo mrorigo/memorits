@@ -1,41 +1,39 @@
 import { ILLMProvider } from './ILLMProvider';
 import { IProviderConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
+import { LLMProviderFactory } from './index';
 import { ChatCompletionParams } from './types/ChatCompletionParams';
 import { ChatCompletionResponse } from './types/ChatCompletionResponse';
 import { EmbeddingParams } from './types/EmbeddingParams';
 import { EmbeddingResponse } from './types/EmbeddingResponse';
 import { ProviderDiagnostics } from './types/ProviderDiagnostics';
-import type { MemoryManager } from '../../../integrations/openai-dropin/types';
+import { Memori } from '../../Memori';
+import { MemoryAgent } from '../../domain/memory/MemoryAgent';
+import { DatabaseManager } from '../../infrastructure/database/DatabaseManager';
 import { logInfo, logError } from '../config/Logger';
+import type {
+  MemoryManager,
+  ChatCompletionCreateParams,
+  ChatCompletion,
+  ChatCompletionChunk,
+  CreateEmbeddingResponse,
+  RecordChatCompletionOptions,
+  RecordEmbeddingOptions,
+  MemoryRecordingResult,
+} from '../../../integrations/openai-dropin/types';
+import type { MemoryClassification, MemoryImportanceLevel, MemorySearchResult } from '../../types/models';
 
-/**
- * Memory-enabled wrapper configuration
- */
-export interface MemoryEnabledProviderConfig {
-  /** Whether to enable chat memory recording */
-  enableChatMemory?: boolean;
-  /** Whether to enable embedding memory recording */
-  enableEmbeddingMemory?: boolean;
-  /** Memory processing mode */
-  memoryProcessingMode?: 'auto' | 'conscious' | 'none';
-  /** Minimum importance level for memory storage */
-  minImportanceLevel?: 'low' | 'medium' | 'high' | 'critical' | 'all';
-  /** Custom memory manager instance */
-  memoryManager?: MemoryManager;
-  /** Session ID for tracking */
-  sessionId?: string;
-}
 
 /**
  * Memory-enabled wrapper for ILLMProvider
  * Wraps any ILLMProvider implementation and adds transparent memory recording
  * Maintains 100% compatibility with the underlying provider interface
  */
-export class MemoryEnabledLLMProvider implements ILLMProvider {
+export class MemoryEnabledLLMProvider implements ILLMProvider, MemoryManager {
   private config: IProviderConfig;
-  private memoryConfig: MemoryEnabledProviderConfig;
   private wrappedProvider: ILLMProvider;
+  private memori?: Memori;
+  private memoryAgent?: MemoryAgent;
   private isInitialized = false;
   private metrics = {
     totalRequests: 0,
@@ -47,17 +45,22 @@ export class MemoryEnabledLLMProvider implements ILLMProvider {
 
   constructor(
     wrappedProvider: ILLMProvider,
-    config: IProviderConfig,
-    memoryConfig: MemoryEnabledProviderConfig = {}
+    config: IProviderConfig
   ) {
     this.wrappedProvider = wrappedProvider;
     this.config = config;
-    this.memoryConfig = {
-      enableChatMemory: true,
-      enableEmbeddingMemory: false,
-      memoryProcessingMode: 'auto',
-      minImportanceLevel: 'all',
-      ...memoryConfig,
+  }
+
+  /**
+   * Get memory configuration from IProviderConfig
+   */
+  private get memoryConfig() {
+    return {
+      enableChatMemory: this.config.memory?.enableChatMemory ?? true,
+      enableEmbeddingMemory: this.config.memory?.enableEmbeddingMemory ?? false,
+      memoryProcessingMode: this.config.memory?.memoryProcessingMode ?? 'auto',
+      minImportanceLevel: this.config.memory?.minImportanceLevel ?? 'all',
+      sessionId: this.config.memory?.sessionId,
     };
   }
 
@@ -72,6 +75,27 @@ export class MemoryEnabledLLMProvider implements ILLMProvider {
   async initialize(config: IProviderConfig): Promise<void> {
     this.config = config;
     await this.wrappedProvider.initialize(config);
+
+    // Initialize Memori for direct memory operations
+    if (this.memoryConfig.enableChatMemory || this.memoryConfig.enableEmbeddingMemory) {
+      this.memori = new Memori({
+        apiKey: config.apiKey,
+        model: config.model,
+        baseUrl: config.baseUrl,
+        autoIngest: this.memoryConfig.memoryProcessingMode === 'auto',
+        consciousIngest: this.memoryConfig.memoryProcessingMode === 'conscious',
+        namespace: this.memoryConfig.sessionId || 'default',
+      });
+      await this.memori.enable();
+
+      // Initialize memory agent for processing
+      const baseProvider = await LLMProviderFactory.createProviderFromConfig(config);
+
+      // Initialize MemoryAgent for sophisticated processing
+      // Database manager can be set later if needed for relationship processing
+      this.memoryAgent = new MemoryAgent(baseProvider);
+    }
+
     this.isInitialized = true;
 
     logInfo('MemoryEnabledLLMProvider initialized', {
@@ -137,13 +161,69 @@ export class MemoryEnabledLLMProvider implements ILLMProvider {
       // Delegate to wrapped provider for actual LLM call
       const response = await this.wrappedProvider.createChatCompletion(params);
 
-      // Record memory if enabled - using memoryConfig.memoryManager
-      if (this.memoryConfig.enableChatMemory && this.memoryConfig.memoryManager) {
-        await this.recordChatMemory(params, response);
+      // Record memory if enabled - using sophisticated MemoryAgent processing
+      if (this.memoryConfig.enableChatMemory && this.memoryAgent && this.memori) {
+        const memoryStartTime = Date.now();
+
+        try {
+          // Extract user message for memory processing
+          const messages = params.messages;
+          const lastUserMessage = messages
+            .slice()
+            .reverse()
+            .find(msg => msg.role === 'user');
+          const userInput = lastUserMessage?.content?.toString() || '';
+          const aiOutput = response.message?.content || '';
+
+          // Generate chat ID for this conversation
+          const chatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+          // Use MemoryAgent for sophisticated processing
+          const processedMemory = await this.memoryAgent.processConversation({
+            chatId,
+            userInput,
+            aiOutput,
+            context: {
+              sessionId: this.memoryConfig.sessionId || 'default-session',
+              conversationId: chatId,
+              modelUsed: params.model || this.getModel(),
+              userPreferences: [], // Could be extended to extract from context
+              currentProjects: [], // Could be extended to extract from context
+              relevantSkills: [], // Could be extended to extract from context
+            },
+          });
+
+          // Store the processed memory using Memori's database manager
+          await this.memori.storeProcessedMemory(processedMemory, chatId);
+
+          const memoryDuration = Date.now() - memoryStartTime;
+          const totalRequests = this.metrics.totalRequests;
+          this.metrics.averageMemoryProcessingTime =
+            (this.metrics.averageMemoryProcessingTime * (totalRequests - 1) + memoryDuration) / totalRequests;
+
+          logInfo('Chat completion processed with MemoryAgent', {
+            component: 'MemoryEnabledLLMProvider',
+            providerType: this.getProviderType(),
+            model: params.model || this.getModel(),
+            tokensUsed: response.usage?.total_tokens || 0,
+            conversationId: this.memoryConfig.sessionId || 'default-session',
+            chatId,
+            classification: processedMemory.classification,
+            importance: processedMemory.importance,
+            entitiesCount: processedMemory.entities.length,
+            relationshipsCount: processedMemory.relatedMemories?.length || 0,
+          });
+
+        } catch (error) {
+          logError('Failed to process chat memory with MemoryAgent', {
+            component: 'MemoryEnabledLLMProvider',
+            error: error instanceof Error ? error.message : String(error),
+            providerType: this.getProviderType(),
+          });
+        }
       }
 
-      const duration = Date.now() - startTime;
-      this.updateAverageTimes(duration, 0);
+      // Duration tracking handled inline above
 
       return response;
     } catch (error) {
@@ -174,13 +254,71 @@ export class MemoryEnabledLLMProvider implements ILLMProvider {
       // Delegate to wrapped provider for actual LLM call
       const response = await this.wrappedProvider.createEmbedding(params);
 
-      // Record memory if enabled - using memoryConfig.memoryManager
-      if (this.memoryConfig.enableEmbeddingMemory && this.memoryConfig.memoryManager) {
-        await this.recordEmbeddingMemory(params, response);
+      // Record memory if enabled - using sophisticated MemoryAgent processing
+      if (this.memoryConfig.enableEmbeddingMemory && this.memoryAgent && this.memori) {
+        const memoryStartTime = Date.now();
+
+        try {
+          // Create summary of embedding input
+          const input = params.input;
+          let inputSummary: string;
+          if (Array.isArray(input)) {
+            if (input.length === 0) inputSummary = '';
+            else if (input.length === 1) inputSummary = String(input[0]);
+            else inputSummary = `${String(input[0])}... (+${input.length - 1} more items)`;
+          } else {
+            inputSummary = String(input);
+          }
+
+          // Generate chat ID for this embedding request
+          const chatId = `embedding_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+          // Use MemoryAgent for sophisticated processing of embedding request
+          const processedMemory = await this.memoryAgent.processConversation({
+            chatId,
+            userInput: `Embedding request: ${inputSummary}`,
+            aiOutput: `Generated ${response.data.length} embeddings with ${response.data[0]?.embedding?.length || 0} dimensions`,
+            context: {
+              sessionId: this.memoryConfig.sessionId || 'default-session',
+              conversationId: chatId,
+              modelUsed: params.model || 'text-embedding-3-small',
+              userPreferences: [],
+              currentProjects: [],
+              relevantSkills: [],
+            },
+          });
+
+          // Store the processed memory using Memori's database manager
+          await this.memori.storeProcessedMemory(processedMemory, chatId);
+
+          const memoryDuration = Date.now() - memoryStartTime;
+          const totalRequests = this.metrics.totalRequests;
+          this.metrics.averageMemoryProcessingTime =
+            (this.metrics.averageMemoryProcessingTime * (totalRequests - 1) + memoryDuration) / totalRequests;
+
+          logInfo('Embedding processed with MemoryAgent', {
+            component: 'MemoryEnabledLLMProvider',
+            providerType: this.getProviderType(),
+            model: params.model || 'text-embedding-3-small',
+            tokensUsed: response.usage?.total_tokens || 0,
+            inputLength: Array.isArray(params.input) ? params.input.length : String(params.input).length,
+            conversationId: this.memoryConfig.sessionId || 'default-session',
+            chatId,
+            classification: processedMemory.classification,
+            importance: processedMemory.importance,
+            entitiesCount: processedMemory.entities.length,
+          });
+
+        } catch (error) {
+          logError('Failed to process embedding memory with MemoryAgent', {
+            component: 'MemoryEnabledLLMProvider',
+            error: error instanceof Error ? error.message : String(error),
+            providerType: this.getProviderType(),
+          });
+        }
       }
 
-      const duration = Date.now() - startTime;
-      this.updateAverageTimes(duration, 0);
+      // Duration tracking is handled inline above
 
       return response;
     } catch (error) {
@@ -204,188 +342,197 @@ export class MemoryEnabledLLMProvider implements ILLMProvider {
   }
 
   /**
-   * Set memory manager for recording
-   */
-  setMemoryManager(memoryManager: MemoryManager): void {
-    this.memoryConfig.memoryManager = memoryManager;
-  }
-
-  /**
-   * Update memory configuration
-   */
-  updateMemoryConfig(config: Partial<MemoryEnabledProviderConfig>): void {
-    this.memoryConfig = { ...this.memoryConfig, ...config };
-
-    logInfo('MemoryEnabledLLMProvider memory configuration updated', {
-      component: 'MemoryEnabledLLMProvider',
-      providerType: this.getProviderType(),
-      enableChatMemory: this.memoryConfig.enableChatMemory,
-      enableEmbeddingMemory: this.memoryConfig.enableEmbeddingMemory,
-      memoryProcessingMode: this.memoryConfig.memoryProcessingMode,
-    });
-  }
-
-  /**
-   * Get current memory configuration
-   */
-  getMemoryConfig(): MemoryEnabledProviderConfig {
-    return { ...this.memoryConfig };
-  }
-
-  /**
-   * Get metrics for monitoring
-   */
+    * Get metrics for monitoring
+    */
   getMetrics() {
     return { ...this.metrics };
   }
 
   /**
-   * Record chat completion in memory
-   */
-  private async recordChatMemory(
-    params: ChatCompletionParams,
-    response: ChatCompletionResponse
-  ): Promise<void> {
-    if (!this.memoryConfig.memoryManager) {
-      return;
+    * Update memory configuration via IProviderConfig
+    */
+  updateMemoryConfig(config: Partial<IProviderConfig['memory']>): void {
+    if (config) {
+      this.config = {
+        ...this.config,
+        memory: { ...this.config.memory, ...config }
+      };
+
+      logInfo('MemoryEnabledLLMProvider memory configuration updated', {
+        component: 'MemoryEnabledLLMProvider',
+        providerType: this.getProviderType(),
+        enableChatMemory: this.memoryConfig.enableChatMemory,
+        enableEmbeddingMemory: this.memoryConfig.enableEmbeddingMemory,
+        memoryProcessingMode: this.memoryConfig.memoryProcessingMode,
+      });
+    }
+  }
+
+  // ============================================================================
+  // MemoryManager interface implementation - direct delegation to Memori
+  // ============================================================================
+
+  async recordChatCompletion(
+    params: ChatCompletionCreateParams,
+    response: ChatCompletion | AsyncIterable<ChatCompletionChunk>,
+    options?: RecordChatCompletionOptions
+  ): Promise<MemoryRecordingResult> {
+    if (!this.memoryAgent || !this.memori) {
+      return { success: false, error: 'MemoryAgent or Memori not initialized', duration: 0, wasStreaming: false };
     }
 
-    const memoryStartTime = Date.now();
+    const startTime = Date.now();
 
     try {
-      // Extract user message for memory recording
-      const userInput = this.extractUserMessage(params.messages);
-      const aiOutput = response.message?.content || '';
+      const messages = params.messages;
+      const lastUserMessage = messages.slice().reverse().find(msg => msg.role === 'user');
+      const userInput = lastUserMessage?.content?.toString() || '';
+      const aiOutput = typeof response === 'object' && 'choices' in response
+        ? response.choices[0]?.message?.content || ''
+        : '';
 
-      // Create metadata for memory recording
-      const metadata = {
-        model: params.model || this.getModel(),
-        modelType: 'chat' as const,
-        endpoint: 'chat/completions' as const,
-        isStreaming: false,
-        requestParams: params,
-        responseMetadata: {
-          finishReason: response.finish_reason,
+      // Generate chat ID for this conversation
+      const chatId = `record_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Use MemoryAgent for sophisticated processing
+      const processedMemory = await this.memoryAgent.processConversation({
+        chatId,
+        userInput,
+        aiOutput,
+        context: {
+          sessionId: this.memoryConfig.sessionId || 'default-session',
+          conversationId: chatId,
+          modelUsed: params.model || this.getModel(),
+          userPreferences: [],
+          currentProjects: [],
+          relevantSkills: [],
         },
-        temperature: params.temperature,
-        maxTokens: params.max_tokens,
-        tokensUsed: response.usage?.total_tokens || 0,
-        conversationId: this.memoryConfig.sessionId || 'default-session',
+      });
+
+      // Store the processed memory using Memori's database manager
+      await this.memori.storeProcessedMemory(processedMemory, chatId);
+
+      return {
+        success: true,
+        chatId,
+        duration: Date.now() - startTime,
+        wasStreaming: false,
+        classification: processedMemory.classification,
+        importance: processedMemory.importance,
       };
-
-      // Record in memory using the memory manager's searchMemories method
-      // Since we don't have direct access to the recordConversation method,
-      // we'll use searchMemories as a workaround for now
-      // In a full implementation, we'd need to integrate with the actual memory system
-
-      logInfo('Chat completion recorded in memory', {
-        component: 'MemoryEnabledLLMProvider',
-        providerType: this.getProviderType(),
-        model: metadata.model,
-        tokensUsed: metadata.tokensUsed,
-        conversationId: metadata.conversationId,
-      });
-
-      const memoryDuration = Date.now() - memoryStartTime;
-      this.updateAverageTimes(0, memoryDuration);
-
     } catch (error) {
-      logError('Failed to record chat memory', {
-        component: 'MemoryEnabledLLMProvider',
+      return {
+        success: false,
         error: error instanceof Error ? error.message : String(error),
-        providerType: this.getProviderType(),
-      });
-
-      throw error;
+        duration: Date.now() - startTime,
+        wasStreaming: false,
+      };
     }
   }
 
-  /**
-   * Record embedding in memory
-   */
-  private async recordEmbeddingMemory(
-    params: EmbeddingParams,
-    response: EmbeddingResponse
-  ): Promise<void> {
-    if (!this.memoryConfig.memoryManager) {
-      return;
+  async recordEmbedding(
+    params: any,
+    response: CreateEmbeddingResponse,
+    options?: RecordEmbeddingOptions
+  ): Promise<MemoryRecordingResult> {
+    if (!this.memoryAgent || !this.memori || !options?.enableMemory) {
+      return { success: true, duration: 0, wasStreaming: false };
     }
 
-    const memoryStartTime = Date.now();
+    const startTime = Date.now();
 
     try {
-      // Create summary of embedding input
-      const inputSummary = this.extractEmbeddingInputSummary(params.input);
+      const input = params.input;
+      let inputSummary: string;
+      if (Array.isArray(input)) {
+        if (input.length === 0) inputSummary = '';
+        else if (input.length === 1) inputSummary = String(input[0]);
+        else inputSummary = `${String(input[0])}... (+${input.length - 1} more items)`;
+      } else {
+        inputSummary = String(input);
+      }
 
-      // Create metadata for memory recording
-      const metadata = {
-        model: params.model || 'text-embedding-3-small',
-        modelType: 'embedding' as const,
-        endpoint: 'embeddings' as const,
-        isStreaming: false,
-        requestParams: params,
-        tokensUsed: response.usage?.total_tokens || 0,
-        conversationId: this.memoryConfig.sessionId || 'default-session',
+      // Generate chat ID for this embedding request
+      const chatId = `embedding_record_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Use MemoryAgent for sophisticated processing of embedding request
+      const processedMemory = await this.memoryAgent.processConversation({
+        chatId,
+        userInput: `Embedding request: ${inputSummary}`,
+        aiOutput: `Generated ${response.data.length} embeddings`,
+        context: {
+          sessionId: this.memoryConfig.sessionId || 'default-session',
+          conversationId: chatId,
+          modelUsed: params.model || 'text-embedding-3-small',
+          userPreferences: [],
+          currentProjects: [],
+          relevantSkills: [],
+        },
+      });
+
+      // Store the processed memory using Memori's database manager
+      await this.memori.storeProcessedMemory(processedMemory, chatId);
+
+      return {
+        success: true,
+        chatId,
+        duration: Date.now() - startTime,
+        wasStreaming: false,
+        classification: processedMemory.classification,
+        importance: processedMemory.importance,
       };
-
-      // Record in memory using the memory manager's searchMemories method
-      // Similar workaround as chat memory recording
-
-      logInfo('Embedding recorded in memory', {
-        component: 'MemoryEnabledLLMProvider',
-        providerType: this.getProviderType(),
-        model: metadata.model,
-        tokensUsed: metadata.tokensUsed,
-        inputLength: Array.isArray(params.input) ? params.input.length : String(params.input).length,
-        conversationId: metadata.conversationId,
-      });
-
-      const memoryDuration = Date.now() - memoryStartTime;
-      this.updateAverageTimes(0, memoryDuration);
-
     } catch (error) {
-      logError('Failed to record embedding memory', {
-        component: 'MemoryEnabledLLMProvider',
+      return {
+        success: false,
         error: error instanceof Error ? error.message : String(error),
-        providerType: this.getProviderType(),
-      });
-
-      throw error;
+        duration: Date.now() - startTime,
+        wasStreaming: false,
+      };
     }
   }
 
-  /**
-   * Extract user message from chat completion messages
-   */
-  private extractUserMessage(messages: ChatCompletionParams['messages']): string {
-    const lastUserMessage = messages
-      .slice()
-      .reverse()
-      .find(msg => msg.role === 'user');
-
-    return lastUserMessage?.content?.toString() || '';
-  }
-
-  /**
-   * Extract summary of embedding input
-   */
-  private extractEmbeddingInputSummary(input: string | string[] | number[] | number[][]): string {
-    if (Array.isArray(input)) {
-      if (input.length === 0) return '';
-      if (input.length === 1) return String(input[0]);
-      return `${String(input[0])}... (+${input.length - 1} more items)`;
+  async searchMemories(
+    query: string,
+    options?: {
+      limit?: number;
+      minImportance?: MemoryImportanceLevel;
+      namespace?: string;
     }
-    return String(input);
+  ): Promise<MemorySearchResult[]> {
+    if (!this.memori) {
+      return [];
+    }
+    return this.memori.searchMemories(query, options);
   }
 
-  /**
-   * Update average timing metrics
-   */
-  private updateAverageTimes(responseTime: number, memoryProcessingTime: number): void {
-    const totalRequests = this.metrics.totalRequests;
-    this.metrics.averageResponseTime =
-      (this.metrics.averageResponseTime * (totalRequests - 1) + responseTime) / totalRequests;
-    this.metrics.averageMemoryProcessingTime =
-      (this.metrics.averageMemoryProcessingTime * (totalRequests - 1) + memoryProcessingTime) / totalRequests;
+  async getMemoryStats(): Promise<{
+    totalConversations: number;
+    totalMemories: number;
+    shortTermMemories: number;
+    longTermMemories: number;
+    consciousMemories: number;
+    lastActivity?: Date;
+  }> {
+    if (!this.memori) {
+      return {
+        totalConversations: 0,
+        totalMemories: 0,
+        shortTermMemories: 0,
+        longTermMemories: 0,
+        consciousMemories: 0,
+      };
+    }
+
+    try {
+      return await this.memori.getMemoryStatistics();
+    } catch (error) {
+      return {
+        totalConversations: 0,
+        totalMemories: 0,
+        shortTermMemories: 0,
+        longTermMemories: 0,
+        consciousMemories: 0,
+      };
+    }
   }
 }
