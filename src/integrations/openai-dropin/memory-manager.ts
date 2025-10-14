@@ -34,7 +34,6 @@ import type {
   ConversationContext,
 } from '../../core/types/models';
 
-// Import these as values, not types
 import {
   MemoryError,
   MemoryErrorType,

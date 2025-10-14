@@ -2,29 +2,16 @@ import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { Memori } from '../../core/Memori';
 import { MemoryAgent } from '../../core/domain/memory/MemoryAgent';
-import { OpenAIProvider } from '../../core/infrastructure/providers/OpenAIProvider';
-import { MemoryEnabledLLMProvider } from '../../core/infrastructure/providers/MemoryEnabledLLMProvider';
-import { ConfigManager, MemoriConfig } from '../../core/infrastructure/config/ConfigManager';
+import { OpenAIProvider, MemoryEnabledLLMProvider, LLMProviderFactory, ProviderType, IProviderConfig } from '../../core/infrastructure/providers/';
 import { logInfo, logError } from '../../core/infrastructure/config/Logger';
 import { OpenAIMemoryManager } from './memory-manager';
-import { ChatProxy } from './chat-proxy';
-import { EmbeddingProxy } from './embedding-proxy';
 import { ConfigUtils } from './utils/ConfigUtils';
 import type {
   MemoriOpenAI,
   MemoriOpenAIConfig,
   MemoryManager,
-  MemoryRecordingResult,
-  ChatCompletion,
-  ChatCompletionChunk,
   ChatCompletionCreateParams,
   EmbeddingCreateParams,
-  CreateEmbeddingResponse,
-  RecordChatCompletionOptions,
-  RecordEmbeddingOptions,
-  OpenAIMemoryMetadata,
-  StreamingMetadata,
-  BufferedStream,
   OpenAIMetrics,
   DatabaseConfig,
 } from './types';
@@ -66,6 +53,49 @@ function validateAndMergeConfig(
  */
 function createDatabaseConfig(config: MemoriOpenAIConfig): DatabaseConfig {
   return ConfigUtils.DatabaseConfigBuilder.fromConfig(config);
+}
+
+/**
+ * Maps MemoriOpenAIConfig to IProviderConfig for the provider architecture
+ */
+function mapToProviderConfig(config: MemoriOpenAIConfig): IProviderConfig {
+  return {
+    apiKey: config.apiKey!,
+    model: config.model || 'gpt-4o-mini',
+    baseUrl: config.baseUrl,
+    options: {
+      organization: config.organization,
+      project: config.project,
+      timeout: config.timeout,
+      maxRetries: config.maxRetries,
+      defaultHeaders: config.defaultHeaders,
+    },
+  };
+}
+
+/**
+ * Determines the provider type from configuration
+ */
+function getProviderType(config: MemoriOpenAIConfig): ProviderType {
+  // Check API key patterns to determine provider
+  if (config.apiKey === 'ollama-local') {
+    return ProviderType.OLLAMA;
+  }
+
+  if (config.baseUrl?.includes('ollama') || config.baseUrl?.includes('11434')) {
+    return ProviderType.OLLAMA;
+  }
+
+  if (config.providerType === 'ollama') {
+    return ProviderType.OLLAMA;
+  }
+
+  if (config.providerType === 'anthropic') {
+    return ProviderType.ANTHROPIC;
+  }
+
+  // Default to OpenAI
+  return ProviderType.OPENAI;
 }
 
 
@@ -132,17 +162,17 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
       namespace: this.config.namespace || 'memori-openai',
       apiKey: this.config.apiKey,
       baseUrl: this.config.baseUrl,
-      model: 'gpt-4o-mini', // Default model for memory processing
+      model: this.config.model || 'gpt-4o-mini', // Use configured model for memory processing
       autoIngest: this.config.autoIngest,
       consciousIngest: this.config.consciousIngest,
     });
 
-    // Create OpenAI provider for memory agent (core provider without memory)
-    const coreProvider = new OpenAIProvider({
-      apiKey: this.config.apiKey!,
-      model: 'gpt-4o-mini',
-      baseUrl: this.config.baseUrl,
-    });
+    // Create provider configuration for the provider architecture
+    const providerConfig = mapToProviderConfig(this.config);
+    const providerType = getProviderType(this.config);
+
+    // Create provider instance using configuration (maintaining backward compatibility)
+    const coreProvider = new OpenAIProvider(providerConfig);
 
     // Create memory agent with core provider
     const memoryAgent = new MemoryAgent(coreProvider);
@@ -150,14 +180,10 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
     // Initialize memory manager with proper architecture
     this.memoryManager = new OpenAIMemoryManager(this.memori, memoryAgent);
 
-    // Create memory-enabled provider for external usage (synchronous initialization)
+    // Create memory-enabled provider for external usage using the configured provider
     this.memoryEnabledProvider = new MemoryEnabledLLMProvider(
       coreProvider,
-      {
-        apiKey: this.config.apiKey!,
-        model: 'gpt-4o-mini', // Use default model since config doesn't have model property
-        baseUrl: this.config.baseUrl,
-      },
+      providerConfig, // Use the same provider config
       {
         enableChatMemory: this.config.enableChatMemory ?? true,
         enableEmbeddingMemory: this.config.enableEmbeddingMemory ?? false,
@@ -207,7 +233,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
         create: async (params: ChatCompletionCreateParams, options?: OpenAI.RequestOptions) => {
           // Use memory-enabled provider for chat completions
           const response = await this.memoryEnabledProvider.createChatCompletion({
-            model: params.model || 'gpt-4o-mini',
+            model: params.model || this.memoryEnabledProvider.getModel(),
             messages: params.messages as any,
             temperature: params.temperature ?? undefined,
             max_tokens: params.max_tokens ?? undefined,
@@ -227,7 +253,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
               id: response.id || 'memori-generated-id',
               object: 'chat.completion',
               created: response.created || Date.now(),
-              model: response.model || params.model || 'gpt-4o-mini',
+              model: response.model || params.model || this.memoryEnabledProvider.getModel(),
               choices: [{
                 index: 0,
                 message: {
@@ -249,7 +275,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
             id: response.id || 'memori-generated-id',
             object: 'chat.completion',
             created: response.created || Date.now(),
-            model: response.model || params.model || 'gpt-4o-mini',
+            model: response.model || params.model || this.memoryEnabledProvider.getModel(),
             choices: [{
               index: 0,
               message: {
@@ -286,7 +312,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
           : String(params.input);
 
         const response = await this.memoryEnabledProvider.createEmbedding({
-          model: params.model || 'text-embedding-3-small',
+          model: params.model || this.config.embeddingModel || 'text-embedding-3-small',
           input: input,
           encoding_format: params.encoding_format,
           dimensions: params.dimensions,
@@ -302,7 +328,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
             embedding: item.embedding,
             index: item.index ?? index,
           })) as OpenAI.Embedding[],
-          model: response.model || params.model || 'text-embedding-3-small',
+          model: response.model || params.model || this.config.embeddingModel || 'text-embedding-3-small',
           usage: response.usage ? {
             prompt_tokens: response.usage.prompt_tokens || 0,
             total_tokens: response.usage.total_tokens || 0,

@@ -2,6 +2,27 @@
 // Core exports (backward compatibility)
 export { Memori } from './core/Memori';
 export { ConfigManager } from './core/infrastructure/config/ConfigManager';
+
+// Search Strategy enum and types for public API access
+export { SearchStrategy } from './core/domain/search/types';
+
+// Core type exports for enhanced API access
+export type {
+  MemorySearchResult,
+  RecordConversationOptions,
+  SearchOptions,
+  TemporalFilterOptions,
+  DatabaseStats,
+  TimeRange,
+  SortOption,
+  MetadataFilterOptions,
+  MemoriConfig,
+} from './core/types/models';
+
+// Performance monitoring exports for enterprise monitoring
+export { PerformanceDashboardService } from './core/performance/PerformanceDashboard';
+export { PerformanceAnalyticsService } from './core/performance/PerformanceAnalyticsService';
+
 // createMemoriOpenAI from old integration - DEPRECATED: Use MemoriOpenAIClient factory functions instead
 export { ProcessedLongTermMemorySchema } from './core/types/schemas';
 

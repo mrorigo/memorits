@@ -205,6 +205,14 @@ export interface MemoriOpenAIConfig {
   /** Memory processing mode */
   memoryProcessingMode?: MemoryProcessingMode;
 
+  // Model configuration
+  /** Model for chat completions */
+  model?: string;
+  /** Model for embeddings */
+  embeddingModel?: string;
+  /** Provider type to use */
+  providerType?: 'openai' | 'ollama' | 'anthropic';
+
   // Initialization
   /** Auto-create Memori instance */
   autoInitialize?: boolean;

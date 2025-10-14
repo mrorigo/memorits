@@ -69,17 +69,22 @@ const allMemories = await openaiProvider.memory.searchMemories('cross-provider c
 ```typescript
 import { MemoriOpenAIClient } from 'memorits';
 
-// Simple replacement - existing code works unchanged
+// Simple replacement with custom model configuration
 const client = new MemoriOpenAIClient('your-api-key', {
+  model: 'gpt-4',                    // ✅ Configurable chat model
+  embeddingModel: 'text-embedding-3-large', // ✅ Configurable embedding model
   enableChatMemory: true,
   autoInitialize: true
 });
 
-// Use exactly like OpenAI client
+// Use exactly like OpenAI client - models are configurable!
 const response = await client.chat.completions.create({
-  model: 'gpt-4o-mini',
+  model: 'gpt-4',  // ✅ Uses configured model instead of hardcoded value
   messages: [{ role: 'user', content: 'Hello, remember this!' }]
 });
+
+// The configured model is used automatically in responses
+console.log('Model used:', response.model); // Will show 'gpt-4'
 
 // Memory automatically recorded
 const memories = await client.memory.searchMemories('Hello');
@@ -162,6 +167,79 @@ const ollamaProvider = await LLMProviderFactory.createProvider(ProviderType.OLLA
 
 // All providers share the same memory system
 const memories = await openaiClient.memory.searchMemories('unified context');
+```
+
+## Model Configuration
+
+### Custom Model Selection
+
+MemoriOpenAI now supports configurable models for both chat completions and embeddings:
+
+```typescript
+// Use different models for different use cases
+const client = new MemoriOpenAIClient('your-api-key', {
+  model: 'gpt-4',                          // High-quality chat model
+  embeddingModel: 'text-embedding-3-large', // High-quality embedding model
+  enableChatMemory: true,
+  autoInitialize: true
+});
+
+// Models are used automatically
+const chatResponse = await client.chat.completions.create({
+  model: 'gpt-4',  // ✅ Uses configured model
+  messages: [{ role: 'user', content: 'Complex analysis...' }]
+});
+
+const embeddingResponse = await client.embeddings.create({
+  model: 'text-embedding-3-large',  // ✅ Uses configured embedding model
+  input: 'Document content for embedding'
+});
+```
+
+### Multi-Provider Support
+
+```typescript
+// OpenAI with custom models
+const openaiClient = new MemoriOpenAIClient('sk-openai-key', {
+  model: 'gpt-4-turbo-preview',
+  embeddingModel: 'text-embedding-3-small',
+  providerType: 'openai'
+});
+
+// Ollama with local models
+const ollamaClient = new MemoriOpenAIClient('ollama-local', {
+  model: 'llama2:70b',
+  embeddingModel: 'nomic-embed-text',
+  baseUrl: 'http://localhost:11434/v1',
+  providerType: 'ollama'
+});
+
+// Anthropic with Claude models
+const anthropicClient = new MemoriOpenAIClient('sk-ant-api-key', {
+  model: 'claude-3-5-sonnet-20241022',
+  providerType: 'anthropic'
+});
+```
+
+### Model Configuration Best Practices
+
+```typescript
+// Production configuration with model optimization
+const productionClient = new MemoriOpenAIClient('your-api-key', {
+  model: 'gpt-4',                    // High quality for complex tasks
+  embeddingModel: 'text-embedding-ada-002', // Cost-effective embeddings
+  enableChatMemory: true,
+  memoryProcessingMode: 'auto',
+  minImportanceLevel: 'medium'       // Only process important memories
+});
+
+// Development configuration with faster models
+const devClient = new MemoriOpenAIClient('your-api-key', {
+  model: 'gpt-3.5-turbo',            // Faster and cheaper for development
+  embeddingModel: 'text-embedding-3-small', // Quick embeddings for testing
+  enableChatMemory: true,
+  debugMode: true                    // Enable debug logging
+});
 ```
 
 ## Memory-Enhanced Conversations
@@ -293,6 +371,11 @@ interface MemoriOpenAIConfig {
   // Core functionality
   enableChatMemory?: boolean;           // Enable chat memory recording
   enableEmbeddingMemory?: boolean;      // Enable embedding memory recording
+
+  // Model configuration (NEW!)
+  model?: string;                       // ✅ Chat completion model (e.g., 'gpt-4', 'gpt-3.5-turbo')
+  embeddingModel?: string;              // ✅ Embedding model (e.g., 'text-embedding-3-large')
+  providerType?: 'openai' | 'ollama' | 'anthropic'; // ✅ Provider type selection
 
   // Initialization
   autoInitialize?: boolean;             // Auto-create Memori instance

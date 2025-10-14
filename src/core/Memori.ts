@@ -3,11 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from './infrastructure/database/DatabaseManager';
 import { MemoryAgent } from './domain/memory/MemoryAgent';
 import { ConsciousAgent } from './domain/memory/ConsciousAgent';
-import { OpenAIProvider } from './infrastructure/providers/OpenAIProvider';
-import { OllamaProvider } from './infrastructure/providers/OllamaProvider';
-import { AnthropicProvider } from './infrastructure/providers/AnthropicProvider';
-import { LLMProviderFactory } from './infrastructure/providers/LLMProviderFactory';
-import { ProviderType } from './infrastructure/providers/ProviderType';
+import { OpenAIProvider, OllamaProvider,AnthropicProvider, LLMProviderFactory, ProviderType} from './infrastructure/providers/';
 import { ConfigManager, MemoriConfig } from './infrastructure/config/ConfigManager';
 import { logInfo, logError } from './infrastructure/config/Logger';
 import {
