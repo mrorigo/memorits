@@ -7,14 +7,17 @@ import { OpenAIProvider } from '@/core/infrastructure/providers/OpenAIProvider';
 import { DatabaseManager } from '@/core/infrastructure/database/DatabaseManager';
 import { MemoryRelationship, MemoryRelationshipType } from '@/core/types/schemas';
 import { RelationshipProcessor } from '@/core/domain/search/relationship/RelationshipProcessor';
+import { cleanupGlobalConnectionPool } from '@/core/infrastructure/providers/performance/ConnectionPool';
 
 // Mock dependencies
 jest.mock('@/core/infrastructure/database/DatabaseManager');
 jest.mock('@/core/infrastructure/providers/OpenAIProvider');
+jest.mock('@/core/infrastructure/providers/performance/ConnectionPool');
 jest.mock('@/core/domain/search/strategies/RelationshipSearchStrategy');
 
 const MockedDatabaseManager = DatabaseManager as jest.MockedClass<typeof DatabaseManager>;
 const MockedOpenAIProvider = OpenAIProvider as jest.MockedClass<typeof OpenAIProvider>;
+const MockedConnectionPool = require('@/core/infrastructure/providers/performance/ConnectionPool').ConnectionPool as jest.MockedClass<any>;
 
 describe('RelationshipProcessor', () => {
   let relationshipProcessor: RelationshipProcessor;
@@ -74,6 +77,16 @@ describe('RelationshipProcessor', () => {
         findMany: jest.fn().mockResolvedValue([mockMemory]),
       },
     } as any);
+
+    // Mock ConnectionPool to prevent interval leaks in tests
+    MockedConnectionPool.mockImplementation(() => ({
+      getConnection: jest.fn(),
+      returnConnection: jest.fn(),
+      getPoolStats: jest.fn(),
+      cleanup: jest.fn(),
+      dispose: jest.fn(),
+      stopHealthCheckInterval: jest.fn(),
+    }));
 
     // Create RelationshipProcessor instance
     relationshipProcessor = new RelationshipProcessor(mockDbManager, mockOpenAIProvider);
@@ -584,5 +597,18 @@ describe('RelationshipProcessor', () => {
       expect(isValid1).toBe(true);
       expect(isValid2).toBe(false);
     });
+  });
+
+  // Global cleanup after all tests
+  afterAll(() => {
+    // Cleanup global ConnectionPool to prevent interval leaks
+    cleanupGlobalConnectionPool();
+
+    // Clear any pending timers
+    jest.clearAllTimers();
+    jest.useRealTimers();
+
+    // Restore any global mocks
+    jest.restoreAllMocks();
   });
 });

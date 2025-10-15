@@ -61,7 +61,7 @@ export function validateConfig(config: MemoriConfig): ValidationResult {
   return {
     isValid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
@@ -96,7 +96,7 @@ function validateOllamaConfig(config: MemoriConfig, errors: string[], warnings: 
 export function createMemoriError(
   message: string,
   code?: string,
-  suggestions?: string[]
+  suggestions?: string[],
 ): MemoriError {
   return new MemoriError(message, code, suggestions);
 }
@@ -109,7 +109,7 @@ export const ErrorCodes = {
   DATABASE_ERROR: 'DATABASE_ERROR',
   PROVIDER_ERROR: 'PROVIDER_ERROR',
   MEMORY_ERROR: 'MEMORY_ERROR',
-  NETWORK_ERROR: 'NETWORK_ERROR'
+  NETWORK_ERROR: 'NETWORK_ERROR',
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];

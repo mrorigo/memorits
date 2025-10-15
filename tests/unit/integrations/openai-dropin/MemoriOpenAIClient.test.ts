@@ -1,6 +1,9 @@
 // Comprehensive unit tests for MemoriOpenAIClient
 // Tests all aspects of the main OpenAI drop-in client implementation
 
+// Import cleanup function for global ConnectionPool
+import { cleanupGlobalConnectionPool } from '../../../../src/core/infrastructure/providers/performance/ConnectionPool';
+
 // Mock dependencies before importing the main module
 const mockMemori = {
   enable: jest.fn().mockResolvedValue(undefined),
@@ -618,4 +621,14 @@ describe('MemoriOpenAIClient', () => {
 // Global cleanup after all tests
 afterAll(async () => {
   await TestCleanup.fullCleanup();
+
+  // Cleanup global ConnectionPool to prevent interval leaks that prevent Jest from exiting
+  cleanupGlobalConnectionPool();
+
+  // Clear any pending timers
+  jest.clearAllTimers();
+  jest.useRealTimers();
+
+  // Restore any global mocks
+  jest.restoreAllMocks();
 });

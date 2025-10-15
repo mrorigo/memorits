@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from './infrastructure/database/DatabaseManager';
 import { MemoryAgent } from './domain/memory/MemoryAgent';
 import { ConsciousAgent } from './domain/memory/ConsciousAgent';
-import { OpenAIProvider, OllamaProvider,AnthropicProvider, LLMProviderFactory, ProviderType} from './infrastructure/providers/';
+import { OpenAIProvider, OllamaProvider,AnthropicProvider, LLMProviderFactory, ProviderType } from './infrastructure/providers/';
 import { ConfigManager, MemoriConfig } from './infrastructure/config/ConfigManager';
 import { logInfo, logError } from './infrastructure/config/Logger';
 import {
@@ -59,7 +59,7 @@ export class Memori {
       // Providers might already be registered, continue silently
       logInfo('Provider registration check completed', {
         component: 'Memori',
-        sessionId: this.sessionId
+        sessionId: this.sessionId,
       });
     }
   }
@@ -70,10 +70,10 @@ export class Memori {
    */
   private getDefaultModel(providerType: ProviderType): string {
     switch (providerType) {
-      case ProviderType.OPENAI: return 'gpt-4o-mini';
-      case ProviderType.ANTHROPIC: return 'claude-3-5-sonnet-20241022';
-      case ProviderType.OLLAMA: return 'llama2';
-      default: return 'gpt-4o-mini';
+    case ProviderType.OPENAI: return 'gpt-4o-mini';
+    case ProviderType.ANTHROPIC: return 'claude-3-5-sonnet-20241022';
+    case ProviderType.OLLAMA: return 'llama2';
+    default: return 'gpt-4o-mini';
     }
   }
 

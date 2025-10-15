@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { ILLMProvider } from './ILLMProvider';
+import { UnifiedLLMProvider } from './UnifiedLLMProvider';
 import { IProviderConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
 import { ChatCompletionParams } from './types/ChatCompletionParams';
@@ -9,56 +9,43 @@ import { EmbeddingResponse } from './types/EmbeddingResponse';
 import { ProviderDiagnostics } from './types/ProviderDiagnostics';
 
 /**
- * OpenAI provider implementation
- * Implements the ILLMProvider interface for OpenAI-compatible APIs
+ * OpenAI provider implementation using unified architecture
+ * Extends UnifiedLLMProvider to integrate performance optimizations and memory capabilities
  */
-export class OpenAIProvider implements ILLMProvider {
-  private client: OpenAI;
-  private config: IProviderConfig;
+export class OpenAIProvider extends UnifiedLLMProvider {
   private model: string;
-  private isInitialized = false;
 
   constructor(config: IProviderConfig) {
-    this.config = config;
+    super(config);
     this.model = config.model || 'gpt-4o-mini';
+  }
 
+  /**
+   * Initialize the OpenAI client
+   */
+  protected async initializeClient(): Promise<void> {
     // Handle dummy API key for Ollama
-    const apiKey = config.apiKey === 'ollama-local' ? 'sk-dummy-key-for-ollama' : config.apiKey;
+    const apiKey = this.config.apiKey === 'ollama-local' ? 'sk-dummy-key-for-ollama' : this.config.apiKey;
 
     this.client = new OpenAI({
       apiKey: apiKey,
-      baseURL: config.baseUrl,
+      baseURL: this.config.baseUrl,
     });
   }
 
-  getProviderType(): ProviderType {
-    return this.config.apiKey === 'ollama-local' ||
-           this.config.baseUrl?.includes('ollama') ||
-           this.config.baseUrl?.includes('11434')
-      ? ProviderType.OLLAMA
-      : ProviderType.OPENAI;
+  /**
+   * Dispose of the OpenAI client
+   */
+  protected async disposeClient(): Promise<void> {
+    // OpenAI client doesn't require explicit disposal
+    // But we can clear the reference if needed
+    this.client = null as any;
   }
 
-  getConfig(): IProviderConfig {
-    return { ...this.config };
-  }
-
-  async initialize(config: IProviderConfig): Promise<void> {
-    this.config = config;
-    this.model = config.model || 'gpt-4o-mini';
-    this.isInitialized = true;
-  }
-
-  async dispose(): Promise<void> {
-    // Clean up any resources if needed
-    this.isInitialized = false;
-  }
-
-  async isHealthy(): Promise<boolean> {
-    if (!this.isInitialized) {
-      return false;
-    }
-
+  /**
+   * Check if the OpenAI client is healthy
+   */
+  protected async checkClientHealth(): Promise<boolean> {
     try {
       // Simple health check - try to list models
       await this.client.models.list();
@@ -68,28 +55,67 @@ export class OpenAIProvider implements ILLMProvider {
     }
   }
 
-  async getDiagnostics(): Promise<ProviderDiagnostics> {
+  /**
+   * Get base diagnostics from the OpenAI client
+   */
+  protected async getBaseDiagnostics(): Promise<Record<string, any>> {
     return {
-      providerType: this.getProviderType(),
-      isInitialized: this.isInitialized,
-      isHealthy: await this.isHealthy(),
-      model: this.model,
-      metadata: {
-        baseUrl: this.config.baseUrl,
-        hasApiKey: !!this.config.apiKey,
-        providerType: this.getProviderType(),
-      },
-      timestamp: new Date(),
+      baseUrl: this.config.baseUrl,
+      hasApiKey: !!this.config.apiKey,
+      clientInitialized: !!this.client,
     };
   }
 
+  /**
+   * Get the provider type (OpenAI or Ollama based on configuration)
+   */
+  getProviderType(): ProviderType {
+    return this.config.apiKey === 'ollama-local' ||
+            this.config.baseUrl?.includes('ollama') ||
+            this.config.baseUrl?.includes('11434')
+      ? ProviderType.OLLAMA
+      : ProviderType.OPENAI;
+  }
+
+  /**
+   * Get the current model
+   */
   getModel(): string {
     return this.model;
   }
 
+  /**
+   * Get the OpenAI client (for backward compatibility)
+   */
+  getClient(): OpenAI {
+    return this.client;
+  }
+
+  /**
+   * Create a chat completion (core LLM functionality)
+   */
   async createChatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
-    if (!this.isInitialized) {
-      throw new Error('Provider not initialized');
+    // This method is implemented in the base class with integrated features
+    // The base class handles caching, connection pooling, memory processing, etc.
+    return super.createChatCompletion(params);
+  }
+
+  /**
+   * Create an embedding (core LLM functionality)
+   */
+  async createEmbedding(params: EmbeddingParams): Promise<EmbeddingResponse> {
+    // This method is implemented in the base class with integrated features
+    // The base class handles caching, connection pooling, memory processing, etc.
+    return super.createEmbedding(params);
+  }
+
+  /**
+   * Execute the actual OpenAI chat completion API call
+   * This is called by the base class when not using cache/pooling optimizations
+   */
+  protected async executeChatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
+    if (!this.client) {
+      throw new Error('OpenAI client not initialized');
     }
 
     const response = await this.client.chat.completions.create({
@@ -148,9 +174,13 @@ export class OpenAIProvider implements ILLMProvider {
     };
   }
 
-  async createEmbedding(params: EmbeddingParams): Promise<EmbeddingResponse> {
-    if (!this.isInitialized) {
-      throw new Error('Provider not initialized');
+  /**
+   * Execute the actual OpenAI embedding API call
+   * This is called by the base class when not using cache/pooling optimizations
+   */
+  protected async executeEmbedding(params: EmbeddingParams): Promise<EmbeddingResponse> {
+    if (!this.client) {
+      throw new Error('OpenAI client not initialized');
     }
 
     const response = await this.client.embeddings.create({
@@ -163,7 +193,7 @@ export class OpenAIProvider implements ILLMProvider {
     });
 
     return {
-      data: response.data.map((item, index) => ({
+      data: response.data.map((item: any, index: number) => ({
         index,
         embedding: item.embedding,
         object: item.object,
@@ -177,9 +207,5 @@ export class OpenAIProvider implements ILLMProvider {
       created: (response as any).created,
       metadata: {},
     };
-  }
-
-  getClient(): OpenAI {
-    return this.client;
   }
 }

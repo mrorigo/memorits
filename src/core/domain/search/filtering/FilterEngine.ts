@@ -5,8 +5,16 @@ import {
   FilterValidationResult,
   FilterExecutionContext,
   FilterExecutionResult,
-  FilterExpression
+  FilterExpression,
+  FilterSelectivityInfo,
+  FilterOptimizationStats,
+  OptimizedFilterResult,
+  FilterExecutionHistory,
+  FilterExecutionPlan,
+  FilterPerformanceMetrics
 } from './types';
+
+import { logInfo, logError, logWarn } from '../../../infrastructure/config/Logger';
 
 /**
  * Core FilterEngine class for processing complex filter combinations
@@ -206,7 +214,7 @@ export class FilterEngine {
     };
   }
 
-  private executeInMemory(filter: FilterNode, results: unknown[]): unknown[] {
+  protected executeInMemory(filter: FilterNode, results: unknown[]): unknown[] {
     return results.filter(item => this.evaluateFilter(filter, item));
   }
 
@@ -295,6 +303,586 @@ export class FilterEngine {
       default:
         return '1=1';
     }
+  }
+}
+
+/**
+ * Enhanced FilterEngine with push-down optimization
+ */
+export class OptimizedFilterEngine extends FilterEngine {
+  private selectivityCache: Map<string, FilterSelectivityInfo> = new Map();
+  private performanceHistory: Map<string, FilterExecutionHistory[]> = new Map();
+  private optimizationStats: FilterOptimizationStats = {
+    cachedSelectivityCount: 0,
+    performanceHistorySize: 0,
+    averageOptimizationImprovement: 0,
+    totalOptimizationsApplied: 0,
+    earlyTerminations: 0
+  };
+
+  /**
+   * Execute filter with push-down optimization
+   */
+  async executeFilterOptimized(
+    filter: FilterNode,
+    results: unknown[],
+    context?: FilterExecutionContext
+  ): Promise<FilterExecutionResult> {
+    const startTime = Date.now();
+
+    try {
+      // Analyze and optimize filter structure
+      const optimizationResult = this.optimizeFilterOrder(filter);
+
+      logInfo('Executing optimized filter', {
+        component: 'OptimizedFilterEngine',
+        operation: 'executeFilterOptimized',
+        originalFilterCount: this.countFilterNodes(filter),
+        optimizedFilterCount: this.countFilterNodes(optimizationResult.optimizedFilter),
+        resultSetSize: results.length,
+        optimizationsApplied: optimizationResult.optimizationApplied
+      });
+
+      // Execute with optimization
+      const filteredResults = await this.executeOptimizedFilter(
+        optimizationResult.optimizedFilter,
+        results,
+        optimizationResult.executionPlan
+      );
+
+      const executionTime = Date.now() - startTime;
+
+      // Update performance history for learning
+      this.updatePerformanceHistory(filter, filteredResults.length / results.length, executionTime);
+
+      return {
+        filteredItems: filteredResults,
+        totalCount: results.length,
+        filteredCount: filteredResults.length,
+        executionTime,
+        strategyUsed: 'optimized_filtering',
+        metadata: {
+          originalFilter: filter,
+          optimizedFilter: optimizationResult.optimizedFilter,
+          selectivityRatio: filteredResults.length / results.length,
+          optimizationApplied: optimizationResult.optimizationApplied,
+          estimatedImprovement: optimizationResult.estimatedImprovement,
+          context: context || {}
+        }
+      };
+    } catch (error) {
+      logError('Optimized filter execution failed', {
+        component: 'OptimizedFilterEngine',
+        operation: 'executeFilterOptimized',
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      // Fallback to standard execution
+      return super.executeFilter(filter, results, context);
+    }
+  }
+
+  /**
+   * Optimize filter order by pushing down most selective filters
+   */
+  private optimizeFilterOrder(filter: FilterNode): OptimizedFilterResult {
+    const optimizations: string[] = [];
+    let optimizedFilter = filter;
+
+    try {
+      // For logical AND operations, reorder children by selectivity
+      if (filter.type === FilterType.LOGICAL && filter.operator === FilterOperator.AND && filter.children) {
+        const optimizedChildren = filter.children
+          .map(child => ({
+            filter: child,
+            selectivity: this.estimateFilterSelectivity(child)
+          }))
+          .sort((a, b) => b.selectivity - a.selectivity) // Most selective first
+          .map(item => this.optimizeFilterOrder(item.filter).optimizedFilter);
+
+        optimizedFilter = {
+          ...filter,
+          children: optimizedChildren
+        };
+        optimizations.push('filter_reordering');
+      }
+
+      // For logical OR operations, keep current order but optimize children
+      if (filter.type === FilterType.LOGICAL && filter.operator === FilterOperator.OR && filter.children) {
+        const optimizedChildren = filter.children.map(child => this.optimizeFilterOrder(child).optimizedFilter);
+        optimizedFilter = {
+          ...filter,
+          children: optimizedChildren
+        };
+        optimizations.push('children_optimization');
+      }
+
+      // Generate execution plan
+      const executionPlan = this.generateExecutionPlan(optimizedFilter);
+
+      // Calculate estimated improvement
+      const originalCost = this.estimateFilterCost(filter);
+      const optimizedCost = executionPlan.estimatedTotalCost;
+      const estimatedImprovement = originalCost > 0 ? (originalCost - optimizedCost) / originalCost : 0;
+
+      this.optimizationStats.totalOptimizationsApplied++;
+
+      return {
+        optimizedFilter,
+        optimizationApplied: optimizations,
+        estimatedImprovement,
+        executionPlan
+      };
+    } catch (error) {
+      logWarn('Filter optimization failed, using original filter', {
+        component: 'OptimizedFilterEngine',
+        operation: 'optimizeFilterOrder',
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      return {
+        optimizedFilter: filter,
+        optimizationApplied: ['optimization_failed'],
+        estimatedImprovement: 0,
+        executionPlan: this.generateExecutionPlan(filter)
+      };
+    }
+  }
+
+  /**
+   * Estimate filter selectivity based on operator and field characteristics
+   */
+  private estimateFilterSelectivity(filter: FilterNode): number {
+    const cacheKey = this.generateFilterKey(filter);
+    const cached = this.selectivityCache.get(cacheKey);
+
+    if (cached) {
+      this.optimizationStats.cachedSelectivityCount++;
+      return cached.estimatedSelectivity;
+    }
+
+    let selectivity: number;
+
+    switch (filter.operator) {
+      case FilterOperator.EQUALS:
+        selectivity = this.estimateEqualitySelectivity(filter);
+        break;
+      case FilterOperator.NOT_EQUALS:
+        selectivity = 0.9; // Usually very selective (eliminates specific values)
+        break;
+      case FilterOperator.GREATER_THAN:
+      case FilterOperator.LESS_THAN:
+        selectivity = this.estimateRangeSelectivity(filter);
+        break;
+      case FilterOperator.CONTAINS:
+      case FilterOperator.LIKE:
+        selectivity = this.estimatePatternSelectivity(filter);
+        break;
+      case FilterOperator.IN:
+        selectivity = this.estimateInSelectivity(filter);
+        break;
+      case FilterOperator.BETWEEN:
+        selectivity = this.estimateBetweenSelectivity(filter);
+        break;
+      default:
+        selectivity = 0.5; // Default moderate selectivity
+    }
+
+    // Adjust based on field type
+    if (filter.field) {
+      selectivity = this.adjustSelectivityByFieldType(filter.field, selectivity);
+    }
+
+    // Cache the result
+    const selectivityInfo: FilterSelectivityInfo = {
+      filterNode: filter,
+      estimatedSelectivity: selectivity,
+      estimatedCost: this.estimateFilterCost(filter),
+      operatorCategory: this.categorizeOperator(filter.operator)
+    };
+
+    this.selectivityCache.set(cacheKey, selectivityInfo);
+    return selectivity;
+  }
+
+  /**
+   * Estimate selectivity for equality operations
+   */
+  private estimateEqualitySelectivity(filter: FilterNode): number {
+    if (!filter.field || !filter.value) return 0.5;
+
+    // Base selectivity for equality
+    let selectivity = 0.8;
+
+    // Adjust based on value specificity
+    if (typeof filter.value === 'string') {
+      if (filter.value.length > 10) {
+        selectivity = 0.9; // Longer strings are typically more selective
+      } else if (filter.value.length < 3) {
+        selectivity = 0.3; // Short strings are less selective
+      }
+    }
+
+    if (typeof filter.value === 'number') {
+      // Numeric values are generally highly selective
+      selectivity = 0.85;
+    }
+
+    return selectivity;
+  }
+
+  /**
+   * Estimate selectivity for range operations
+   */
+  private estimateRangeSelectivity(filter: FilterNode): number {
+    if (!filter.field || !filter.value) return 0.5;
+
+    // Range operations typically eliminate ~50-70% of results
+    let selectivity = 0.4;
+
+    if (typeof filter.value === 'number') {
+      // For numeric ranges, selectivity depends on the range size
+      // This is a simplified estimation
+      selectivity = 0.6;
+    }
+
+    return selectivity;
+  }
+
+  /**
+   * Estimate selectivity for pattern matching
+   */
+  private estimatePatternSelectivity(filter: FilterNode): number {
+    if (!filter.value || typeof filter.value !== 'string') return 0.5;
+
+    const pattern = filter.value.toLowerCase();
+
+    // Exact phrase matches are more selective
+    if (!pattern.includes('%') && !pattern.includes('*')) {
+      return 0.7;
+    }
+
+    // Wildcard patterns are less selective
+    if (pattern.startsWith('%') || pattern.startsWith('*')) {
+      return 0.3; // Starts-with patterns
+    }
+
+    if (pattern.endsWith('%') || pattern.endsWith('*')) {
+      return 0.4; // Ends-with patterns
+    }
+
+    // Contains patterns are least selective
+    return 0.2;
+  }
+
+  /**
+   * Estimate selectivity for IN operations
+   */
+  private estimateInSelectivity(filter: FilterNode): number {
+    if (!filter.value || !Array.isArray(filter.value)) return 0.5;
+
+    const arraySize = filter.value.length;
+
+    // More values in IN clause = more selective
+    if (arraySize <= 1) return 0.8;
+    if (arraySize <= 3) return 0.6;
+    if (arraySize <= 10) return 0.4;
+    return 0.2; // Large IN clauses
+  }
+
+  /**
+   * Estimate selectivity for BETWEEN operations
+   */
+  private estimateBetweenSelectivity(filter: FilterNode): number {
+    // BETWEEN is typically quite selective for most data types
+    return 0.7;
+  }
+
+  /**
+   * Adjust selectivity based on field type characteristics
+   */
+  private adjustSelectivityByFieldType(fieldName: string, baseSelectivity: number): number {
+    // Field-specific adjustments based on common patterns
+
+    if (fieldName.includes('id') || fieldName.includes('uuid')) {
+      // ID fields are typically highly selective
+      return Math.max(baseSelectivity, 0.9);
+    }
+
+    if (fieldName.includes('category') || fieldName.includes('type')) {
+      // Category fields have moderate selectivity
+      return (baseSelectivity + 0.6) / 2;
+    }
+
+    if (fieldName.includes('score') || fieldName.includes('importance')) {
+      // Score fields depend on the range but are generally selective
+      return (baseSelectivity + 0.7) / 2;
+    }
+
+    if (fieldName.includes('content') || fieldName.includes('description')) {
+      // Text content fields are less selective for exact matches
+      return Math.min(baseSelectivity, 0.3);
+    }
+
+    return baseSelectivity;
+  }
+
+  /**
+   * Categorize operator for optimization strategies
+   */
+  private categorizeOperator(operator: FilterOperator): 'equality' | 'range' | 'pattern' | 'logical' {
+    switch (operator) {
+      case FilterOperator.EQUALS:
+      case FilterOperator.NOT_EQUALS:
+        return 'equality';
+      case FilterOperator.GREATER_THAN:
+      case FilterOperator.LESS_THAN:
+      case FilterOperator.GREATER_EQUAL:
+      case FilterOperator.LESS_EQUAL:
+      case FilterOperator.BETWEEN:
+        return 'range';
+      case FilterOperator.CONTAINS:
+      case FilterOperator.LIKE:
+      case FilterOperator.STARTS_WITH:
+      case FilterOperator.ENDS_WITH:
+        return 'pattern';
+      default:
+        return 'logical';
+    }
+  }
+
+  /**
+   * Estimate execution cost for a filter
+   */
+  private estimateFilterCost(filter: FilterNode): number {
+    const baseCosts: Record<FilterOperator, number> = {
+      [FilterOperator.EQUALS]: 1,
+      [FilterOperator.NOT_EQUALS]: 1,
+      [FilterOperator.GREATER_THAN]: 1,
+      [FilterOperator.LESS_THAN]: 1,
+      [FilterOperator.GREATER_EQUAL]: 1,
+      [FilterOperator.LESS_EQUAL]: 1,
+      [FilterOperator.CONTAINS]: 3,
+      [FilterOperator.LIKE]: 5,
+      [FilterOperator.REGEX]: 10,
+      [FilterOperator.IN]: 2,
+      [FilterOperator.NOT_IN]: 2,
+      [FilterOperator.BETWEEN]: 2,
+      [FilterOperator.AND]: 1,
+      [FilterOperator.OR]: 1,
+      [FilterOperator.NOT]: 1,
+      [FilterOperator.BEFORE]: 1,
+      [FilterOperator.AFTER]: 1,
+      [FilterOperator.WITHIN]: 2,
+      [FilterOperator.AGE_LESS_THAN]: 1,
+      [FilterOperator.AGE_GREATER_THAN]: 1,
+      [FilterOperator.NEAR]: 5,
+      [FilterOperator.WITHIN_RADIUS]: 8,
+      [FilterOperator.CONTAINS_POINT]: 10,
+      [FilterOperator.SIMILAR_TO]: 15,
+      [FilterOperator.RELATED_TO]: 15,
+      [FilterOperator.STARTS_WITH]: 2,
+      [FilterOperator.ENDS_WITH]: 2
+    };
+
+    return baseCosts[filter.operator] || 1;
+  }
+
+  /**
+   * Execute optimized filter with early termination
+   */
+  private async executeOptimizedFilter(
+    filter: FilterNode,
+    results: unknown[],
+    executionPlan: FilterExecutionPlan
+  ): Promise<unknown[]> {
+    // For AND operations, apply filters in selectivity order
+    if (filter.type === FilterType.LOGICAL && filter.operator === FilterOperator.AND && filter.children) {
+      let currentResults = results;
+
+      for (let i = 0; i < filter.children.length; i++) {
+        const childFilter = filter.children[i];
+        const startTime = Date.now();
+
+        currentResults = this.executeInMemory(childFilter, currentResults);
+
+        const executionTime = Date.now() - startTime;
+
+        // Record execution history
+        this.recordExecutionHistory(childFilter, results.length, currentResults.length, executionTime);
+
+        // Early termination if result set becomes too small
+        if (currentResults.length === 0) {
+          this.optimizationStats.earlyTerminations++;
+          logInfo('Early termination due to empty results', {
+            component: 'OptimizedFilterEngine',
+            operation: 'executeOptimizedFilter',
+            filterIndex: i,
+            remainingResults: currentResults.length,
+            originalResults: results.length
+          });
+          break;
+        }
+
+        // Early termination if remaining results are below threshold
+        if (currentResults.length < 10 && results.length > 100) {
+          this.optimizationStats.earlyTerminations++;
+          logInfo('Early termination due to highly selective filter', {
+            component: 'OptimizedFilterEngine',
+            operation: 'executeOptimizedFilter',
+            filterIndex: i,
+            remainingResults: currentResults.length,
+            originalResults: results.length
+          });
+          break;
+        }
+      }
+
+      return currentResults;
+    }
+
+    // For other operations, use standard execution
+    return this.executeInMemory(filter, results);
+  }
+
+  /**
+   * Generate cache key for filter selectivity
+   */
+  private generateFilterKey(filter: FilterNode): string {
+    return `${filter.field}_${filter.operator}_${String(filter.value)}_${filter.type}`;
+  }
+
+  /**
+   * Update performance history for learning from actual results
+   */
+  private updatePerformanceHistory(filter: FilterNode, actualSelectivity: number, executionTime: number): void {
+    const key = this.generateFilterKey(filter);
+
+    if (!this.performanceHistory.has(key)) {
+      this.performanceHistory.set(key, []);
+    }
+
+    const history = this.performanceHistory.get(key)!;
+    history.push({
+      executionTime,
+      inputSize: 0, // Will be updated by executeOptimizedFilter
+      outputSize: 0, // Will be updated by executeOptimizedFilter
+      timestamp: new Date(),
+      cacheHit: false
+    });
+
+    // Keep only recent history (last 100 entries)
+    if (history.length > 100) {
+      history.shift();
+    }
+
+    this.optimizationStats.performanceHistorySize = this.performanceHistory.size;
+  }
+
+  /**
+   * Record detailed execution history
+   */
+  private recordExecutionHistory(filter: FilterNode, inputSize: number, outputSize: number, executionTime: number): void {
+    const key = this.generateFilterKey(filter);
+    const history = this.performanceHistory.get(key);
+
+    if (history && history.length > 0) {
+      const lastEntry = history[history.length - 1];
+      lastEntry.inputSize = inputSize;
+      lastEntry.outputSize = outputSize;
+      lastEntry.executionTime = executionTime;
+    }
+  }
+
+  /**
+   * Count filter nodes for complexity analysis
+   */
+  private countFilterNodes(filter: FilterNode): number {
+    if (!filter.children || filter.children.length === 0) {
+      return 1;
+    }
+
+    return 1 + filter.children.reduce((sum, child) => sum + this.countFilterNodes(child), 0);
+  }
+
+  /**
+   * Generate execution plan for optimized execution
+   */
+  private generateExecutionPlan(filter: FilterNode): FilterExecutionPlan {
+    const executionOrder: FilterNode[] = [];
+    const parallelGroups: FilterNode[][] = [];
+    const earlyTerminationPoints: number[] = [];
+    const cacheOpportunities: string[] = [];
+
+    this.analyzeExecutionPlan(filter, executionOrder, parallelGroups, earlyTerminationPoints, cacheOpportunities);
+
+    return {
+      executionOrder,
+      parallelGroups,
+      estimatedTotalCost: this.estimateFilterCost(filter),
+      earlyTerminationPoints,
+      cacheOpportunities
+    };
+  }
+
+  /**
+   * Analyze filter structure to generate execution plan
+   */
+  private analyzeExecutionPlan(
+    filter: FilterNode,
+    executionOrder: FilterNode[],
+    parallelGroups: FilterNode[][],
+    earlyTerminationPoints: number[],
+    cacheOpportunities: string[]
+  ): void {
+    if (filter.type === FilterType.LOGICAL && filter.operator === FilterOperator.AND && filter.children) {
+      // For AND operations, add each child to execution order
+      filter.children.forEach((child, index) => {
+        executionOrder.push(child);
+
+        // Check for early termination opportunities
+        const selectivity = this.estimateFilterSelectivity(child);
+        if (selectivity > 0.8) {
+          earlyTerminationPoints.push(index);
+        }
+
+        // Check for caching opportunities
+        if (this.estimateFilterCost(child) > 5) {
+          cacheOpportunities.push(child.field);
+        }
+
+        this.analyzeExecutionPlan(child, executionOrder, parallelGroups, earlyTerminationPoints, cacheOpportunities);
+      });
+    } else {
+      executionOrder.push(filter);
+    }
+  }
+
+  /**
+   * Get optimization statistics for monitoring
+   */
+  getOptimizationStats(): FilterOptimizationStats {
+    return { ...this.optimizationStats };
+  }
+
+  /**
+   * Clear optimization caches
+   */
+  clearOptimizationCaches(): void {
+    this.selectivityCache.clear();
+    this.performanceHistory.clear();
+    this.optimizationStats = {
+      cachedSelectivityCount: 0,
+      performanceHistorySize: 0,
+      averageOptimizationImprovement: 0,
+      totalOptimizationsApplied: 0,
+      earlyTerminations: 0
+    };
+
+    logInfo('Optimization caches cleared', {
+      component: 'OptimizedFilterEngine',
+      operation: 'clearOptimizationCaches'
+    });
   }
 }
 

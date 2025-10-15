@@ -11,7 +11,11 @@ jest.mock('../../../src/core/infrastructure/database/DatabaseManager');
 jest.mock('../../../src/core/domain/memory/MemoryAgent');
 jest.mock('../../../src/core/domain/memory/ConsciousAgent');
 jest.mock('../../../src/core/infrastructure/providers/OpenAIProvider');
+jest.mock('../../../src/core/infrastructure/providers/performance/ConnectionPool');
 jest.mock('../../../src/core/infrastructure/config/ConfigManager');
+
+// Import cleanup function for global ConnectionPool
+import { cleanupGlobalConnectionPool } from '../../../src/core/infrastructure/providers/performance/ConnectionPool';
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'mock-uuid'),
 }));
@@ -20,6 +24,7 @@ const MockDatabaseManager = DatabaseManager as jest.MockedClass<typeof DatabaseM
 const MockMemoryAgent = MemoryAgent as jest.MockedClass<typeof MemoryAgent>;
 const MockConsciousAgent = ConsciousAgent as jest.MockedClass<typeof ConsciousAgent>;
 const MockOpenAIProvider = OpenAIProvider as jest.MockedClass<typeof OpenAIProvider>;
+const MockConnectionPool = require('../../../src/core/infrastructure/providers/performance/ConnectionPool').ConnectionPool as jest.MockedClass<any>;
 const mockLoadConfig = jest.fn();
 (ConfigManager.loadConfig as jest.Mock) = mockLoadConfig;
 
@@ -53,6 +58,16 @@ describe('Memori', () => {
     MockDatabaseManager.prototype.searchMemories = jest.fn().mockResolvedValue([]);
     MockDatabaseManager.prototype.close = jest.fn().mockResolvedValue(undefined);
     MockMemoryAgent.prototype.processConversation = jest.fn().mockResolvedValue({ content: 'processed' });
+
+    // Mock ConnectionPool to prevent interval leaks in tests
+    MockConnectionPool.mockImplementation(() => ({
+      getConnection: jest.fn(),
+      returnConnection: jest.fn(),
+      getPoolStats: jest.fn(),
+      cleanup: jest.fn(),
+      dispose: jest.fn(),
+      stopHealthCheckInterval: jest.fn(),
+    }));
 
     // Create Memori instance
     memori = new Memori();
@@ -212,6 +227,9 @@ describe('Memori', () => {
 
     // Restore any global mocks
     jest.restoreAllMocks();
+
+    // Cleanup global ConnectionPool to prevent interval leaks
+    cleanupGlobalConnectionPool();
 
     // Small delay to ensure any pending async operations complete
     await new Promise(resolve => setTimeout(resolve, 100));

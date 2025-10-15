@@ -73,3 +73,4 @@ This file provides guidance to agents when working with code in this repository.
 - **Session management**: All providers now use sessionId in memory configuration for proper multi-user memory isolation
 - **Unified configuration**: Single IProviderConfig interface for all LLM providers (OpenAI, Anthropic, Ollama) with consistent memory options
 - **MemoryAgent capabilities**: All providers share identical MemoryAgent processing for AI-powered classification, entity extraction, importance scoring, and relationship detection
+- **Import restrictions**: Use static imports only - dynamic imports (import()) are prohibited and will cause module resolution issues

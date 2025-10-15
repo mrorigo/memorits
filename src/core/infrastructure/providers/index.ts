@@ -10,6 +10,9 @@ export { AnthropicProvider } from './AnthropicProvider';
 export { OllamaProvider } from './OllamaProvider';
 export { MemoryEnabledLLMProvider } from './MemoryEnabledLLMProvider';
 
+// Unified provider architecture
+export { UnifiedLLMProvider } from './UnifiedLLMProvider';
+
 // Factory and registration
 export { LLMProviderFactory } from './LLMProviderFactory';
 
@@ -22,6 +25,11 @@ export type { ChatCompletionParams, ChatMessage } from './types/ChatCompletionPa
 export type { ChatCompletionResponse } from './types/ChatCompletionResponse';
 export type { EmbeddingParams } from './types/EmbeddingParams';
 export type { EmbeddingResponse } from './types/EmbeddingResponse';
+
+// Unified configuration types
+export type { PerformanceConfig, MemoryConfig } from './IProviderConfig';
+export { extractPerformanceConfig, extractMemoryConfig, extractLegacyMemoryConfig } from './IProviderConfig';
+export { DEFAULT_PERFORMANCE_CONFIG, DEFAULT_MEMORY_CONFIG } from './IProviderConfig';
 
 // Provider mocking - relocated to tests/mocks for proper separation
 // These are now available via tests/mocks for test code only

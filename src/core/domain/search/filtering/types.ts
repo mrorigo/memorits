@@ -238,3 +238,45 @@ export interface FilterChainContext {
   enableEarlyTermination?: boolean
   performanceMetrics?: FilterPerformanceMetrics
 }
+
+// Filter Push-Down Optimization Types
+export interface FilterSelectivityInfo {
+  filterNode: FilterNode;
+  estimatedSelectivity: number; // 0.0-1.0 (1.0 = very selective)
+  estimatedCost: number; // Relative execution cost
+  fieldType?: 'string' | 'number' | 'date' | 'boolean';
+  operatorCategory: 'equality' | 'range' | 'pattern' | 'logical';
+  actualSelectivity?: number; // Measured selectivity for learning
+  executionHistory?: FilterExecutionHistory[];
+}
+
+export interface FilterExecutionHistory {
+  executionTime: number;
+  inputSize: number;
+  outputSize: number;
+  timestamp: Date;
+  cacheHit: boolean;
+}
+
+export interface FilterOptimizationStats {
+  cachedSelectivityCount: number;
+  performanceHistorySize: number;
+  averageOptimizationImprovement: number;
+  totalOptimizationsApplied: number;
+  earlyTerminations: number;
+}
+
+export interface OptimizedFilterResult {
+  optimizedFilter: FilterNode;
+  optimizationApplied: string[];
+  estimatedImprovement: number;
+  executionPlan: FilterExecutionPlan;
+}
+
+export interface FilterExecutionPlan {
+  executionOrder: FilterNode[];
+  parallelGroups: FilterNode[][];
+  estimatedTotalCost: number;
+  earlyTerminationPoints: number[];
+  cacheOpportunities: string[];
+}

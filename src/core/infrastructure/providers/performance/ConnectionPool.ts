@@ -27,6 +27,7 @@ export interface PooledConnection {
 export class ConnectionPool {
   private connections = new Map<string, PooledConnection[]>();
   private config: ConnectionPoolConfig;
+  private healthCheckTimer?: ReturnType<typeof setInterval>;
 
   constructor(config: Partial<ConnectionPoolConfig> = {}) {
     this.config = {
@@ -39,8 +40,10 @@ export class ConnectionPool {
       ...config,
     };
 
-    // Start health check interval
-    this.startHealthCheckInterval();
+    // Start health check interval only if not in test environment
+    if (!this.isTestEnvironment()) {
+      this.startHealthCheckInterval();
+    }
   }
 
   /**
@@ -207,24 +210,27 @@ export class ConnectionPool {
   }
 
   /**
-   * Dispose of all connections in the pool
-   */
-  async dispose(): Promise<void> {
-    const disposePromises = [];
+    * Dispose of all connections in the pool
+    */
+   async dispose(): Promise<void> {
+     // Stop health check interval first
+     this.stopHealthCheckInterval();
 
-    for (const pool of this.connections.values()) {
-      for (const connection of pool) {
-        disposePromises.push(connection.provider.dispose());
-      }
-    }
+     const disposePromises = [];
 
-    await Promise.all(disposePromises);
-    this.connections.clear();
+     for (const pool of this.connections.values()) {
+       for (const connection of pool) {
+         disposePromises.push(connection.provider.dispose());
+       }
+     }
 
-    logInfo('Connection pool disposed', {
-      component: 'ConnectionPool',
-    });
-  }
+     await Promise.all(disposePromises);
+     this.connections.clear();
+
+     logInfo('Connection pool disposed', {
+       component: 'ConnectionPool',
+     });
+   }
 
   private async createProvider(
     providerType: ProviderType,
@@ -296,9 +302,45 @@ export class ConnectionPool {
   }
 
   private startHealthCheckInterval(): void {
-    setInterval(async () => {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+    }
+    this.healthCheckTimer = setInterval(async () => {
       await this.performHealthChecks();
     }, this.config.healthCheckInterval);
+  }
+
+  /**
+   * Stop the health check interval
+   */
+  public stopHealthCheckInterval(): void {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = undefined;
+      logInfo('Stopped health check interval', {
+        component: 'ConnectionPool',
+      });
+    }
+  }
+
+  /**
+   * Check if running in test environment
+   */
+  private isTestEnvironment(): boolean {
+    // Check for Jest test environment
+    return typeof jest !== 'undefined' ||
+           process.env.JEST_WORKER_ID !== undefined ||
+           process.env.NODE_ENV === 'test' ||
+           (typeof globalThis !== 'undefined' && (globalThis as any).__JEST__ === true);
+  }
+
+  /**
+   * Manually start the health check interval (for testing or when explicitly needed)
+   */
+  public startHealthCheckIntervalManual(): void {
+    if (!this.healthCheckTimer) {
+      this.startHealthCheckInterval();
+    }
   }
 
   private async performHealthChecks(): Promise<void> {
@@ -320,4 +362,13 @@ export class ConnectionPool {
 }
 
 // Global connection pool instance
+// In test environment, create instance but don't start health check interval
 export const globalConnectionPool = new ConnectionPool();
+
+/**
+ * Cleanup function for the global connection pool
+ * Stops the health check interval to prevent Jest from hanging
+ */
+export function cleanupGlobalConnectionPool(): void {
+  globalConnectionPool.stopHealthCheckInterval();
+}

@@ -1,75 +1,150 @@
 /**
- * Integration examples for the advanced filtering engine
- * Demonstrates how to use the filtering engine with existing search strategies
+ * Integration layer for advanced filtering engine using existing SearchService architecture
+ * Properly leverages the SearchFilterProcessor that's already integrated into SearchService
  */
 
 import { FilterEngine, FilterBuilder } from './FilterEngine';
 import { FilterOperator, FilterType } from './types';
-import { SearchQuery } from '../types';
+import { SearchQuery, SearchResult } from '../types';
+import { SearchService } from '../SearchService';
+import { DatabaseManager } from '../../../infrastructure/database/DatabaseManager';
 import { logInfo, logError } from '../../../infrastructure/config/Logger';
 
 /**
- * Example: Enhanced SearchService with filtering integration
+ * Proper integration service that uses the existing SearchService architecture
+ * Leverages the SearchFilterProcessor that's already integrated into SearchService
  */
-export class EnhancedSearchService {
+export class SearchFilterIntegration {
+  private searchService: SearchService;
   private filterEngine: FilterEngine;
 
-  constructor() {
+  constructor(dbManager: DatabaseManager) {
+    this.searchService = new SearchService(dbManager);
     this.filterEngine = new FilterEngine();
+
+    // Initialize SearchService asynchronously
+    this.initializeSearchService();
   }
 
   /**
-   * Search with advanced filtering
+   * Initialize SearchService asynchronously
+   */
+  private async initializeSearchService(): Promise<void> {
+    try {
+      await this.searchService.initializeAsync();
+      logInfo('SearchFilterIntegration initialized with SearchService', {
+        component: 'SearchFilterIntegration',
+        operation: 'initializeSearchService'
+      });
+    } catch (error) {
+      logError('Failed to initialize SearchService in SearchFilterIntegration', {
+        component: 'SearchFilterIntegration',
+        operation: 'initializeSearchService',
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Search with advanced filtering using the existing SearchService architecture
    */
   async searchWithFiltering(
     query: SearchQuery,
     filterExpression?: string
-  ): Promise<any[]> {
-    // Get base search results
-    const baseResults = await this.performBaseSearch(query);
+  ): Promise<SearchResult[]> {
+    try {
+      // Use the existing SearchService which already has SearchFilterProcessor integrated
+      if (filterExpression) {
+        // Set filter expression on query for integrated processing
+        query.filterExpression = filterExpression;
+        return await this.searchService.search(query);
+      }
 
-    // Apply filters if provided
-    if (filterExpression) {
-      const filter = this.filterEngine.parseFilter(filterExpression);
-      const filterResult = await this.filterEngine.executeFilter(filter, baseResults);
-
-      return filterResult.filteredItems;
+      // Search without additional filtering
+      return await this.searchService.search(query);
+    } catch (error) {
+      logError('Search with filtering failed', {
+        component: 'SearchFilterIntegration',
+        operation: 'searchWithFiltering',
+        error: error instanceof Error ? error.message : String(error),
+        queryText: query.text,
+        hasFilterExpression: !!filterExpression
+      });
+      throw error;
     }
-
-    return baseResults;
   }
 
   /**
-   * Search using fluent API filter builder
+   * Search using fluent API filter builder with existing SearchService
    */
   async searchWithFluentFilter(
     query: SearchQuery,
     filterBuilder: FilterBuilder
-  ): Promise<any[]> {
-    const baseResults = await this.performBaseSearch(query);
-    const filter = filterBuilder.build();
+  ): Promise<SearchResult[]> {
+    try {
+      const filter = filterBuilder.build();
 
-    if (filter) {
-      const filterResult = await this.filterEngine.executeFilter(filter, baseResults);
-      return filterResult.filteredItems;
+      if (filter) {
+        // For fluent filters, we need to apply them in-memory since we can't easily convert back to expressions
+        // This maintains compatibility while leveraging the SearchService for base search
+        const baseResults = await this.searchService.search(query);
+
+        // Apply the fluent filter in-memory using FilterEngine
+        const filterResult = await this.filterEngine.executeFilter(filter, baseResults);
+        return filterResult.filteredItems as SearchResult[];
+      }
+
+      return await this.searchService.search(query);
+    } catch (error) {
+      logError('Search with fluent filter failed', {
+        component: 'SearchFilterIntegration',
+        operation: 'searchWithFluentFilter',
+        error: error instanceof Error ? error.message : String(error),
+        queryText: query.text
+      });
+      throw error;
     }
-
-    return baseResults;
   }
 
   /**
-   * Database query with advanced filtering
+   * Database query with advanced filtering using FilterEngine
    */
   async searchWithDatabaseFilter(
     baseQuery: string,
     filterExpression: string
   ): Promise<{ sql: string; parameters: unknown[] }> {
-    const filter = this.filterEngine.parseFilter(filterExpression);
-    return await this.filterEngine.executeFilterAsQuery(filter, baseQuery);
+    try {
+      const filter = this.filterEngine.parseFilter(filterExpression);
+      return await this.filterEngine.executeFilterAsQuery(filter, baseQuery);
+    } catch (error) {
+      logError('Database filter query generation failed', {
+        component: 'SearchFilterIntegration',
+        operation: 'searchWithDatabaseFilter',
+        error: error instanceof Error ? error.message : String(error),
+        baseQuery,
+        filterExpression
+      });
+      throw error;
+    }
   }
 
   /**
-   * Example filter expressions
+   * Get the underlying SearchService instance for direct access
+   */
+  getSearchService(): SearchService {
+    return this.searchService;
+  }
+
+  /**
+   * Get the FilterEngine instance for direct access
+   */
+  getFilterEngine(): FilterEngine {
+    return this.filterEngine;
+  }
+
+  /**
+   * Example filter expressions (maintained for backward compatibility)
    */
   static getExampleFilters() {
     return {
@@ -94,7 +169,7 @@ export class EnhancedSearchService {
   }
 
   /**
-   * Example fluent filter construction
+   * Example fluent filter construction (maintained for backward compatibility)
    */
   static createExampleFluentFilter(): FilterBuilder {
     return new FilterBuilder()
@@ -107,43 +182,6 @@ export class EnhancedSearchService {
         new FilterBuilder()
           .where('status', FilterOperator.NOT_EQUALS, 'archived')
       );
-  }
-
-  /**
-   * Perform base search (placeholder for actual search implementation)
-   */
-  private async performBaseSearch(query: SearchQuery): Promise<any[]> {
-    // This would integrate with the existing SearchService
-    // For now, return mock data
-    return [
-      {
-        id: '1',
-        content: 'Important meeting tomorrow',
-        category: 'important',
-        priority: 9,
-        status: 'pending',
-        created_at: '2024-01-15',
-        score: 0.95
-      },
-      {
-        id: '2',
-        content: 'Review project proposal',
-        category: 'work',
-        priority: 7,
-        status: 'in_progress',
-        created_at: '2024-01-14',
-        score: 0.82
-      },
-      {
-        id: '3',
-        content: 'Archived old documents',
-        category: 'misc',
-        priority: 2,
-        status: 'archived',
-        created_at: '2024-01-10',
-        score: 0.45
-      }
-    ];
   }
 }
 
