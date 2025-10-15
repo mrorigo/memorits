@@ -879,4 +879,112 @@ class SearchIndexManager {
 ```
 ```
 
+## Manager Responsibility Clarification
+
+Following the code review remediation, the search architecture now has clearly defined responsibilities between the manager classes:
+
+### SearchManager (Low-Level Search Coordination)
+**Primary Responsibility**: FTS operations and direct search coordination
+
+```typescript
+class SearchManager {
+  // FTS5 operations and low-level search coordination
+  async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]>
+
+  // Strategy selection and fallback logic for direct searches
+  private determineSearchStrategy(query: string, options: SearchOptions): string
+
+  // Fallback search when primary strategy fails
+  private async executeFallbackSearch(query: string, options: SearchOptions): Promise<MemorySearchResult[]>
+}
+```
+
+**Key Functions**:
+- ✅ Direct FTS5 search operations
+- ✅ Search strategy selection and coordination
+- ✅ Fallback mechanism for failed searches
+- ✅ Input validation and sanitization
+- ✅ Search statistics tracking
+
+### SearchService (High-Level Search API)
+**Primary Responsibility**: Strategy orchestration and advanced search capabilities
+
+```typescript
+class SearchService {
+  // High-level search API with strategy orchestration
+  async search(query: SearchQuery): Promise<SearchResult[]>
+
+  // Strategy-specific search execution
+  async searchWithStrategy(query: SearchQuery, strategy: SearchStrategy): Promise<SearchResult[]>
+
+  // Advanced filtering and expression processing
+  async processFilterExpression(expression: string): Promise<ProcessedFilter>
+}
+```
+
+**Key Functions**:
+- ✅ Multi-strategy orchestration and execution
+- ✅ Advanced filter expression processing
+- ✅ Performance monitoring and error handling
+- ✅ Circuit breaker pattern for strategy protection
+- ✅ Result merging, deduplication, and ranking
+- ✅ Index health monitoring and optimization
+
+### DatabaseManager (Pure Database Facade)
+**Primary Responsibility**: Database operations without search logic
+
+```typescript
+class DatabaseManager {
+  // Pure database operations only
+  async storeLongTermMemory(memory: ProcessedLongTermMemory): Promise<string>
+  async getDatabaseStats(): Promise<DatabaseStats>
+  async getConsolidationService(): Promise<ConsolidationService>
+
+  // ❌ No search methods - removed in remediation
+}
+```
+
+**Key Functions**:
+- ✅ Memory storage and retrieval
+- ✅ Database statistics and monitoring
+- ✅ Consolidation service access
+- ✅ State management operations
+- ✅ Performance monitoring
+
+## Responsibility Separation Benefits
+
+### Before Remediation:
+- **SearchManager**: Mixed low-level and high-level logic
+- **SearchService**: Strategy management with some overlap
+- **DatabaseManager**: Had search methods (should be facade only)
+
+### After Remediation:
+- **SearchManager**: Pure low-level search coordination and FTS operations
+- **SearchService**: Pure high-level search API and strategy orchestration
+- **DatabaseManager**: Pure database facade with no search logic
+
+This separation provides:
+- **Clear boundaries**: Each class has a single, well-defined responsibility
+- **Reduced coupling**: Managers interact through well-defined interfaces
+- **Easier testing**: Each component can be tested in isolation
+- **Better maintainability**: Changes to one layer don't affect others
+- **Improved performance**: Specialized classes can optimize for their specific use cases
+
+## Integration Pattern
+
+The managers work together through a clean integration pattern:
+
+```typescript
+// High-level API usage (Memori.ts)
+const searchResults = await memori.searchMemories(query, options);
+
+// Internally routes to:
+const searchManager = dbManager.searchManager; // Get SearchManager instance
+return searchManager.searchMemories(query, options); // Execute search
+
+// Advanced usage:
+const searchService = await dbManager.getSearchService(); // Get SearchService
+return searchService.searchWithStrategy(searchQuery, strategy); // Strategy-specific search
+```
+
 This search architecture provides a robust, scalable, and intelligent search system capable of handling complex queries across multiple dimensions while maintaining high performance and reliability.

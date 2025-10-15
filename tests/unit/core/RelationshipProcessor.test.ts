@@ -70,7 +70,9 @@ describe('RelationshipProcessor', () => {
     mockOpenAIProvider = new MockedOpenAIProvider({ apiKey: 'test-key' }) as jest.Mocked<OpenAIProvider>;
 
     // Setup default mock implementations
-    mockDbManager.searchMemories = jest.fn().mockResolvedValue(mockExistingMemories);
+    (mockDbManager as any).searchManager = {
+      searchMemories: jest.fn().mockResolvedValue(mockExistingMemories)
+    };
     mockDbManager.getPrismaClient = jest.fn().mockReturnValue({
       longTermMemory: {
         findUnique: jest.fn().mockResolvedValue(mockMemory),
@@ -204,7 +206,9 @@ describe('RelationshipProcessor', () => {
   describe('Relationship Graph Building', () => {
     test('should build relationship graph with correct structure', async () => {
       // Mock database calls for graph building
-      mockDbManager.searchMemories = jest.fn().mockResolvedValue(mockExistingMemories);
+      (mockDbManager as any).searchManager = {
+        searchMemories: jest.fn().mockResolvedValue(mockExistingMemories)
+      };
       mockDbManager.getPrismaClient = jest.fn().mockReturnValue({
         longTermMemory: {
           findMany: jest.fn().mockResolvedValue([
@@ -469,7 +473,9 @@ describe('RelationshipProcessor', () => {
 
   describe('Error Handling', () => {
     test('should handle database errors gracefully', async () => {
-      mockDbManager.searchMemories = jest.fn().mockRejectedValue(new Error('Database connection failed'));
+      (mockDbManager as any).searchManager = {
+        searchMemories: jest.fn().mockRejectedValue(new Error('Database connection failed'))
+      };
 
       const result = await relationshipProcessor.extractRelationships(
         'Test content',
@@ -484,7 +490,9 @@ describe('RelationshipProcessor', () => {
     });
 
     test('should handle graph building errors gracefully', async () => {
-      mockDbManager.searchMemories = jest.fn().mockRejectedValue(new Error('Graph building failed'));
+      (mockDbManager as any).searchManager = {
+        searchMemories: jest.fn().mockRejectedValue(new Error('Graph building failed'))
+      };
 
       await expect(
         relationshipProcessor.buildRelationshipGraph('test-namespace')
@@ -492,7 +500,9 @@ describe('RelationshipProcessor', () => {
     });
 
     test('should handle empty memory list gracefully', async () => {
-      mockDbManager.searchMemories = jest.fn().mockResolvedValue([]);
+      (mockDbManager as any).searchManager = {
+        searchMemories: jest.fn().mockResolvedValue([])
+      };
 
       const result = await relationshipProcessor.extractRelationships(
         'Test content',
@@ -545,7 +555,9 @@ describe('RelationshipProcessor', () => {
         createdAt: new Date(),
       }));
 
-      mockDbManager.searchMemories = jest.fn().mockResolvedValue(largeMemorySet);
+      (mockDbManager as any).searchManager = {
+        searchMemories: jest.fn().mockResolvedValue(largeMemorySet)
+      };
 
       const startTime = Date.now();
       const result = await relationshipProcessor.extractRelationships(

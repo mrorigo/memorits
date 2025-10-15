@@ -142,7 +142,8 @@ describe('DatabaseManager (Optimized)', () => {
       };
 
       // This should not throw an error and should return empty results (no data in test DB)
-      const results = await dbManager.searchMemories(specialQuery, options);
+      const searchManager = (dbManager as any).searchManager;
+      const results = await searchManager.searchMemories(specialQuery, options);
       expect(Array.isArray(results)).toBe(true);
       expect(results.length).toBe(0); // No data in test database
     });
@@ -153,16 +154,15 @@ describe('DatabaseManager (Optimized)', () => {
         namespace: 'a'.repeat(200), // Too long namespace
       };
 
-      // Test that the DatabaseManager validation works properly
-      // The validation is in the searchMemoriesFTS method
+      // Test that the SearchManager validation works properly
+      const searchManager = (dbManager as any).searchManager;
+
       try {
-        // Use reflection to access the private method for testing
-        const ftsMethod = (dbManager as any).searchMemoriesFTS;
-        await ftsMethod.call(dbManager, 'test', options);
+        await searchManager.searchMemories('test', options);
         throw new Error('Expected validation error for long namespace');
       } catch (error: any) {
-        // Accept either the old error message or the new validation error message
-        expect(error.message).toMatch(/(Invalid FTS query|Namespace exceeds maximum length)/);
+        // The SearchManager should validate namespace length
+        expect(error.message).toMatch(/(Namespace is too long|namespace|validation)/i);
       }
     });
 
@@ -176,7 +176,8 @@ describe('DatabaseManager (Optimized)', () => {
       };
 
       // Should not throw an error
-      const results = await dbManager.searchMemories(validQuery, options);
+      const searchManager = (dbManager as any).searchManager;
+      const results = await searchManager.searchMemories(validQuery, options);
       expect(Array.isArray(results)).toBe(true);
     });
   });

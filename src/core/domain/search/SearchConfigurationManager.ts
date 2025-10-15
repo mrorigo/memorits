@@ -1,4 +1,4 @@
-import { SearchStrategy, SearchStrategyConfiguration } from './types';
+import { SearchStrategy, SearchStrategyConfig } from './types';
 import { SearchConfigurationError } from './SearchStrategy';
 import { logError, logWarn, logInfo } from '../../infrastructure/config/Logger';
 
@@ -13,8 +13,8 @@ import { logError, logWarn, logInfo } from '../../infrastructure/config/Logger';
  * Configuration change listener type
  */
 export type ConfigurationChangeListener = (
-    oldConfig: SearchStrategyConfiguration,
-    newConfig: SearchStrategyConfiguration
+    oldConfig: SearchStrategyConfig,
+    newConfig: SearchStrategyConfig
 ) => void;
 
 /**
@@ -35,8 +35,8 @@ export interface ConfigurationUpdateRecord {
     timestamp: Date;
     strategyName: string;
     action: 'update' | 'rollback' | 'failed';
-    oldConfig?: SearchStrategyConfiguration;
-    newConfig?: SearchStrategyConfiguration;
+    oldConfig?: SearchStrategyConfig;
+    newConfig?: SearchStrategyConfig;
     error?: string;
     success: boolean;
 }
@@ -64,7 +64,7 @@ export class SearchConfigurationManager {
      */
     async updateStrategyConfiguration(
         strategyName: string,
-        config: Partial<SearchStrategyConfiguration>,
+        config: Partial<SearchStrategyConfig>,
     ): Promise<void> {
         const updateStartTime = Date.now();
 
@@ -164,7 +164,7 @@ export class SearchConfigurationManager {
     /**
      * Load configuration for a strategy
      */
-    async loadConfiguration(strategyName: string): Promise<SearchStrategyConfiguration | null> {
+    async loadConfiguration(strategyName: string): Promise<SearchStrategyConfig | null> {
         // This would typically load from a configuration file or database
         // For now, return null to indicate no configuration found
         return null;
@@ -173,7 +173,7 @@ export class SearchConfigurationManager {
     /**
      * Save configuration for a strategy
      */
-    async saveConfiguration(strategyName: string, config: SearchStrategyConfiguration): Promise<void> {
+    async saveConfiguration(strategyName: string, config: SearchStrategyConfig): Promise<void> {
         // This would typically save to a configuration file or database
         logInfo(`Saving configuration for ${strategyName}`, {
             component: 'SearchConfigurationManager',
@@ -185,9 +185,9 @@ export class SearchConfigurationManager {
     /**
      * Get default configuration for a strategy
      */
-    getDefaultConfiguration(strategyName: string): SearchStrategyConfiguration {
+    getDefaultConfiguration(strategyName: string): SearchStrategyConfig {
         // Return default configuration based on strategy type
-        const baseConfig: SearchStrategyConfiguration = {
+        const baseConfig: SearchStrategyConfig = {
             strategyName: strategyName as SearchStrategy,
             enabled: true,
             priority: 5,
@@ -260,7 +260,7 @@ export class SearchConfigurationManager {
     /**
      * Validate configuration
      */
-    async validateConfiguration(config: SearchStrategyConfiguration): Promise<{
+    async validateConfiguration(config: SearchStrategyConfig): Promise<{
         isValid: boolean;
         errors: string[];
         warnings: string[];
@@ -307,9 +307,9 @@ export class SearchConfigurationManager {
      * Merge two configurations
      */
     mergeConfigurations(
-        baseConfig: SearchStrategyConfiguration,
-        updates: Partial<SearchStrategyConfiguration>,
-    ): SearchStrategyConfiguration {
+        baseConfig: SearchStrategyConfig,
+        updates: Partial<SearchStrategyConfig>,
+    ): SearchStrategyConfig {
         const merged = { ...baseConfig };
 
         // Merge top-level properties
@@ -343,7 +343,7 @@ export class SearchConfigurationManager {
      */
     private async applyConfigurationToStrategy(
         strategyName: SearchStrategy,
-        config: SearchStrategyConfiguration,
+        config: SearchStrategyConfig,
     ): Promise<void> {
         // This would apply the configuration to a running strategy instance
         logInfo(`Applying configuration to strategy ${strategyName}`, {
@@ -377,7 +377,7 @@ export class SearchConfigurationManager {
     /**
      * Update cached configuration (placeholder)
      */
-    private updateCachedConfiguration(strategyName: string, config: SearchStrategyConfiguration): void {
+    private updateCachedConfiguration(strategyName: string, config: SearchStrategyConfig): void {
         // This would update any cached configuration
         logInfo(`Updating cached configuration for ${strategyName}`, {
             component: 'SearchConfigurationManager',
@@ -414,8 +414,8 @@ export class SearchConfigurationManager {
      */
     private notifyConfigurationChange(
         strategyName: string,
-        oldConfig: SearchStrategyConfiguration,
-        newConfig: SearchStrategyConfiguration,
+        oldConfig: SearchStrategyConfig,
+        newConfig: SearchStrategyConfig,
     ): void {
         const listeners = this.changeListeners.get(strategyName) || [];
         listeners.forEach(listener => {

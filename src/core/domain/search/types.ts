@@ -15,14 +15,25 @@ import { MemoryRelationshipType } from '../../types/schemas';
 import type { MemoryRelationship } from '../../types/schemas';
 import { SearchStrategyConfig as BaseSearchStrategyConfig } from '../../types/base';
 
-// Import and re-export interfaces from SearchStrategy
+// Import and re-export essential interfaces from SearchStrategy
 import type {
   SearchQuery,
   SearchResult,
   ISearchStrategy,
+  SearchStrategyConfig,
+} from './SearchStrategy';
+
+export type {
+  SearchQuery,
+  SearchResult,
+  ISearchStrategy,
+  SearchStrategyConfig,
+};
+
+// Import types that are still needed from SearchStrategy
+import type {
   SearchCapability,
   SearchStrategyMetadata,
-  SearchStrategyConfig,
   ValidationResult,
   SearchError,
   SearchStrategyError,
@@ -35,14 +46,9 @@ import type {
   SearchErrorCategory,
 } from './SearchStrategy';
 
-
 export type {
-  SearchQuery,
-  SearchResult,
-  ISearchStrategy,
   SearchCapability,
   SearchStrategyMetadata,
-  SearchStrategyConfig,
   ValidationResult,
   SearchError,
   SearchStrategyError,
@@ -83,32 +89,6 @@ export interface DatabaseQueryResult {
 
 // Note: StrategyConfiguration removed - use SearchStrategyConfiguration instead
 
-// Query parameters interface for type-safe query building
-export interface QueryParameters {
-  text?: string;
-  limit?: number;
-  offset?: number;
-  filters?: Record<string, unknown>;
-  sortBy?: {
-    field: string;
-    direction: 'asc' | 'desc';
-  };
-  includeMetadata?: boolean;
-  context?: Record<string, unknown>;
-  categories?: string[];
-  categoryHierarchy?: string[];
-  categoryOperator?: 'AND' | 'OR' | 'HIERARCHY';
-  enableRelevanceBoost?: boolean;
-  enableAggregation?: boolean;
-  minCategoryRelevance?: number;
-  maxCategories?: number;
-  createdAfter?: string;
-  createdBefore?: string;
-  minImportance?: number;
-  maxImportance?: number;
-  memoryType?: string;
-  metadataFilters?: Record<string, unknown>;
-}
 
 // Search metadata interface for structured metadata handling
 export interface SearchMetadata {
@@ -146,27 +126,6 @@ export interface SortCriteria {
   direction: 'asc' | 'desc';
 }
 
-// Configuration Management Interfaces
-export interface SearchStrategyConfiguration {
-  strategyName: string;
-  enabled: boolean;
-  priority: number;
-  timeout: number;
-  maxResults: number;
-  performance: {
-    enableMetrics: boolean;
-    enableCaching: boolean;
-    cacheSize: number;
-    enableParallelExecution: boolean;
-  };
-  scoring: {
-    baseWeight: number;
-    recencyWeight: number;
-    importanceWeight: number;
-    relationshipWeight: number;
-  };
-  strategySpecific?: Record<string, unknown>;
-}
 
 export interface ConfigurationSchema {
   type: 'object';
@@ -179,32 +138,32 @@ export interface ConfigurationValidationResult {
   isValid: boolean;
   errors: string[];
   warnings: string[];
-  validatedConfig?: SearchStrategyConfiguration;
+  validatedConfig?: SearchStrategyConfig;
 }
 
 export interface ConfigurationManager {
-  loadConfiguration(name: string): Promise<SearchStrategyConfiguration | null>;
-  saveConfiguration(name: string, config: SearchStrategyConfiguration): Promise<void>;
+  loadConfiguration(name: string): Promise<SearchStrategyConfig | null>;
+  saveConfiguration(name: string, config: SearchStrategyConfig): Promise<void>;
   getConfigurationNames(): Promise<string[]>;
   deleteConfiguration(name: string): Promise<void>;
-  validateConfiguration(config: SearchStrategyConfiguration): Promise<ConfigurationValidationResult>;
-  getDefaultConfiguration(strategyName: string): SearchStrategyConfiguration;
-  mergeConfigurations(base: SearchStrategyConfiguration, override: Partial<SearchStrategyConfiguration>): SearchStrategyConfiguration;
+  validateConfiguration(config: SearchStrategyConfig): Promise<ConfigurationValidationResult>;
+  getDefaultConfiguration(strategyName: string): SearchStrategyConfig;
+  mergeConfigurations(base: SearchStrategyConfig, override: Partial<SearchStrategyConfig>): SearchStrategyConfig;
 }
 
 export interface ConfigurationPersistenceManager {
-  save(config: SearchStrategyConfiguration): Promise<void>;
-  load(strategyName: string): Promise<SearchStrategyConfiguration | null>;
+  save(config: SearchStrategyConfig): Promise<void>;
+  load(strategyName: string): Promise<SearchStrategyConfig | null>;
   delete(strategyName: string): Promise<void>;
   list(): Promise<string[]>;
   backup(name: string): Promise<BackupMetadata>;
-  restore(name: string, backupId: string): Promise<SearchStrategyConfiguration>;
-  restoreWithValidation(name: string, backupId: string): Promise<SearchStrategyConfiguration>;
+  restore(name: string, backupId: string): Promise<SearchStrategyConfig>;
+  restoreWithValidation(name: string, backupId: string): Promise<SearchStrategyConfig>;
   listStrategyBackups(strategyName: string): Promise<BackupMetadata[]>;
   cleanupOldBackups(strategyName: string, maxBackups: number): Promise<void>;
   validateBackupIntegrity(backupId: string): Promise<boolean>;
-  export(): Promise<Record<string, SearchStrategyConfiguration>>;
-  import(configs: Record<string, SearchStrategyConfiguration>): Promise<void>;
+  export(): Promise<Record<string, SearchStrategyConfig>>;
+  import(configs: Record<string, SearchStrategyConfig>): Promise<void>;
 }
 
 export interface ConfigurationAuditEntry {

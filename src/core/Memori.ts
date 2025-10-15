@@ -294,7 +294,8 @@ export class Memori {
   }
 
   async searchMemories(query: string, options: SearchOptions = {}): Promise<MemorySearchResult[]> {
-    return this.dbManager.searchMemories(query, {
+    const searchManager = (this.dbManager as any).searchManager;
+    return searchManager.searchMemories(query, {
       namespace: this.config.namespace,
       limit: options.limit || 5,
       minImportance: options.minImportance,

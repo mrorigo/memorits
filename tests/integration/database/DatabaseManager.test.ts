@@ -49,7 +49,8 @@ describe('DatabaseManager (Optimized)', () => {
 
     // Since we're searching longTermMemory but only stored ChatHistory,
     // let's test with a simpler approach - just verify the method doesn't throw
-    const memories = await dbManager.searchMemories('TypeScript', {
+    const searchManager = (dbManager as any).searchManager;
+    const memories = await searchManager.searchMemories('TypeScript', {
       namespace: 'test',
       limit: 5,
     });

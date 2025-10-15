@@ -1,5 +1,5 @@
 import {
-  SearchStrategyConfiguration,
+  SearchStrategyConfig,
   ConfigurationValidationResult,
   ConfigurationManager,
   ConfigurationPersistenceManager,
@@ -47,7 +47,7 @@ interface ConfigurationOperationMetrics {
 /**
  * Default configuration templates for each search strategy
  */
-const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfiguration> = {
+const DEFAULT_STRATEGY_CONFIGS: Record<SearchStrategy, SearchStrategyConfig> = {
   [SearchStrategy.FTS5]: {
     strategyName: SearchStrategy.FTS5,
     enabled: true,
@@ -297,7 +297,7 @@ class ConfigurationValidator {
   /**
    * Validate a complete strategy configuration
    */
-  static validateConfiguration(config: SearchStrategyConfiguration): ConfigurationValidationResult {
+  static validateConfiguration(config: SearchStrategyConfig): ConfigurationValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -585,7 +585,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
     }
   }
 
-  async save(config: SearchStrategyConfiguration): Promise<void> {
+  async save(config: SearchStrategyConfig): Promise<void> {
     const filename = `${config.strategyName}.json`;
     const filepath = join(this.configDir, filename);
     const data = JSON.stringify(config, null, 2);
@@ -597,7 +597,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
     }
   }
 
-  async load(strategyName: string): Promise<SearchStrategyConfiguration | null> {
+  async load(strategyName: string): Promise<SearchStrategyConfig | null> {
     const filename = `${strategyName}.json`;
     const filepath = join(this.configDir, filename);
 
@@ -693,7 +693,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
     }
   }
 
-  async restore(name: string, backupId: string): Promise<SearchStrategyConfiguration> {
+  async restore(name: string, backupId: string): Promise<SearchStrategyConfig> {
     const backupFilename = `${backupId}.json`;
     const backupFilepath = join(this.backupDir, backupFilename);
 
@@ -727,10 +727,10 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
     }
   }
 
-  async export(): Promise<Record<string, SearchStrategyConfiguration>> {
+  async export(): Promise<Record<string, SearchStrategyConfig>> {
     try {
       const strategyNames = await this.list();
-      const configs: Record<string, SearchStrategyConfiguration> = {};
+      const configs: Record<string, SearchStrategyConfig> = {};
 
       for (const name of strategyNames) {
         const config = await this.load(name);
@@ -745,7 +745,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
     }
   }
 
-  async import(configs: Record<string, SearchStrategyConfiguration>): Promise<void> {
+  async import(configs: Record<string, SearchStrategyConfig>): Promise<void> {
     try {
       for (const [name, config] of Object.entries(configs)) {
         const validation = ConfigurationValidator.validateConfiguration(config);
@@ -763,7 +763,7 @@ class FileConfigurationPersistenceManager implements ConfigurationPersistenceMan
   /**
    * Enhanced restore with integrity validation
    */
-  async restoreWithValidation(name: string, backupId: string): Promise<SearchStrategyConfiguration> {
+  async restoreWithValidation(name: string, backupId: string): Promise<SearchStrategyConfig> {
     try {
       // First validate backup integrity
       const isValid = await this.validateBackupIntegrity(backupId);
@@ -958,7 +958,7 @@ class MemoryConfigurationAuditManager implements ConfigurationAuditManager {
 export class SearchStrategyConfigManager implements ConfigurationManager {
   private persistenceManager: ConfigurationPersistenceManager;
   private auditManager: ConfigurationAuditManager;
-  private configurations: Map<string, SearchStrategyConfiguration> = new Map();
+  private configurations: Map<string, SearchStrategyConfig> = new Map();
 
   // Performance monitoring
   private performanceMetrics: ConfigurationPerformanceMetrics = {
@@ -983,7 +983,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     this.auditManager = auditManager || new MemoryConfigurationAuditManager();
   }
 
-  async loadConfiguration(name: string): Promise<SearchStrategyConfiguration | null> {
+  async loadConfiguration(name: string): Promise<SearchStrategyConfig | null> {
     const startTime = Date.now();
     const cacheUsed = this.configurations.has(name);
 
@@ -1061,7 +1061,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     }
   }
 
-  async saveConfiguration(name: string, config: SearchStrategyConfiguration): Promise<void> {
+  async saveConfiguration(name: string, config: SearchStrategyConfig): Promise<void> {
     try {
       // Validate configuration
       const validation = ConfigurationValidator.validateConfiguration(config);
@@ -1164,7 +1164,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     }
   }
 
-  async validateConfiguration(config: SearchStrategyConfiguration): Promise<ConfigurationValidationResult> {
+  async validateConfiguration(config: SearchStrategyConfig): Promise<ConfigurationValidationResult> {
     try {
       const result = ConfigurationValidator.validateConfiguration(config);
 
@@ -1198,7 +1198,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     }
   }
 
-  getDefaultConfiguration(strategyName: string): SearchStrategyConfiguration {
+  getDefaultConfiguration(strategyName: string): SearchStrategyConfig {
     const defaultConfig = DEFAULT_STRATEGY_CONFIGS[strategyName as SearchStrategy];
     if (!defaultConfig) {
       throw new Error(`No default configuration available for strategy: ${strategyName}`);
@@ -1207,7 +1207,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
     return JSON.parse(JSON.stringify(defaultConfig)); // Deep clone
   }
 
-  mergeConfigurations(base: SearchStrategyConfiguration, override: Partial<SearchStrategyConfiguration>): SearchStrategyConfiguration {
+  mergeConfigurations(base: SearchStrategyConfig, override: Partial<SearchStrategyConfig>): SearchStrategyConfig {
     const merged = { ...base };
 
     if (override.enabled !== undefined) merged.enabled = override.enabled;
@@ -1233,7 +1233,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
   /**
    * Get all current cached configurations
    */
-  getCachedConfigurations(): Map<string, SearchStrategyConfiguration> {
+  getCachedConfigurations(): Map<string, SearchStrategyConfig> {
     return new Map(this.configurations);
   }
 
@@ -1247,7 +1247,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
   /**
    * Calculate changes between two configurations
    */
-  private calculateChanges(oldConfig: SearchStrategyConfiguration, newConfig: SearchStrategyConfiguration): Record<string, { from: unknown; to: unknown }> {
+  private calculateChanges(oldConfig: SearchStrategyConfig, newConfig: SearchStrategyConfig): Record<string, { from: unknown; to: unknown }> {
     const changes: Record<string, { from: unknown; to: unknown }> = {};
 
     // Check top-level properties
@@ -1290,7 +1290,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
   /**
    * Export all configurations for backup or migration
    */
-  async exportConfigurations(): Promise<Record<string, SearchStrategyConfiguration>> {
+  async exportConfigurations(): Promise<Record<string, SearchStrategyConfig>> {
     try {
       return await this.persistenceManager.export();
     } catch (error) {
@@ -1306,7 +1306,7 @@ export class SearchStrategyConfigManager implements ConfigurationManager {
   /**
    * Import configurations from backup or migration
    */
-  async importConfigurations(configs: Record<string, SearchStrategyConfiguration>): Promise<void> {
+  async importConfigurations(configs: Record<string, SearchStrategyConfig>): Promise<void> {
     try {
       await this.persistenceManager.import(configs);
 

@@ -31,10 +31,16 @@ const mockLoadConfig = jest.fn();
 describe('Memori', () => {
   let memori: Memori;
   let mockConfig: any;
+  let mockSearchManager: any;
 
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
+
+    // Setup search manager mock
+    mockSearchManager = {
+      searchMemories: jest.fn().mockResolvedValue([])
+    };
 
     // Setup mock config
     mockConfig = {
@@ -55,7 +61,16 @@ describe('Memori', () => {
     // Setup method mocks
     MockDatabaseManager.prototype.storeChatHistory = jest.fn().mockResolvedValue('mock-uuid');
     MockDatabaseManager.prototype.storeLongTermMemory = jest.fn().mockResolvedValue('memory-id');
-    MockDatabaseManager.prototype.searchMemories = jest.fn().mockResolvedValue([]);
+    // Mock the DatabaseManager instance methods
+    mockSearchManager = {
+      searchMemories: jest.fn().mockResolvedValue([])
+    };
+
+    // Setup the mock to return searchManager when accessed
+    Object.defineProperty(MockDatabaseManager.prototype, 'searchManager', {
+      get: () => mockSearchManager,
+      configurable: true
+    });
     MockDatabaseManager.prototype.close = jest.fn().mockResolvedValue(undefined);
     MockMemoryAgent.prototype.processConversation = jest.fn().mockResolvedValue({ content: 'processed' });
 
@@ -197,7 +212,7 @@ describe('Memori', () => {
     it('should search memories with default limit', async () => {
       await memori.searchMemories('test query');
 
-      expect(MockDatabaseManager.prototype.searchMemories).toHaveBeenCalledWith('test query', {
+      expect(mockSearchManager.searchMemories).toHaveBeenCalledWith('test query', {
         namespace: mockConfig.namespace,
         limit: 5,
         minImportance: undefined,
@@ -209,7 +224,7 @@ describe('Memori', () => {
     it('should search memories with custom limit', async () => {
       await memori.searchMemories('test query', { limit: 10 });
 
-      expect(MockDatabaseManager.prototype.searchMemories).toHaveBeenCalledWith('test query', {
+      expect(mockSearchManager.searchMemories).toHaveBeenCalledWith('test query', {
         namespace: mockConfig.namespace,
         limit: 10,
         minImportance: undefined,

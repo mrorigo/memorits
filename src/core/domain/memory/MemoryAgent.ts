@@ -554,7 +554,8 @@ export class MemoryAgent {
     }
 
     try {
-      return await this.dbManager.searchMemories('', {
+      const searchManager = (this.dbManager as any).searchManager;
+      return await searchManager.searchMemories('', {
         namespace: sessionId,
         limit,
       });
@@ -707,7 +708,8 @@ Extract and classify this memory, including relationship analysis:`;
 
       if (this.dbManager) {
         try {
-          const existingMemories = await this.dbManager.searchMemories('', {
+          const searchManager = (this.dbManager as any).searchManager;
+          const existingMemories = await searchManager.searchMemories('', {
             namespace: params.context.sessionId || 'default',
             limit: 50, // Get recent memories for relationship analysis
           });

@@ -1,4 +1,4 @@
-import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, ISearchService, StrategyNotFoundError, SearchStrategyConfiguration } from './types';
+import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, ISearchService, StrategyNotFoundError, SearchStrategyConfig } from './types';
 import { SearchError, SearchValidationError, SearchErrorCategory, SearchStrategyError, SearchTimeoutError } from './SearchStrategy';
 import { SearchIndexManager } from './SearchIndexManager';
 import { LikeSearchStrategy } from './LikeSearchStrategy';
@@ -31,7 +31,7 @@ import {
  */
 export class SearchService implements ISearchService {
   private strategies: Map<SearchStrategy, ISearchStrategy> = new Map();
-  private strategyConfigs: Map<SearchStrategy, SearchStrategyConfiguration> = new Map();
+  private strategyConfigs: Map<SearchStrategy, SearchStrategyConfig> = new Map();
   private dbManager: DatabaseManager;
   private configManager: SearchStrategyConfigManager;
   private searchIndexManager: SearchIndexManager;
@@ -254,7 +254,10 @@ export class SearchService implements ISearchService {
         minScore: config.scoring?.baseWeight || 0.1
       };
 
-      const recentStrategy = new RecentMemoriesStrategy(strategyConfig, this.dbManager);
+      const recentStrategy = new RecentMemoriesStrategy({
+        strategyName: SearchStrategy.RECENT,
+        ...strategyConfig,
+      }, this.dbManager);
 
       // Apply strategy-specific configuration
       if (config.strategySpecific) {
@@ -437,6 +440,7 @@ export class SearchService implements ISearchService {
     this.strategies.set(SearchStrategy.FTS5, new SQLiteFTSStrategy(this.dbManager));
     this.strategies.set(SearchStrategy.LIKE, new LikeSearchStrategy(this.dbManager));
     this.strategies.set(SearchStrategy.RECENT, new RecentMemoriesStrategy({
+      strategyName: SearchStrategy.RECENT,
       enabled: true,
       priority: 3,
       timeout: 5000,

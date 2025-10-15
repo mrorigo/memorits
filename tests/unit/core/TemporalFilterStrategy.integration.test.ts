@@ -80,7 +80,10 @@ describe('Temporal Strategy Integration Tests', () => {
         } as any;
 
         temporalStrategy = new TemporalFilterStrategy(defaultTemporalConfig, mockDbManager);
-        recentStrategy = new RecentMemoriesStrategy(defaultRecentConfig, mockDbManager);
+        recentStrategy = new RecentMemoriesStrategy({
+          strategyName: SearchStrategy.RECENT,
+          ...defaultRecentConfig,
+        }, mockDbManager);
     });
 
     describe('TemporalFilterStrategy Integration', () => {
@@ -444,7 +447,10 @@ describe('Temporal Strategy Integration Tests', () => {
 
             it('should reject invalid half-life', () => {
                 // Test the validation logic directly on the strategy instance
-                const strategy = new RecentMemoriesStrategy(defaultRecentConfig, mockDbManager);
+                const strategy = new RecentMemoriesStrategy({
+                  strategyName: SearchStrategy.RECENT,
+                  ...defaultRecentConfig,
+                }, mockDbManager);
 
                 // Access the private configuration and modify it for testing
                 (strategy as any).timeDecayConfig = {

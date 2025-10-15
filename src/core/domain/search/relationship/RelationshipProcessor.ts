@@ -828,7 +828,8 @@ Return the analysis in the specified JSON format.`;
    */
   private async getMemoriesWithRelationships(namespace: string): Promise<any[]> {
     // Get recent memories that might have relationships
-    const recentMemories = await this.databaseManager.searchMemories('', {
+    const searchManager = (this.databaseManager as any).searchManager;
+    const recentMemories = await searchManager.searchMemories('', {
       namespace,
       limit: this.config.maxRelatedMemories,
     });

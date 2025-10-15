@@ -157,14 +157,28 @@ export interface SearchStrategyMetadata {
 }
 
 /**
- * Search strategy configuration interface
- */
+  * Search strategy configuration interface
+  */
 export interface SearchStrategyConfig {
+  strategyName: string;
   enabled: boolean;
   priority: number;
   timeout: number;
   maxResults: number;
-  minScore: number;
+  minScore?: number;
+  performance?: {
+    enableMetrics: boolean;
+    enableCaching: boolean;
+    cacheSize: number;
+    enableParallelExecution: boolean;
+  };
+  scoring?: {
+    baseWeight: number;
+    recencyWeight: number;
+    importanceWeight: number;
+    relationshipWeight: number;
+  };
+  strategySpecific?: Record<string, unknown>;
   options?: Record<string, unknown>;
 }
 
@@ -241,7 +255,7 @@ export abstract class BaseSearchStrategy implements ISearchStrategy {
         throw new Error('MaxResults must be between 1 and 1000');
       }
 
-      if (this.config.minScore < 0 || this.config.minScore > 1) {
+      if (this.config.minScore !== undefined && (this.config.minScore < 0 || this.config.minScore > 1)) {
         throw new Error('MinScore must be between 0 and 1');
       }
 
