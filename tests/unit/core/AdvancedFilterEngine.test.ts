@@ -1,6 +1,6 @@
-import { AdvancedFilterEngine, FilterTemplateManager } from './AdvancedFilterEngine';
-import { FilterCombinationStrategy, FilterType, FilterOperator } from './types';
-import { FilterBuilder } from './FilterBuilder';
+import { AdvancedFilterEngine, FilterTemplateManager } from '../../../src/core/domain/search/filtering/AdvancedFilterEngine';
+import { FilterCombinationStrategy, FilterType, FilterOperator } from '../../../src/core/domain/search/filtering/types';
+import { FilterBuilder, FilterEngine } from '../../../src/core/domain/search/filtering/FilterEngine';
 
 describe('AdvancedFilterEngine', () => {
   let engine: AdvancedFilterEngine;
@@ -11,11 +11,11 @@ describe('AdvancedFilterEngine', () => {
 
   describe('combineFilters', () => {
     it('should combine filters with INTERSECTION strategy', () => {
-      const filter1 = FilterBuilder.create()
+      const filter1 = new FilterBuilder()
         .where('category', FilterOperator.EQUALS, 'important')
         .build()!;
 
-      const filter2 = FilterBuilder.create()
+      const filter2 = new FilterBuilder()
         .where('priority', FilterOperator.GREATER_THAN, 5)
         .build()!;
 
@@ -28,11 +28,11 @@ describe('AdvancedFilterEngine', () => {
     });
 
     it('should combine filters with UNION strategy', () => {
-      const filter1 = FilterBuilder.create()
+      const filter1 = new FilterBuilder()
         .where('status', FilterOperator.EQUALS, 'active')
         .build()!;
 
-      const filter2 = FilterBuilder.create()
+      const filter2 = new FilterBuilder()
         .where('status', FilterOperator.EQUALS, 'pending')
         .build()!;
 
@@ -45,11 +45,11 @@ describe('AdvancedFilterEngine', () => {
     });
 
     it('should combine filters with CASCADE strategy', () => {
-      const filter1 = FilterBuilder.create()
+      const filter1 = new FilterBuilder()
         .where('category', FilterOperator.EQUALS, 'urgent')
         .build()!;
 
-      const filter2 = FilterBuilder.create()
+      const filter2 = new FilterBuilder()
         .where('priority', FilterOperator.GREATER_THAN, 8)
         .build()!;
 
@@ -62,11 +62,11 @@ describe('AdvancedFilterEngine', () => {
     });
 
     it('should combine filters with WEIGHTED strategy', () => {
-      const filter1 = FilterBuilder.create()
+      const filter1 = new FilterBuilder()
         .where('score', FilterOperator.GREATER_THAN, 0.8)
         .build()!;
 
-      const filter2 = FilterBuilder.create()
+      const filter2 = new FilterBuilder()
         .where('rating', FilterOperator.GREATER_THAN, 4)
         .build()!;
 
@@ -86,7 +86,7 @@ describe('AdvancedFilterEngine', () => {
 
     // TODO: Fix enum handling for unsupported strategy validation
     // it('should throw error for unsupported strategy', () => {
-    //   const filter = FilterBuilder.create()
+    //   const filter = new FilterBuilder()
     //     .where('field', FilterOperator.EQUALS, 'value')
     //     .build()!;
 
@@ -99,8 +99,8 @@ describe('AdvancedFilterEngine', () => {
   describe('optimizeFilterChain', () => {
     it('should optimize filter chain with cost estimation', () => {
       const filters = [
-        FilterBuilder.create().where('category', FilterOperator.EQUALS, 'test').build()!,
-        FilterBuilder.create().where('priority', FilterOperator.GREATER_THAN, 5).build()!,
+        new FilterBuilder().where('category', FilterOperator.EQUALS, 'test').build()!,
+        new FilterBuilder().where('priority', FilterOperator.GREATER_THAN, 5).build()!,
       ];
 
       const optimized = engine.optimizeFilterChain(filters);
@@ -112,9 +112,9 @@ describe('AdvancedFilterEngine', () => {
 
     it('should create parallel groups for independent filters', () => {
       const filters = [
-        FilterBuilder.create().where('category', FilterOperator.EQUALS, 'test').build()!,
-        FilterBuilder.create().where('priority', FilterOperator.GREATER_THAN, 5).build()!,
-        FilterBuilder.create().where('status', FilterOperator.EQUALS, 'active').build()!,
+        new FilterBuilder().where('category', FilterOperator.EQUALS, 'test').build()!,
+        new FilterBuilder().where('priority', FilterOperator.GREATER_THAN, 5).build()!,
+        new FilterBuilder().where('status', FilterOperator.EQUALS, 'active').build()!,
       ];
 
       const optimized = engine.optimizeFilterChain(filters);
