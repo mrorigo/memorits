@@ -36,8 +36,8 @@ import {
   MemoryRelationshipType,
   MemoryRelationship,
   ProcessedLongTermMemory,
-} from '../../../core/types/schemas';
-import { MemoryProcessingParams } from '../../../core/types/models';
+} from '@/core/types/schemas';
+import { MemoryProcessingParams } from '@/core/types/models';
 import { DatabaseManager } from '../../infrastructure/database/DatabaseManager';
 import { MemoryProcessingState } from './MemoryProcessingStateManager';
 import { RelationshipProcessor } from '../search/relationship/RelationshipProcessor';
@@ -87,12 +87,12 @@ IMPORTANCE CRITERIA:
 `;
 
 export class MemoryAgent {
-  private openaiProvider: ILLMProvider;
+  private llmProvider: ILLMProvider;
   private dbManager?: DatabaseManager;
   private relationshipProcessor?: RelationshipProcessor;
 
   constructor(openaiProvider: ILLMProvider, dbManager?: DatabaseManager) {
-    this.openaiProvider = openaiProvider;
+    this.llmProvider = openaiProvider;
     this.dbManager = dbManager;
 
     // Initialize relationship processor if database manager is available
@@ -110,7 +110,7 @@ export class MemoryAgent {
 
   /**
    * Process LLM response and return validated memory object
-   * This method can be tested independently of OpenAI API calls
+   * This method can be tested independently of provider API calls
    */
   static processLLMResponse(
     content: string,
@@ -686,7 +686,7 @@ RELATIONSHIP ANALYSIS INSTRUCTIONS:
 Extract and classify this memory, including relationship analysis:`;
 
     try {
-      const response = await this.openaiProvider.createChatCompletion({
+      const response = await this.llmProvider.createChatCompletion({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
