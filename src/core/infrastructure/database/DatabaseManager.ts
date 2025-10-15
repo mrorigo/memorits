@@ -24,8 +24,8 @@ import { PrismaClient } from '@prisma/client';
 import { MemoryConsolidationService } from './MemoryConsolidationService';
 import { RepositoryFactory } from './factories/RepositoryFactory';
 import { ConsolidationService } from './interfaces/ConsolidationService';
-import { ChatHistoryManager } from '../../../core/domain/conversation/ChatHistoryManager';
-import { SearchService } from '../../domain/search/SearchService';
+import { ChatHistoryManager } from '@/core/domain/conversation/ChatHistoryManager';
+import { SearchService } from '@/core/domain/search/SearchService';
 
 // Type definitions for database records and operations
 type LongTermMemoryRecord = {

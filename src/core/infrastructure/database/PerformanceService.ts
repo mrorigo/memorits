@@ -1,4 +1,4 @@
-import { PerformanceMetrics, PerformanceTrend } from '../../../core/types/base';
+import { PerformanceMetrics, PerformanceTrend } from '@/core/types/base';
 import { DatabaseOperationMetrics, DatabasePerformanceConfig } from './types';
 
 // Node.js process for memory usage monitoring

@@ -546,11 +546,6 @@ describe('Temporal Strategy Integration Tests', () => {
 
             const results = await temporalStrategy.search(query);
 
-            // Debug logging
-            console.log('Query:', JSON.stringify(query, null, 2));
-            console.log('Results length:', results.length);
-            console.log('Results:', JSON.stringify(results, null, 2));
-
             // Let's also check if the mock was called
             console.log('Mock called:', mockPrismaClient.$queryRawUnsafe.mock.calls.length > 0);
             if (mockPrismaClient.$queryRawUnsafe.mock.calls.length > 0) {
