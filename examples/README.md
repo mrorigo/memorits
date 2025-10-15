@@ -18,7 +18,7 @@ import { Memori, OpenAIWrapper } from 'memorits';
 
 // Simple configuration
 const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
+  databaseUrl: 'file:./memories.db',
   namespace: 'my-app',
   apiKey: 'your-api-key',
   autoMemory: true
@@ -34,7 +34,7 @@ const openai = new OpenAIWrapper(memori);
 2. Use it directly in your code:
    ```typescript
    const memori = new Memori({
-     databaseUrl: 'sqlite:./memories.db',
+     databaseUrl: 'file:./memories.db',
      namespace: 'my-app',
      apiKey: 'your-openai-api-key',
      autoMemory: true
@@ -56,7 +56,7 @@ const openai = new OpenAIWrapper(memori);
 4. Use it in your code:
    ```typescript
    const memori = new Memori({
-     databaseUrl: 'sqlite:./memories.db',
+     databaseUrl: 'file:./memories.db',
      namespace: 'my-app',
      apiKey: 'ollama-local',
      baseUrl: 'http://localhost:11434',

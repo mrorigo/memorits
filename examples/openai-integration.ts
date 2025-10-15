@@ -17,7 +17,7 @@ async function openaiIntegrationExample(): Promise<void> {
   try {
     // Create Memori instance with unified configuration
     memori = new Memori({
-      databaseUrl: 'sqlite:./memories.db',
+      databaseUrl: 'file:./memories.db',
       namespace: 'openai-integration',
       apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key',
       model: 'gpt-4o-mini',

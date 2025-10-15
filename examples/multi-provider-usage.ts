@@ -14,7 +14,7 @@ async function multiProviderDemo(): Promise<void> {
 
   // Same Memori instance, different provider wrappers
   const memori = new Memori({
-    databaseUrl: 'sqlite:./multi-provider.db',
+    databaseUrl: 'file:./multi-provider.db',
     namespace: 'multi-provider-demo',
     apiKey: 'your-api-key',
     model: 'gpt-4o-mini',
@@ -70,7 +70,7 @@ async function sharedMemoryExample(): Promise<void> {
 
   // Single Memori instance shared across multiple providers
   const memori = new Memori({
-    databaseUrl: 'sqlite:./shared-memory.db',
+    databaseUrl: 'file:./shared-memory.db',
     namespace: 'shared-memory-demo',
     apiKey: 'your-api-key',
     model: 'gpt-4o-mini',

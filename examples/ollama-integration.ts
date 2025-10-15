@@ -17,7 +17,7 @@ async function ollamaIntegrationExample(): Promise<void> {
   try {
     // Create Memori instance with unified configuration
     memori = new Memori({
-      databaseUrl: 'sqlite:./memories.db',
+      databaseUrl: 'file:./memories.db',
       namespace: 'ollama-integration',
       apiKey: 'ollama-local',
       model: 'llama2',

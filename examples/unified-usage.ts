@@ -22,7 +22,7 @@ async function basicUsage() {
 
   // 1. Create Memori instance with full configuration
   const memori = new Memori({
-    databaseUrl: 'postgresql://localhost:5432/memori',
+    databaseUrl: 'file://memori.db',
     namespace: 'my-app',
     apiKey: 'sk-your-openai-key',
     model: 'gpt-4o-mini',

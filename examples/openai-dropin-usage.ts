@@ -2,35 +2,31 @@
 // Example demonstrating OpenAI Drop-in replacement with ChatProxy
 // This example shows how to use the MemoriOpenAI client as a drop-in replacement
 
-import { MemoriOpenAIClient } from '../src/integrations/openai-dropin/client';
-import { memoriOpenAIFactory } from '../src/integrations/openai-dropin/factory';
+import MemoriOpenAI, {
+  MemoriOpenAIFromConfig,
+  MemoriOpenAIFromEnv,
+  MemoriOpenAIFromDatabase,
+} from '../src/integrations/openai-dropin';
+import { logInfo, logError } from '../src/core/infrastructure/config/Logger';
 
 /**
  * Example: Basic Drop-in Replacement
  * Shows how existing OpenAI code can be easily migrated to use memory functionality
  */
 async function basicDropInExample() {
-  console.log('🚀 Basic OpenAI Drop-in Replacement Example');
+  logInfo('=== Basic Drop-in Example ===', { component: 'OpenAIUsageExample', example: 'basicDropIn' });
 
   // Create MemoriOpenAI client (drop-in replacement for OpenAI)
-  const client = new MemoriOpenAIClient('your-api-key-here', {
-    enableChatMemory: true,
-    autoInitialize: true,
-    databaseConfig: {
-      type: 'sqlite',
-      url: 'sqlite:./memori-dropin.db',
-      namespace: 'basic-example',
+  const client = new MemoriOpenAI({
+    apiKey: 'your-api-key',
+    memory: {
+      enableChatMemory: true,
     },
+    baseUrl: 'https://api.openai.com/v1',
   });
 
-  // Enable the client
-  await client.enable();
-
-  console.log(`📝 Memory recording enabled: ${client.config.enableChatMemory}`);
-  console.log(`🔗 Session ID: ${client.sessionId}`);
-
-  // Example conversation - memory is automatically recorded
   try {
+    // Example conversation - memory is automatically recorded
     const response = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -47,28 +43,44 @@ async function basicDropInExample() {
       max_tokens: 150,
     });
 
-    console.log('✅ Chat completion successful');
-    console.log('📄 Response:', response.choices[0]?.message?.content);
+    logInfo('Chat completion successful', {
+      component: 'OpenAIUsageExample',
+      example: 'basicDropIn',
+      responseLength: response.choices[0]?.message?.content?.length || 0,
+    });
 
     // Search for memories (this should include the conversation we just had)
     const memories = await client.memory.searchMemories('Alice TypeScript');
-    console.log(`🔍 Found ${memories.length} memories related to "Alice TypeScript"`);
+    logInfo('Memory search completed', {
+      component: 'OpenAIUsageExample',
+      example: 'basicDropIn',
+      memoriesFound: memories.length,
+    });
 
     memories.forEach((memory, index) => {
-      console.log(`  Memory ${index + 1}: ${memory.content}`);
+      logInfo(`Memory ${index + 1}`, {
+        component: 'OpenAIUsageExample',
+        example: 'basicDropIn',
+        content: memory.content?.substring(0, 100) + '...',
+      });
     });
 
     // Get memory statistics
     const stats = await client.memory.getMemoryStats();
-    console.log('📊 Memory Statistics:', stats);
+    logInfo('Memory statistics retrieved', {
+      component: 'OpenAIUsageExample',
+      example: 'basicDropIn',
+      stats,
+    });
 
+    await client.close();
   } catch (error) {
-    console.error('❌ Error:', error instanceof Error ? error.message : String(error));
+    logError('Error in basic example', {
+      component: 'OpenAIUsageExample',
+      example: 'basicDropIn',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
-
-  // Clean up
-  await client.close();
-  console.log('👋 Basic example completed');
 }
 
 /**
@@ -76,35 +88,42 @@ async function basicDropInExample() {
  * Shows the various ways to initialize the MemoriOpenAI client
  */
 async function initializationPatternsExample() {
-  console.log('\n🔧 Initialization Patterns Example');
+  logInfo('=== Initialization Patterns Example ===', { component: 'OpenAIUsageExample', example: 'initializationPatterns' });
 
   // Pattern 1: Factory function with config
-  const client1 = await memoriOpenAIFactory.fromConfig('your-api-key-here', {
-    enableChatMemory: true,
-    memoryProcessingMode: 'auto',
-    namespace: 'pattern1',
+  const client1 = await MemoriOpenAIFromConfig({
+    apiKey: 'your-api-key',
+    memory: {
+      enableChatMemory: true,
+      memoryProcessingMode: 'auto',
+    },
   });
 
   // Pattern 2: Factory function from environment
-  const client2 = await memoriOpenAIFactory.fromEnv('your-api-key-here', {
-    enableChatMemory: true,
-    memoryProcessingMode: 'conscious',
+  const client2 = await MemoriOpenAIFromEnv('your-api-key', {
+    memory: {
+      enableChatMemory: true,
+      memoryProcessingMode: 'conscious',
+    },
   });
 
   // Pattern 3: Factory function with database URL
-  const client3 = await memoriOpenAIFactory.fromDatabaseUrl('your-api-key-here', 'sqlite:./pattern3.db', {
-    enableChatMemory: true,
-    namespace: 'pattern3',
+  const client3 = await MemoriOpenAIFromDatabase('your-api-key', 'sqlite:./pattern3.db', {
+    memory: {
+      enableChatMemory: true,
+    },
   });
 
-  console.log('✅ All initialization patterns work');
-  console.log('📝 Client 1 namespace:', client1.config.namespace);
-  console.log('📝 Client 2 processing mode:', client2.config.memoryProcessingMode);
-  console.log('📝 Client 3 database:', client3.config.databaseConfig?.url);
+  logInfo('All initialization patterns work', {
+    component: 'OpenAIUsageExample',
+    example: 'initializationPatterns',
+    client1MemoryMode: client1.config.memory?.memoryProcessingMode,
+    client2MemoryMode: client2.config.memory?.memoryProcessingMode,
+    client3MemoryMode: client3.config.memory?.memoryProcessingMode,
+  });
 
   // Clean up
   await Promise.all([client1.close(), client2.close(), client3.close()]);
-  console.log('👋 Initialization patterns example completed');
 }
 
 /**
@@ -112,44 +131,45 @@ async function initializationPatternsExample() {
  * Shows different memory recording configurations
  */
 async function memoryConfigurationExample() {
-  console.log('\n⚙️ Memory Configuration Example');
+  logInfo('=== Memory Configuration Example ===', { component: 'OpenAIUsageExample', example: 'memoryConfiguration' });
 
   // Configuration with auto ingestion
-  const autoClient = new MemoriOpenAIClient('your-api-key-here', {
-    enableChatMemory: true,
-    memoryProcessingMode: 'auto',
-    autoIngest: true,
-    consciousIngest: false,
-    minImportanceLevel: 'all' as const,
-    namespace: 'auto-memory',
+  const autoClient = new MemoriOpenAI({
+    apiKey: 'your-api-key',
+    memory: {
+      enableChatMemory: true,
+      memoryProcessingMode: 'auto',
+    },
   });
 
   // Configuration with conscious ingestion
-  const consciousClient = new MemoriOpenAIClient('your-api-key-here', {
-    enableChatMemory: true,
-    memoryProcessingMode: 'conscious',
-    autoIngest: false,
-    consciousIngest: true,
-    namespace: 'conscious-memory',
+  const consciousClient = new MemoriOpenAI({
+    apiKey: 'your-api-key',
+    memory: {
+      enableChatMemory: true,
+      memoryProcessingMode: 'conscious',
+    },
   });
 
   // Configuration with no ingestion (just storage)
-  const storageClient = new MemoriOpenAIClient('your-api-key-here', {
-    enableChatMemory: true,
-    memoryProcessingMode: 'none',
-    autoIngest: false,
-    consciousIngest: false,
-    namespace: 'storage-only',
+  const storageClient = new MemoriOpenAI({
+    apiKey: 'your-api-key',
+    memory: {
+      enableChatMemory: true,
+      memoryProcessingMode: 'none',
+    },
   });
 
-  console.log('✅ Memory configurations created');
-  console.log('📝 Auto ingestion:', autoClient.config.autoIngest);
-  console.log('📝 Conscious ingestion:', consciousClient.config.consciousIngest);
-  console.log('📝 Storage only:', !storageClient.config.autoIngest && !storageClient.config.consciousIngest);
+  logInfo('Memory configurations created', {
+    component: 'OpenAIUsageExample',
+    example: 'memoryConfiguration',
+    autoMode: autoClient.config.memory?.memoryProcessingMode,
+    consciousMode: consciousClient.config.memory?.memoryProcessingMode,
+    storageMode: storageClient.config.memory?.memoryProcessingMode,
+  });
 
   // Clean up
   await Promise.all([autoClient.close(), consciousClient.close(), storageClient.close()]);
-  console.log('👋 Memory configuration example completed');
 }
 
 /**
@@ -157,35 +177,32 @@ async function memoryConfigurationExample() {
  * Shows how memory recording failures don't break chat functionality
  */
 async function errorHandlingExample() {
-  console.log('\n🛡️ Error Handling Example');
-
-  // Create client with invalid database URL to simulate memory recording failure
-  const client = new MemoriOpenAIClient('your-api-key-here', {
-    enableChatMemory: true,
-    autoInitialize: false, // Don't auto-initialize to avoid immediate errors
-    databaseConfig: {
-      type: 'sqlite',
-      url: '/invalid/path/database.db',
-      namespace: 'error-test',
-    },
-  });
+  logInfo('=== Error Handling Example ===', { component: 'OpenAIUsageExample', example: 'errorHandling' });
 
   try {
-    // This should fail during enable due to invalid database path
-    await client.enable();
+    // Create client with invalid API key to simulate authentication error
+    const client = new MemoriOpenAI({
+      apiKey: 'invalid-api-key',
+      memory: {
+        enableChatMemory: true,
+      },
+    });
+
+    // This will fail with authentication error
+    await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'This will fail' }],
+    });
   } catch (error) {
-    console.log('✅ Expected error during enable:', error instanceof Error ? error.message : String(error));
+    logInfo('Expected error caught in error handling example', {
+      component: 'OpenAIUsageExample',
+      example: 'errorHandling',
+      error: error instanceof Error ? error.message : String(error),
+    });
 
-    // Even with memory recording disabled due to error, chat should still work
-    console.log('📝 Chat functionality should still work even with memory errors...');
-
-    // Note: This would work if we had a valid API key, but would fail memory recording
-    // The chat completion itself would succeed, but memory recording would fail gracefully
+    // Memory recording errors don't break the main functionality
+    // The OpenAI error is preserved exactly as it would be
   }
-
-  // Clean up
-  await client.close();
-  console.log('👋 Error handling example completed');
 }
 
 /**
@@ -193,20 +210,20 @@ async function errorHandlingExample() {
  * Shows how to monitor memory recording performance
  */
 async function metricsExample() {
-  console.log('\n📊 Metrics and Monitoring Example');
+  logInfo('=== Metrics and Monitoring Example ===', { component: 'OpenAIUsageExample', example: 'metrics' });
 
-  const client = await memoriOpenAIFactory.fromConfig('your-api-key-here', {
-    enableChatMemory: true,
-    enableMetrics: true,
-    autoInitialize: true,
-    namespace: 'metrics-test',
+  const client = await MemoriOpenAIFromConfig({
+    apiKey: 'your-api-key',
+    memory: {
+      enableChatMemory: true,
+    },
   });
-
-  await client.enable();
 
   // Get initial metrics
   const initialMetrics = await client.getMetrics();
-  console.log('📈 Initial metrics:', {
+  logInfo('Initial metrics retrieved', {
+    component: 'OpenAIUsageExample',
+    example: 'metrics',
     totalRequests: initialMetrics.totalRequests,
     memoryRecordingSuccess: initialMetrics.memoryRecordingSuccess,
     averageResponseTime: initialMetrics.averageResponseTime,
@@ -217,7 +234,6 @@ async function metricsExample() {
 
   // Clean up
   await client.close();
-  console.log('👋 Metrics example completed');
 }
 
 // Export examples for use in other files
@@ -229,15 +245,42 @@ export {
   metricsExample,
 };
 
+/**
+ * Run all examples (for demonstration purposes)
+ * In real usage, you would only run the examples you need
+ */
+export async function runAllExamples() {
+  logInfo('Starting MemoriOpenAI Usage Examples...\n', { component: 'OpenAIUsageExample', example: 'runAll' });
+
+  try {
+    await basicDropInExample();
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIUsageExample', example: 'separator' });
+
+    await initializationPatternsExample();
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIUsageExample', example: 'separator' });
+
+    await memoryConfigurationExample();
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIUsageExample', example: 'separator' });
+
+    await errorHandlingExample();
+    logInfo('\n' + '='.repeat(50) + '\n', { component: 'OpenAIUsageExample', example: 'separator' });
+
+    await metricsExample();
+  } catch (error) {
+    logError('Error running examples', {
+      component: 'OpenAIUsageExample',
+      example: 'runAll',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // Run examples if this file is executed directly
 if (typeof process !== 'undefined' && process.argv0) {
   console.log('⚠️  These examples require a valid OpenAI API key to run.');
-  console.log('💡 Set your API key and uncomment the function calls below to run examples.');
+  console.log('💡 Set your OPENAI_API_KEY environment variable to run examples.');
+  console.log('💡 Note: Examples will demonstrate error handling for invalid keys.');
 
   // Uncomment to run examples:
-  // basicDropInExample().catch(console.error);
-  // initializationPatternsExample().catch(console.error);
-  // memoryConfigurationExample().catch(console.error);
-  // errorHandlingExample().catch(console.error);
-  // metricsExample().catch(console.error);
+  runAllExamples().catch(console.error);
 }
