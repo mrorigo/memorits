@@ -42,8 +42,6 @@ export type { TestCase, TestSuiteResult, TestResult, BenchmarkConfig, ProviderBe
 export { ConnectionPool, globalConnectionPool } from './performance/ConnectionPool';
 export { RequestCache, globalRequestCache } from './performance/RequestCache';
 export { HealthMonitor, globalHealthMonitor } from './performance/HealthMonitor';
-export { OptimizedProvider, createOptimizedProvider } from './performance/OptimizedProvider';
 export type { ConnectionPoolConfig, PooledConnection } from './performance/ConnectionPool';
 export type { RequestCacheConfig } from './performance/RequestCache';
 export type { HealthMonitorConfig, ProviderHealthStatus, HealthCheckEvent } from './performance/HealthMonitor';
-export type { OptimizedProviderConfig } from './performance/OptimizedProvider';

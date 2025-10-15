@@ -5,7 +5,6 @@ export { default as MemoriOpenAIClient } from './client';
 // Factory functions and patterns
 export { default as MemoriOpenAIFactory, memoriOpenAIFactory } from './factory';
 export {
-  createMemoriOpenAI,
   MemoriOpenAIFromConfig,
   MemoriOpenAIFromEnv,
   MemoriOpenAIFromDatabase,
@@ -34,7 +33,6 @@ export type {
   StreamingBufferConfig,
   ConversationRecorder,
   StreamingBuffer,
-  MemoriOpenAIConstructorOptions,
   DeepPartial,
   OptionalConfigKeys,
   RequiredConfigKeys,

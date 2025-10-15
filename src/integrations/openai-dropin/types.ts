@@ -237,15 +237,6 @@ export interface MemoriOpenAIFactory {
   ): Promise<MemoriOpenAI>;
 }
 
-/**
- * Constructor options for MemoriOpenAI
- */
-export interface MemoriOpenAIConstructorOptions extends IProviderConfig {
-  /** API key for OpenAI */
-  apiKey: string;
-  /** Additional OpenAI client options */
-  clientOptions?: Record<string, unknown>;
-}
 
 // =============================================================================
 // Memory Manager Interfaces

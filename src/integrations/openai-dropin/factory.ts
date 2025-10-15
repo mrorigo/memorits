@@ -200,18 +200,6 @@ export async function createMemoriOpenAIWithProviderConfig(
 }
 
 /**
- * Convenience factory function for creating MemoriOpenAI instances
- * Provides a simple function-based API for users who prefer functional patterns
- * @deprecated Consider using createMemoriOpenAIWithProviderConfig for new code
- */
-export async function createMemoriOpenAI(
-  memori: Memori,
-  providerConfig: IProviderConfig,
-): Promise<MemoriOpenAI> {
-  return memoriOpenAIFactory.createWithMemori(memori, providerConfig);
-}
-
-/**
  * Create MemoriOpenAI instance from IProviderConfig (convenience function)
  * Pattern 2: Automatic Initialization
  */

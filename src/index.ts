@@ -15,14 +15,10 @@ export type {
   MemoriError
 } from './providers/types';
 
-// MemoriConfig is now the single unified configuration interface
-
 // Validation utilities
 export {
   validateConfig,
   detectProvider,
-  createMemoriError,
-  ErrorCodes
 } from './providers/validation';
 
 // Legacy exports (backward compatibility)
@@ -48,7 +44,6 @@ export type {
 export { PerformanceDashboardService } from './core/performance/PerformanceDashboard';
 export { PerformanceAnalyticsService } from './core/performance/PerformanceAnalyticsService';
 
-// createMemoriOpenAI from old integration - DEPRECATED: Use MemoriOpenAIClient factory functions instead
 export { ProcessedLongTermMemorySchema } from './core/types/schemas';
 
 // Search Strategy exports (new architecture)
@@ -77,7 +72,6 @@ export { default as MemoriOpenAIClient, MemoriOpenAI } from './integrations/open
 // Factory functions and classes
 export { MemoriOpenAIFactory, memoriOpenAIFactory } from './integrations/openai-dropin/factory';
 export {
-  createMemoriOpenAI as createMemoriOpenAIFactory,
   MemoriOpenAIFromConfig,
   MemoriOpenAIFromEnv,
   MemoriOpenAIFromDatabase,
@@ -114,9 +108,6 @@ export type {
   RecordChatCompletionOptions,
   RecordEmbeddingOptions,
   MemoryRecordingResult,
-
-  // Factory and configuration types
-  MemoriOpenAIConstructorOptions,
 
   // Memory manager types
   MemoryManager,

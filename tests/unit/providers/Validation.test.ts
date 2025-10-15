@@ -1,7 +1,7 @@
 /**
  * Test suite for unified API validation
  */
-import { validateConfig, detectProvider, createMemoriError, ErrorCodes } from '../../../src/providers/validation';
+import { validateConfig, detectProvider } from '../../../src/providers/validation';
 
 describe('Unified API Validation', () => {
   describe('validateConfig', () => {
@@ -124,37 +124,4 @@ describe('Unified API Validation', () => {
     });
   });
 
-  describe('createMemoriError', () => {
-    it('should create error with message only', () => {
-      const error = createMemoriError('Test error');
-      expect(error.message).toBe('Test error');
-      expect(error.code).toBeUndefined();
-      expect(error.suggestions).toBeUndefined();
-    });
-
-    it('should create error with code and suggestions', () => {
-      const suggestions = ['Try restarting', 'Check configuration'];
-      const error = createMemoriError('Test error', ErrorCodes.INVALID_CONFIG, suggestions);
-
-      expect(error.message).toBe('Test error');
-      expect(error.code).toBe(ErrorCodes.INVALID_CONFIG);
-      expect(error.suggestions).toEqual(suggestions);
-    });
-
-    it('should be instance of Error', () => {
-      const error = createMemoriError('Test error');
-      expect(error).toBeInstanceOf(Error);
-      expect(error.name).toBe('MemoriError');
-    });
-  });
-
-  describe('ErrorCodes', () => {
-    it('should have all required error codes', () => {
-      expect(ErrorCodes.INVALID_CONFIG).toBe('INVALID_CONFIG');
-      expect(ErrorCodes.DATABASE_ERROR).toBe('DATABASE_ERROR');
-      expect(ErrorCodes.PROVIDER_ERROR).toBe('PROVIDER_ERROR');
-      expect(ErrorCodes.MEMORY_ERROR).toBe('MEMORY_ERROR');
-      expect(ErrorCodes.NETWORK_ERROR).toBe('NETWORK_ERROR');
-    });
-  });
 });
