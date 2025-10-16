@@ -27,7 +27,6 @@ export class OpenAIProvider extends UnifiedLLMProvider {
      // Handle dummy API key for Ollama
      const apiKey = this.config.apiKey === 'ollama-local' ? 'sk-dummy-key-for-ollama' : this.config.apiKey;
 
-    //  console.log(`*** initializeClient with apiKey: ${apiKey}, baseUrl: ${this.config.baseUrl}`);
      this.client = new OpenAI({
        apiKey: apiKey,
        baseURL: this.config.baseUrl,

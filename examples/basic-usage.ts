@@ -14,7 +14,8 @@ async function basicUsageExample(): Promise<void> {
     databaseUrl: 'file:./memori.db',
     apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
     baseUrl: 'http://localhost:11434/v1',
-    model: 'gemma3:4b',
+    model: 'gpt-oss:20b',
+    provider: 'ollama',
     mode: 'automatic'
   });
 

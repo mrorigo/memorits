@@ -637,25 +637,61 @@ export class Memori {
   }
 
   /**
-   * Store processed memory directly (used by memory manager components)
-   */
-  async storeProcessedMemory(
-    processedMemory: ProcessedLongTermMemory,
-    chatId: string,
-    namespace?: string,
-  ): Promise<string> {
-    if (!this.enabled) {
-      throw new Error('Memori is not enabled');
-    }
+    * Store processed memory directly (used by memory manager components)
+    */
+   async storeProcessedMemory(
+     processedMemory: ProcessedLongTermMemory,
+     chatId: string,
+     namespace?: string,
+   ): Promise<string> {
+     if (!this.enabled) {
+       throw new Error('Memori is not enabled');
+     }
 
-    const targetNamespace = namespace || this.config.namespace;
+     const targetNamespace = namespace || this.config.namespace;
 
-    try {
-      const memoryId = await this.dbManager.storeLongTermMemory(
-        processedMemory,
-        chatId,
-        targetNamespace,
-      );
+     try {
+       // For LLM-generated memories, we need to ensure there's a ChatHistory record
+       // or modify the storage to handle cases without chat history
+       let actualChatId = chatId;
+
+       // Check if this chatId already exists in ChatHistory
+       try {
+         const chatHistoryManager = (this.dbManager as any).chatHistoryManager;
+         if (chatHistoryManager) {
+           const existingChat = await chatHistoryManager.getChatHistory(chatId);
+           if (!existingChat) {
+             // Create a minimal ChatHistory record for LLM-generated memories
+             // This is needed because LongTermMemory has a foreign key to ChatHistory
+             await chatHistoryManager.storeChatHistory({
+               chatId,
+               userInput: processedMemory.content.substring(0, 500) + (processedMemory.content.length > 500 ? '...' : ''), // Truncate for chat history
+               aiOutput: 'LLM-generated memory (no original conversation)',
+               model: this.config.model || 'unknown',
+               sessionId: this.sessionId,
+               namespace: targetNamespace || this.config.namespace || 'default',
+               metadata: {
+                 memoryGenerated: true,
+                 memoryId: 'pending',
+                 source: 'llm-direct',
+               },
+             });
+           }
+         }
+       } catch (error) {
+         logError('Failed to ensure ChatHistory exists for memory storage', {
+           component: 'Memori',
+           chatId,
+           error: error instanceof Error ? error.message : String(error),
+         });
+         // Continue with memory storage even if ChatHistory creation fails
+       }
+
+       const memoryId = await this.dbManager.storeLongTermMemory(
+         processedMemory,
+         actualChatId,
+         targetNamespace,
+       );
 
       logInfo(`Processed memory stored successfully for chat ${chatId}`, {
         component: 'Memori',

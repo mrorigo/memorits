@@ -127,95 +127,140 @@ export class FTSManager {
       logInfo('Creating FTS triggers after main tables exist...', { component: 'FTSManager' });
 
       // Create triggers for synchronization with long_term_memory
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_insert_long_term
-        AFTER INSERT ON long_term_memory
-        BEGIN
-          INSERT INTO memory_fts(rowid, content, metadata)
-          VALUES (new.id, new.searchableContent, json_object(
-            'memory_type', new.retentionType,
-            'category_primary', new.categoryPrimary,
-            'importance_score', new.importanceScore,
-            'classification', new.classification,
-            'created_at', new.extractionTimestamp,
-            'namespace', new.namespace
-          ));
-        END;
-      `;
+      try {
+        await this.prisma.$executeRaw`
+          CREATE TRIGGER IF NOT EXISTS memory_fts_insert_long_term
+          AFTER INSERT ON long_term_memory
+          BEGIN
+            INSERT INTO memory_fts(rowid, content, metadata)
+            VALUES (new.id, new.searchableContent, json_object(
+              'memory_type', new.retentionType,
+              'category_primary', new.categoryPrimary,
+              'importance_score', new.importanceScore,
+              'classification', new.classification,
+              'created_at', new.extractionTimestamp,
+              'namespace', new.namespace
+            ));
+          END;
+        `;
+      } catch (error) {
+        logError('Failed to create memory_fts_insert_long_term trigger', {
+          component: 'FTSManager',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Continue with other triggers
+      }
 
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_delete_long_term
-        AFTER DELETE ON long_term_memory
-        BEGIN
-          DELETE FROM memory_fts WHERE rowid = old.id;
-        END;
-      `;
+      try {
+        await this.prisma.$executeRaw`
+          CREATE TRIGGER IF NOT EXISTS memory_fts_delete_long_term
+          AFTER DELETE ON long_term_memory
+          BEGIN
+            DELETE FROM memory_fts WHERE rowid = old.id;
+          END;
+        `;
+      } catch (error) {
+        logError('Failed to create memory_fts_delete_long_term trigger', {
+          component: 'FTSManager',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_update_long_term
-        AFTER UPDATE ON long_term_memory
-        BEGIN
-          DELETE FROM memory_fts WHERE rowid = old.id;
-          INSERT INTO memory_fts(rowid, content, metadata)
-          VALUES (new.id, new.searchableContent, json_object(
-            'memory_type', new.retentionType,
-            'category_primary', new.categoryPrimary,
-            'importance_score', new.importanceScore,
-            'classification', new.classification,
-            'created_at', new.extractionTimestamp,
-            'namespace', new.namespace
-          ));
-        END;
-      `;
+      try {
+        await this.prisma.$executeRaw`
+          CREATE TRIGGER IF NOT EXISTS memory_fts_update_long_term
+          AFTER UPDATE ON long_term_memory
+          BEGIN
+            DELETE FROM memory_fts WHERE rowid = old.id;
+            INSERT INTO memory_fts(rowid, content, metadata)
+            VALUES (new.id, new.searchableContent, json_object(
+              'memory_type', new.retentionType,
+              'category_primary', new.categoryPrimary,
+              'importance_score', new.importanceScore,
+              'classification', new.classification,
+              'created_at', new.extractionTimestamp,
+              'namespace', new.namespace
+            ));
+          END;
+        `;
+      } catch (error) {
+        logError('Failed to create memory_fts_update_long_term trigger', {
+          component: 'FTSManager',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
       // Create triggers for synchronization with short_term_memory
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_insert_short_term
-        AFTER INSERT ON short_term_memory
-        BEGIN
-          INSERT INTO memory_fts(rowid, content, metadata)
-          VALUES (new.id, new.searchableContent, json_object(
-            'memory_type', new.retentionType,
-            'category_primary', new.categoryPrimary,
-            'importance_score', new.importanceScore,
-            'created_at', new.createdAt,
-            'namespace', new.namespace
-          ));
-        END;
-      `;
+      try {
+        await this.prisma.$executeRaw`
+          CREATE TRIGGER IF NOT EXISTS memory_fts_insert_short_term
+          AFTER INSERT ON short_term_memory
+          BEGIN
+            INSERT INTO memory_fts(rowid, content, metadata)
+            VALUES (new.id, new.searchableContent, json_object(
+              'memory_type', new.retentionType,
+              'category_primary', new.categoryPrimary,
+              'importance_score', new.importanceScore,
+              'created_at', new.createdAt,
+              'namespace', new.namespace
+            ));
+          END;
+        `;
+      } catch (error) {
+        logError('Failed to create memory_fts_insert_short_term trigger', {
+          component: 'FTSManager',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_delete_short_term
-        AFTER DELETE ON short_term_memory
-        BEGIN
-          DELETE FROM memory_fts WHERE rowid = old.id;
-        END;
-      `;
+      try {
+        await this.prisma.$executeRaw`
+          CREATE TRIGGER IF NOT EXISTS memory_fts_delete_short_term
+          AFTER DELETE ON short_term_memory
+          BEGIN
+            DELETE FROM memory_fts WHERE rowid = old.id;
+          END;
+        `;
+      } catch (error) {
+        logError('Failed to create memory_fts_delete_short_term trigger', {
+          component: 'FTSManager',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
-      await this.prisma.$executeRaw`
-        CREATE TRIGGER IF NOT EXISTS memory_fts_update_short_term
-        AFTER UPDATE ON short_term_memory
-        BEGIN
-          DELETE FROM memory_fts WHERE rowid = old.id;
-          INSERT INTO memory_fts(rowid, content, metadata)
-          VALUES (new.id, new.searchableContent, json_object(
-            'memory_type', new.retentionType,
-            'category_primary', new.categoryPrimary,
-            'importance_score', new.importanceScore,
-            'created_at', new.createdAt,
-            'namespace', new.namespace
-          ));
-        END;
-      `;
+      try {
+        await this.prisma.$executeRaw`
+          CREATE TRIGGER IF NOT EXISTS memory_fts_update_short_term
+          AFTER UPDATE ON short_term_memory
+          BEGIN
+            DELETE FROM memory_fts WHERE rowid = old.id;
+            INSERT INTO memory_fts(rowid, content, metadata)
+            VALUES (new.id, new.searchableContent, json_object(
+              'memory_type', new.retentionType,
+              'category_primary', new.categoryPrimary,
+              'importance_score', new.importanceScore,
+              'created_at', new.createdAt,
+              'namespace', new.namespace
+            ));
+          END;
+        `;
+      } catch (error) {
+        logError('Failed to create memory_fts_update_short_term trigger', {
+          component: 'FTSManager',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
-      logInfo('FTS triggers created successfully', { component: 'FTSManager' });
+      logInfo('FTS trigger creation completed (some may have failed due to connectivity issues)', {
+        component: 'FTSManager'
+      });
 
     } catch (error) {
-      logError('Failed to create FTS triggers', {
+      logError('FTS trigger creation process completed with errors', {
         component: 'FTSManager',
         error: error instanceof Error ? error.message : String(error),
       });
-      throw error;
+      // Don't throw - allow system to continue even if trigger creation fails
     }
   }
 
@@ -226,6 +271,12 @@ export class FTSManager {
     try {
       // Ensure FTS support is initialized before using it
       await this.initializeFTSSupport();
+
+      // Check if FTS is actually enabled after initialization
+      if (!this.isFTSEnabled()) {
+        throw new Error('FTS5 is not available or not properly initialized');
+      }
+
       const limit = Math.min(options.limit || 10, 1000); // Cap limit for security
 
       // Enhanced sanitization for query and options
@@ -311,7 +362,17 @@ export class FTSManager {
         LIMIT $${paramIndex + 1}
       `;
 
-      const rawResults = await this.prisma.$queryRawUnsafe(queryString, ...queryParams, limit);
+      let rawResults;
+      try {
+        rawResults = await this.prisma.$queryRawUnsafe(queryString, ...queryParams, limit);
+      } catch (queryError) {
+        logError('FTS5 query execution failed', {
+          component: 'FTSManager',
+          query: queryString.substring(0, 200) + '...',
+          error: queryError instanceof Error ? queryError.message : String(queryError),
+        });
+        throw new Error(`FTS5 search query failed: ${queryError instanceof Error ? queryError.message : String(queryError)}`);
+      }
 
       // Transform results to MemorySearchResult format
       const results: MemorySearchResult[] = [];

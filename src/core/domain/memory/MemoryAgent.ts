@@ -136,22 +136,31 @@ export class MemoryAgent {
   ): z.infer<typeof ProcessedLongTermMemorySchema> {
     // Clean up the content - remove markdown code blocks if present
     let cleanContent = content.trim();
+
+    // Remove markdown code blocks
     if (cleanContent.startsWith('```json')) {
       cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
     } else if (cleanContent.startsWith('```')) {
       cleanContent = cleanContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
+    // Try to extract JSON if there's other text mixed in
+    const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanContent = jsonMatch[0];
+    }
+
     let parsedMemory;
     try {
       parsedMemory = JSON.parse(cleanContent);
-    } catch {
+    } catch (parseError) {
       logWarn('Failed to parse JSON response, using fallback', {
         component: 'MemoryAgent',
-        contentPreview: cleanContent.substring(0, 100),
+        contentPreview: cleanContent.substring(0, 200),
         chatId,
+        parseError: parseError instanceof Error ? parseError.message : String(parseError),
       });
-      throw new Error('Invalid JSON response from model');
+      throw new Error(`Invalid JSON response from model: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
     }
 
     // Convert uppercase enum values to lowercase to match schema expectations
@@ -659,32 +668,28 @@ export class MemoryAgent {
       }
     }
 
-    const systemPrompt = `You are a memory processing agent specializing in conversational analysis and relationship extraction.
+    const systemPrompt = `You are a JSON-only API that analyzes conversations and returns structured memory data.
 
-${CLASSIFICATION_GUIDELINES}
-${IMPORTANCE_CRITERIA}
+IMPORTANT: You must respond with valid JSON only. No conversational text, no explanations, no markdown.
 
-MEMORY RELATIONSHIP ANALYSIS:
-- Analyze how current conversation relates to previous discussions
-- Identify continuation of topics, references to past information, or contradictions
-- Detect relationships: continuation, reference, related topics, superseding information, contradictions
-- Extract entities and context that connect memories
-- Calculate relationship confidence based on semantic similarity and temporal proximity
+CLASSIFICATION GUIDELINES:
+- ESSENTIAL: Critical information, facts, or decisions that must be remembered
+- CONTEXTUAL: Supporting information that provides useful background
+- CONVERSATIONAL: General discussion without lasting importance
+- REFERENCE: Technical information, links, or reference material
+- PERSONAL: User-specific preferences, habits, or personal details
+- CONSCIOUS_INFO: Insights requiring higher-order reasoning or pattern recognition
 
-RELATIONSHIP TYPES:
-- CONTINUATION: Memory continues previous conversation thread
-- REFERENCE: Memory references specific previous memories
-- RELATED: Memory discusses similar topics or entities
-- SUPERSEDES: Memory replaces or updates previous information
-- CONTRADICTION: Memory conflicts with previous information
+IMPORTANCE CRITERIA:
+- CRITICAL (0.8-1.0): Must-remember information affecting decisions or safety
+- HIGH (0.6-0.8): Important information with significant relevance
+- MEDIUM (0.4-0.6): Useful information with moderate relevance
+- LOW (0.0-0.4): Background information with limited importance
 
-CONTEXT USAGE:
-- Prioritize current conversation over historical context
-- Use user preferences and project context to inform classification
-- Consider conversation flow and topic transitions
-- Identify memory relationships for better recall and context building
+REQUIRED JSON SCHEMA:
+${JSON.stringify(MEMORY_SCHEMA, null, 2)}
 
-Return valid JSON matching this exact schema: ${JSON.stringify(MEMORY_SCHEMA, null, 2)}`;
+RESPONSE FORMAT: Return only the JSON object matching the schema above.`;
 
     // Create structured context template
     const contextTemplate = `
@@ -693,31 +698,15 @@ Current Projects: ${params.context.currentProjects?.join(', ') || 'None'}
 Relevant Skills: ${params.context.relevantSkills?.join(', ') || 'None'}
 `;
 
-    const userPrompt = `Analyze this conversation segment for memory processing and relationship extraction:
+    const userPrompt = `Extract structured memory data from this conversation:
 
-CURRENT CONVERSATION:
+CONVERSATION:
 User: ${params.userInput}
-AI: ${params.aiOutput}
+Assistant: ${params.aiOutput}
 
 ${contextTemplate}
 
-PROCESSING INSTRUCTIONS:
-1. Extract the core information and its significance
-2. Determine appropriate classification based on content type and importance
-3. Identify key entities (people, places, concepts) and topics
-4. Generate concise summary (max 200 characters)
-5. Provide clear reasoning for your classification choice
-6. Set confidence score (0.0-1.0) based on analysis clarity
-7. Determine if this warrants conscious context promotion
-
-RELATIONSHIP ANALYSIS INSTRUCTIONS:
-8. Analyze how this conversation relates to previous discussions
-9. Identify potential memory relationships (continuation, reference, related, supersedes, contradiction)
-10. Extract entities and context that might connect to existing memories
-11. Consider temporal aspects and topic continuity
-12. Assess relationship confidence based on semantic and contextual similarity
-
-Extract and classify this memory, including relationship analysis:`;
+Return JSON with: content, summary, classification, importance, topic, entities, keywords, confidenceScore, classificationReason, promotionEligible, relatedMemories.`;
 
     try {
       const response = await this.llmProvider.createChatCompletion({

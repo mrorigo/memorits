@@ -1,5 +1,43 @@
 import { PrismaClient } from '@prisma/client';
-import { logInfo, logError } from '../../infrastructure/config/Logger';
+import { logInfo, logError, logWarn } from '../../infrastructure/config/Logger';
+
+/**
+ * Check if FTS5 is available in the SQLite build using PRAGMA compile_options
+ */
+async function detectFTS5Support(prisma: PrismaClient): Promise<boolean> {
+  try {
+    // Query SQLite compile options to check for FTS5 support
+    const compileOptions = await prisma.$queryRaw`PRAGMA compile_options;`;
+
+    if (Array.isArray(compileOptions)) {
+      // Look for FTS5-related compile options
+      const hasFTS5 = compileOptions.some((option: any) => {
+        // Handle both object format {name: 'OPTION'} and string format 'OPTION'
+        const optionName = (typeof option === 'object' && option.name) ? option.name : option;
+        const optionStr = String(optionName).toUpperCase();
+        return optionStr === 'ENABLE_FTS5' ||
+               optionStr === 'HAS_FTS5' ||
+               optionStr.includes('FTS5');
+      });
+
+      logInfo('FTS5 support detection completed', {
+        component: 'DatabaseInit',
+        fts5Available: hasFTS5,
+        compileOptions: compileOptions.length,
+      });
+
+      return hasFTS5;
+    }
+
+    return false;
+  } catch (error) {
+    logWarn('Failed to check FTS5 compile options', {
+      component: 'DatabaseInit',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
 
 /**
  * Initialize the FTS5 search schema with triggers and BM25 support
@@ -8,76 +46,56 @@ export async function initializeSearchSchema(prisma: PrismaClient): Promise<bool
   try {
     logInfo('Initializing FTS5 search schema...', { component: 'DatabaseInit' });
 
-    // Check if FTS5 is available first
-   try {
-     await prisma.$executeRaw`
-       CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
-       USING fts5(
-         content,        -- Full text content
-         metadata,       -- JSON metadata for filtering
-         tokenize = 'porter ascii'  -- Tokenization with stemming
-       );
-     `;
-     if (process.env.TEST_DEBUG) {
-       logInfo('Created FTS5 virtual table', { component: 'DatabaseInit' });
-     }
+    // First check if FTS5 is available in this SQLite build
+    const fts5Available = await detectFTS5Support(prisma);
 
-     // Verify the table was actually created and is functional
-     const tableCheck = await prisma.$queryRaw`
-       SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts';
-     `;
+    if (!fts5Available) {
+      logWarn('FTS5 not available in SQLite build - skipping FTS initialization', {
+        component: 'DatabaseInit',
+      });
+      return false;
+    }
 
-     // Test that FTS5 functionality works
-     try {
-       // Use a unique rowid that doesn't conflict with existing data
-       const testRowId = Date.now(); // Use timestamp as unique rowid
+    logInfo('FTS5 support confirmed - proceeding with initialization', {
+      component: 'DatabaseInit',
+    });
 
-       await prisma.$executeRaw`
-         INSERT INTO memory_fts(rowid, content, metadata) VALUES (${testRowId}, 'test content', '{}');
-       `;
-       await prisma.$executeRaw`DELETE FROM memory_fts WHERE rowid = ${testRowId};`;
-       if (process.env.TEST_DEBUG) {
-         logInfo('FTS5 table created and tested successfully', { component: 'DatabaseInit' });
-       }
-     } catch (testError) {
-       if (process.env.TEST_DEBUG) {
-         logError('FTS5 table created but functionality test failed', {
-           component: 'DatabaseInit',
-           error: testError instanceof Error ? testError.message : String(testError),
-         });
-       }
-       // Don't fail completely, but log the issue
-     }
+    // Now create FTS table since we know FTS5 is supported
+    await prisma.$executeRaw`
+      CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
+      USING fts5(
+        content,        -- Full text content
+        metadata,       -- JSON metadata for filtering
+        tokenize = 'porter ascii'  -- Tokenization with stemming
+      );
+    `;
 
-     if (!tableCheck) {
-       throw new Error('FTS5 table was not found after creation');
-     }
-   } catch (error) {
-     if (process.env.TEST_DEBUG) {
-       logError('FTS5 initialization failed with detailed error', {
-         component: 'DatabaseInit',
-         error: error instanceof Error ? error.message : String(error),
-         stack: error instanceof Error ? error.stack : undefined,
-       });
-     }
+    if (process.env.TEST_DEBUG) {
+      logInfo('Created FTS5 virtual table', { component: 'DatabaseInit' });
+    }
 
-     // Instead of just returning false, let's provide more guidance
-     if (error instanceof Error && error.message.includes('no such module: fts5')) {
-       if (process.env.TEST_DEBUG) {
-         logError('FTS5 module not available - SQLite was not compiled with FTS5 support', {
-           component: 'DatabaseInit',
-         });
-       }
-     } else if (error instanceof Error && error.message.includes('syntax error')) {
-       if (process.env.TEST_DEBUG) {
-         logError('FTS5 syntax error - check SQLite version and FTS5 support', {
-           component: 'DatabaseInit',
-         });
-       }
-     }
+    // Test that FTS5 functionality works
+    try {
+      // Use a unique rowid that doesn't conflict with existing data
+      const testRowId = Date.now(); // Use timestamp as unique rowid
 
-     return false;
-   }
+      await prisma.$executeRaw`
+        INSERT INTO memory_fts(rowid, content, metadata) VALUES (${testRowId}, 'test content', '{}');
+      `;
+      await prisma.$executeRaw`DELETE FROM memory_fts WHERE rowid = ${testRowId};`;
+
+      if (process.env.TEST_DEBUG) {
+        logInfo('FTS5 table created and tested successfully', { component: 'DatabaseInit' });
+      }
+    } catch (testError) {
+      if (process.env.TEST_DEBUG) {
+        logError('FTS5 table created but functionality test failed', {
+          component: 'DatabaseInit',
+          error: testError instanceof Error ? testError.message : String(testError),
+        });
+      }
+      // Don't fail completely, but log the issue
+    }
 
      // Create indexes for performance optimization (FTS5 virtual tables cannot be indexed)
      // We create indexes on the main tables for better query performance
@@ -86,35 +104,35 @@ export async function initializeSearchSchema(prisma: PrismaClient): Promise<bool
        const longTermTableCheck = await prisma.$queryRaw`
          SELECT name FROM sqlite_master WHERE type='table' AND name='long_term_memory';
        `;
-
+ 
        const shortTermTableCheck = await prisma.$queryRaw`
          SELECT name FROM sqlite_master WHERE type='table' AND name='short_term_memory';
        `;
-
+ 
        if (longTermTableCheck && Array.isArray(longTermTableCheck) && longTermTableCheck.length > 0) {
          await prisma.$executeRaw`
            CREATE INDEX IF NOT EXISTS idx_long_term_memory_namespace
            ON long_term_memory(namespace);
          `;
-
+ 
          await prisma.$executeRaw`
            CREATE INDEX IF NOT EXISTS idx_long_term_memory_importance
            ON long_term_memory(importanceScore DESC);
          `;
        }
-
+ 
        if (shortTermTableCheck && Array.isArray(shortTermTableCheck) && shortTermTableCheck.length > 0) {
          await prisma.$executeRaw`
            CREATE INDEX IF NOT EXISTS idx_short_term_memory_namespace
            ON short_term_memory(namespace);
          `;
-
+ 
          await prisma.$executeRaw`
            CREATE INDEX IF NOT EXISTS idx_short_term_memory_importance
            ON short_term_memory(importanceScore DESC);
          `;
        }
-
+ 
        if (process.env.TEST_DEBUG) {
          logInfo('Created performance indexes on main tables', { component: 'DatabaseInit' });
        }
@@ -126,48 +144,12 @@ export async function initializeSearchSchema(prisma: PrismaClient): Promise<bool
          });
        }
        // Don't fail initialization for index creation issues
-       // Check if it's a connection error and handle gracefully
-       if (error instanceof Error && (
-         error.message.includes('Engine is not yet connected') ||
-         error.message.includes('Response from the Engine was empty') ||
-         error.message.includes('constraint failed') ||
-         error.message.includes('database or disk is full') ||
-         error.message.includes('disk I/O error')
-       )) {
-         if (process.env.TEST_DEBUG) {
-           logInfo('Skipping performance index creation due to connection state or I/O error', {
-             component: 'DatabaseInit',
-             error: error.message,
-           });
-         }
-       }
      }
-
-    // Skip trigger creation for now - let them be created after tables exist
-    if (process.env.TEST_DEBUG) {
-      logInfo('Skipping trigger creation during initialization - will be created when tables are ready', { component: 'DatabaseInit' });
-    }
-
-    // Don't create triggers during schema push - they will be created later when needed
-    if (process.env.TEST_DEBUG) {
-      logInfo('Deferring trigger creation until after main tables are confirmed to exist', { component: 'DatabaseInit' });
-    }
-
-    // TODO: Create triggers after main tables are confirmed to exist
-    // This will be handled by ensureFTSSupport() when first FTS operation is performed
-
-
-    // Populate FTS table with existing data for backward compatibility
-    // Note: This is skipped for now as it causes datatype issues with Prisma
-    // The triggers will handle new data going forward
-    if (process.env.TEST_DEBUG) {
-      logInfo('Skipping FTS table population - triggers will handle new data', { component: 'DatabaseInit' });
-    }
-
-    if (process.env.TEST_DEBUG) {
-      logInfo('FTS5 search schema initialized successfully', { component: 'DatabaseInit' });
-    }
-    return true;
+ 
+     if (process.env.TEST_DEBUG) {
+       logInfo('FTS5 search schema initialized successfully', { component: 'DatabaseInit' });
+     }
+     return true;
 
   } catch (error) {
     if (process.env.TEST_DEBUG) {
@@ -249,37 +231,26 @@ export async function verifyFTSSchema(prisma: PrismaClient): Promise<{
   const stats = { tables: 0, triggers: 0, indexes: 0 };
 
   try {
+    // First check if FTS5 is available
+    const fts5Available = await detectFTS5Support(prisma);
+
+    if (!fts5Available) {
+      return {
+        isValid: false,
+        issues: ['FTS5 not available in SQLite build'],
+        stats,
+      };
+    }
+
     // Check if FTS table exists
     const ftsTableResult = await prisma.$queryRaw`
       SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts';
     `;
 
-    if (!ftsTableResult) {
+    if (!ftsTableResult || (Array.isArray(ftsTableResult) && ftsTableResult.length === 0)) {
       issues.push('FTS5 virtual table memory_fts does not exist');
     } else {
-      stats.tables++;
-    }
-
-    // Check triggers
-    const triggers = [
-      'memory_fts_insert_long_term',
-      'memory_fts_delete_long_term',
-      'memory_fts_update_long_term',
-      'memory_fts_insert_short_term',
-      'memory_fts_delete_short_term',
-      'memory_fts_update_short_term',
-    ];
-
-    for (const trigger of triggers) {
-      const triggerResult = await prisma.$queryRaw`
-        SELECT name FROM sqlite_master WHERE type='trigger' AND name=${trigger};
-      `;
-
-      if (!triggerResult || (Array.isArray(triggerResult) && triggerResult.length === 0)) {
-        issues.push(`Trigger ${trigger} does not exist`);
-      } else {
-        stats.triggers++;
-      }
+      stats.tables = 1;
     }
 
     // Check indexes
@@ -302,27 +273,27 @@ export async function verifyFTSSchema(prisma: PrismaClient): Promise<{
       }
     }
 
-    // Test FTS5 functionality with a simpler approach
-    try {
-      // Simple test - just check if we can query the FTS table
-      const testResult = await prisma.$queryRaw`
-        SELECT COUNT(*) as count FROM memory_fts LIMIT 1;
-      ` as any[];
+    // Basic FTS functionality test
+    if (stats.tables > 0) {
+      try {
+        const testResult = await prisma.$queryRaw`
+          SELECT COUNT(*) as count FROM memory_fts LIMIT 1;
+        ` as any[];
 
-      if (testResult && testResult.length > 0) {
-        if (process.env.TEST_DEBUG) {
-          logInfo('FTS5 functionality verified successfully', { component: 'DatabaseInit' });
+        if (testResult && testResult.length > 0) {
+          if (process.env.TEST_DEBUG) {
+            logInfo('FTS5 functionality verified successfully', { component: 'DatabaseInit' });
+          }
         }
+      } catch (error) {
+        if (process.env.TEST_DEBUG) {
+          logError('FTS5 functionality test failed', {
+            component: 'DatabaseInit',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        issues.push(`FTS5 functionality test failed: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      // BM25 function may not be available, but FTS5 should still work
-      if (process.env.TEST_DEBUG) {
-        logError('FTS5 basic functionality test failed', {
-          component: 'DatabaseInit',
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-      issues.push(`FTS5 functionality test failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     return {

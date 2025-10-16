@@ -33,47 +33,36 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
 
   constructor(dbManager: DatabaseManager) {
     this.databaseManager = dbManager;
-    this.initializeFTSSupport();
   }
 
-  private async initializeFTSSupport(): Promise<void> {
-    try {
-      if (this.databaseManager.isFTSEnabled()) {
-        return;
-      }
 
-      const ftsStatus = await this.databaseManager.getFTSStatus();
 
-      if (!ftsStatus.enabled) {
-        logWarn('FTS5 not available in this SQLite build, FTS strategy will be disabled', {
-          component: 'SQLiteFTSStrategy',
-          operation: 'initializeFTSSupport'
-        });
-      }
-    } catch (error) {
-      logWarn('FTS5 initialization failed, FTS strategy will not be available', {
-        component: 'SQLiteFTSStrategy',
-        operation: 'initializeFTSSupport',
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
+
 
   canHandle(query: SearchQuery): boolean {
     if (!query.text || query.text.trim().length === 0) {
       return false;
     }
 
+    // Try to initialize FTS when actually needed
     try {
-      const ftsEnabled = this.databaseManager.isFTSEnabled();
-      if (!ftsEnabled) {
-        logWarn('FTS5 not available - SQLite was not compiled with FTS5 support', {
+      // Simple check - if we can create the FTS table, then FTS5 is available
+      const dbManager = this.databaseManager as any;
+      const prisma = dbManager?.prisma || this.databaseManager;
+
+      // Try to create FTS table - if it fails, FTS5 is not available
+      try {
+        prisma.$executeRaw`CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(content, metadata, tokenize = 'porter ascii');`;
+        return true;
+      } catch (ftsError) {
+        logWarn('FTS5 not available in SQLite build', {
           component: 'SQLiteFTSStrategy',
           operation: 'canHandle',
-          query: query.text?.substring(0, 100)
+          query: query.text?.substring(0, 100),
+          error: ftsError instanceof Error ? ftsError.message : String(ftsError)
         });
+        return false;
       }
-      return ftsEnabled;
     } catch (error) {
       logWarn('FTS5 availability check failed', {
         component: 'SQLiteFTSStrategy',

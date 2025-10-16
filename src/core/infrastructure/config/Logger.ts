@@ -6,7 +6,7 @@ export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 // Sensitive fields that should be redacted in logs
 export const SENSITIVE_FIELDS = Object.freeze([
   'apiKey', 'password', 'token', 'secret', 'auth', 'credential',
-  'accessToken', 'refreshToken', 'key', 'authorization', 'sessionId',
+  'accessToken', 'refreshToken', 'key', 'authorization', 
 ]);
 
 // Redaction utility functions

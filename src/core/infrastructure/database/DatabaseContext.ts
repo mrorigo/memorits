@@ -53,7 +53,6 @@ export interface DatabaseManager {
 export class DatabaseContext {
   private prisma: PrismaClient;
   private ftsEnabled: boolean = false;
-  private initializationInProgress: boolean = false;
   private stateManager: ProcessingStateManager;
   private managers: Map<string, DatabaseManager> = new Map();
 
@@ -203,21 +202,22 @@ export class DatabaseContext {
    * Initialize FTS5 support for full-text search
    */
   async initializeFTSSupport(): Promise<void> {
-    if (this.ftsEnabled || this.initializationInProgress) {
+    if (this.ftsEnabled) {
       return;
     }
-
-    this.initializationInProgress = true;
     const startTime = Date.now();
 
     try {
       logInfo('Initializing FTS5 search support', {
         component: 'DatabaseContext',
         initializationInProgress: true,
+        ftsInitializationInProgress: true,
       });
 
       // Import initialization functions dynamically to avoid circular dependencies
       const { initializeSearchSchema, verifyFTSSchema } = await import('./init-search-schema');
+
+      // FTS5 support is now checked using PRAGMA compile_options in initializeSearchSchema
 
       // Initialize the FTS5 schema
       const schemaInitialized = await initializeSearchSchema(this.prisma);
@@ -278,8 +278,6 @@ export class DatabaseContext {
       }
 
       throw error;
-    } finally {
-      this.initializationInProgress = false;
     }
   }
 
@@ -361,6 +359,8 @@ export class DatabaseContext {
        return;
      }
 
+     // FTS initialization is now handled lazily when FTS strategy is created
+
      this.isShuttingDown = true;
      const startTime = Date.now();
 
@@ -376,7 +376,7 @@ export class DatabaseContext {
          this.healthCheckInterval = undefined;
        }
 
-       // Cleanup managers in reverse order
+       // Cleanup managers in reverse order, but skip FTS-related cleanup if still initializing
        const managerNames = Array.from(this.managers.keys());
        for (const name of managerNames.reverse()) {
          try {
@@ -847,4 +847,5 @@ export class DatabaseContext {
       return false;
     }
   }
+
 }

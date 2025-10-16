@@ -215,6 +215,7 @@ export class MemoryEnabledLLMProvider implements ILLMProvider, MemoryManager {
           });
 
           // Store the processed memory using Memori's database manager
+          // Note: For LLM-generated memories, we don't need a corresponding ChatHistory record
           await this.memori.storeProcessedMemory(processedMemory, chatId);
 
           const memoryDuration = Date.now() - memoryStartTime;
