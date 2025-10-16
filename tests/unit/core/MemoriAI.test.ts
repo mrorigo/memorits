@@ -49,6 +49,8 @@ describe('MemoriAI Unified Class', () => {
     mockMemoriInstance = {
       searchMemories: jest.fn(),
       close: jest.fn(),
+      recordConversation: jest.fn(),
+      enable: jest.fn(),
     };
 
     mockMemoryProviderInstance = {
@@ -255,9 +257,10 @@ describe('MemoriAI Unified Class', () => {
         databaseUrl: 'file:./test.db',
         apiKey: 'sk-test-key',
         model: 'gpt-4o-mini',
+        baseUrl: undefined,
         namespace: 'test-namespace',
-        autoIngest: true,
-        consciousIngest: false,
+        mode: 'automatic',
+        provider: 'openai',
       });
     });
   });

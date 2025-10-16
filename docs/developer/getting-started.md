@@ -5,7 +5,7 @@ This guide will get you up and running with Memorits in minutes. Follow these si
 ## Prerequisites
 
 - **Node.js 18+** - For running Memorits
-- **OpenAI API Key** - For LLM-powered memory processing (or Ollama for local models)
+- **LLM Provider** - OpenAI API key, Anthropic API key, or Ollama for local models
 - **Basic TypeScript Knowledge** - To understand the examples
 
 ## Installation
@@ -21,25 +21,23 @@ npm install memorits
 ### 1. Basic Setup
 
 ```typescript
-import { Memori, OpenAIWrapper } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-// Create Memori instance (simple configuration)
-const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-openai-api-key',
-  autoMemory: true
+// Create MemoriAI instance (handles everything directly)
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 
-// Wrap with provider (direct integration)
-const openai = new OpenAIWrapper(memori);
-
-// Use normally - memory happens automatically
-const response = await openai.chat({
+// Use directly - no wrapper needed
+const response = await ai.chat({
   messages: [{ role: 'user', content: 'Hello! I am a software engineer who loves TypeScript.' }]
 });
 
-console.log('Response:', response.content);
+console.log('Response:', response.message.content);
 console.log('Memorits is ready!');
 ```
 
@@ -47,18 +45,18 @@ console.log('Memorits is ready!');
 
 ```typescript
 // Search for relevant memories
-const memories = await memori.searchMemories('TypeScript', {
+const memories = await ai.searchMemories('TypeScript', {
   limit: 5
 });
 
 console.log(`Found ${memories.length} relevant memories`);
 ```
 
-### 3. Basic Memory Search
+### 3. Advanced Memory Search
 
 ```typescript
-// Search for relevant memories
-const relevantMemories = await memori.searchMemories('TypeScript', {
+// Search for relevant memories with filtering
+const relevantMemories = await ai.searchMemories('TypeScript', {
   limit: 5,
   minImportance: 'medium'
 });
@@ -71,25 +69,32 @@ console.log(`Found ${relevantMemories.length} relevant memories`);
 Use different AI providers with the same memory pool:
 
 ```typescript
-import { Memori, OpenAIWrapper, AnthropicWrapper } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-// Same Memori instance, different providers
-const memori = new Memori({
-  databaseUrl: 'postgresql://localhost:5432/memori',
-  namespace: 'multi-provider-app',
-  apiKey: 'your-api-key',
-  autoMemory: true
+// Create multiple MemoriAI instances with different providers
+const openaiAI = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 
-const openai = new OpenAIWrapper(memori);
-const claude = new AnthropicWrapper(memori);
+const ollamaAI = new MemoriAI({
+  databaseUrl: 'file:./memori.db',  // Same database for shared memory
+  apiKey: 'ollama-local',
+  baseUrl: 'http://localhost:11434/v1',
+  model: 'llama2:7b',
+  provider: 'ollama',
+  mode: 'automatic'
+});
 
-// Both record to the same memory
-await openai.chat({ messages: [{ role: 'user', content: 'From OpenAI' }] });
-await claude.chat({ messages: [{ role: 'user', content: 'From Claude' }] });
+// Both record to the same memory pool
+await openaiAI.chat({ messages: [{ role: 'user', content: 'From OpenAI' }] });
+await ollamaAI.chat({ messages: [{ role: 'user', content: 'From Ollama' }] });
 
 // Search across all conversations
-const memories = await memori.searchMemories('AI');
+const memories = await openaiAI.searchMemories('AI');
 ```
 
 ## Configuration Options
@@ -103,96 +108,94 @@ Create a `.env` file in your project root:
 OPENAI_API_KEY=your-openai-api-key-here
 
 # Memory Configuration
-DATABASE_URL=sqlite:./memories.db
+DATABASE_URL=file:./memori.db
 ```
 
 ### Simple Configuration
 
 ```typescript
-import { Memori } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-const memori = new Memori({
-  databaseUrl: 'sqlite:./my-memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-openai-api-key',
-  autoMemory: true
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 ```
 
 ## Memory Modes
 
-### Auto Memory Mode (Default)
+### Automatic Mode (Default)
 
 **Best for**: Most applications that need automatic memory recording.
 
 ```typescript
-const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-api-key',
-  autoMemory: true,        // Enable automatic memory recording
-  consciousMemory: false   // Disable conscious processing
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'  // Automatic memory recording and processing
 });
 ```
 
-### Conscious Memory Mode
+### Manual Mode
 
-**Best for**: Applications needing background memory processing.
+**Best for**: Applications needing manual control over memory processing.
 
 ```typescript
-const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-api-key',
-  autoMemory: false,       // Disable automatic recording
-  consciousMemory: true    // Enable conscious processing
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'manual'  // Manual control over memory recording
 });
 ```
 
-### Combined Mode
+### Conscious Mode
 
-**Best for**: Maximum intelligence with both memory modes.
+**Best for**: Applications needing advanced background memory processing.
 
 ```typescript
-const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-api-key',
-  autoMemory: true,        // Enable both modes
-  consciousMemory: true
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'conscious'  // Advanced background processing with human-like reflection
 });
 ```
 
 ## Testing Your Setup
 
-### 1. Use the Provider Wrapper
+### 1. Use MemoriAI Directly
 
 ```typescript
-import { OpenAIWrapper } from 'memorits';
-
-const openai = new OpenAIWrapper(memori);
-
-// Chat normally - memory is recorded automatically
-const response = await openai.chat({
+// MemoriAI handles everything - no wrapper needed
+const response = await ai.chat({
   messages: [
     { role: 'user', content: 'I am building an AI assistant for developers' }
   ]
 });
 
-console.log('Chat ID for memory:', response.chatId);
+console.log('Response:', response.message.content);
+console.log('Memories recorded automatically');
 ```
 
 ### 2. Search for Memories
 
 ```typescript
 // Search for relevant memories
-const memories = await memori.searchMemories('AI assistant', {
+const memories = await ai.searchMemories('AI assistant', {
   limit: 5
 });
 
 console.log('Found memories:', memories.length);
 memories.forEach(memory => {
-  console.log(`- ${memory.metadata?.summary} (${memory.score})`);
+  console.log(`- ${memory.content?.substring(0, 100)}... (${memory.score})`);
 });
 ```
 
@@ -205,14 +208,14 @@ Check that memories are being stored:
 npx prisma studio --schema=./prisma/schema.prisma
 
 # Or check the SQLite database directly
-sqlite3 ./memories.db "SELECT COUNT(*) FROM chat_history;"
-sqlite3 ./memories.db "SELECT COUNT(*) FROM long_term_memory;"
+sqlite3 ./memori.db "SELECT COUNT(*) FROM chat_history;"
+sqlite3 ./memori.db "SELECT COUNT(*) FROM long_term_memory;"
 
 # View recent conversations
-sqlite3 ./memories.db "SELECT userInput, aiOutput, createdAt FROM chat_history ORDER BY createdAt DESC LIMIT 5;"
+sqlite3 ./memori.db "SELECT userInput, aiOutput, createdAt FROM chat_history ORDER BY createdAt DESC LIMIT 5;"
 
 # View processed memories
-sqlite3 ./memories.db "SELECT summary, classification, importanceScore FROM long_term_memory ORDER BY createdAt DESC LIMIT 5;"
+sqlite3 ./memori.db "SELECT searchableContent, classification, importanceScore FROM long_term_memory ORDER BY createdAt DESC LIMIT 5;"
 ```
 
 ## Common Issues and Solutions
@@ -232,8 +235,12 @@ echo 'OPENAI_API_KEY=your-key-here' > .env
 **Solution**: Check database permissions and path:
 
 ```typescript
-const config = MemoriConfigSchema.parse({
-  databaseUrl: 'sqlite:./memories.db'  // Ensure directory is writable
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',  // Ensure directory is writable
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 ```
 
@@ -243,11 +250,12 @@ const config = MemoriConfigSchema.parse({
 
 ```typescript
 // Ensure memory processing is enabled
-const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-api-key',
-  autoMemory: true  // Enable memory processing
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'  // Enable automatic memory processing
 });
 ```
 

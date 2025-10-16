@@ -41,81 +41,91 @@ Getting started with multiple LLM providers in minutes using the MemoryAgent arc
 ### Using Different Providers
 
 ```typescript
-import { Memori, OpenAIWrapper, AnthropicWrapper, OllamaWrapper } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-// Create Memori instance (shared memory for all providers)
-const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-api-key',
-  autoMemory: true
+// Create MemoriAI instances for different providers (shared database)
+const openaiAI = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 
-// Create provider wrappers that integrate directly with Memori
-const openai = new OpenAIWrapper(memori);
-const anthropic = new AnthropicWrapper(memori);
-const ollama = new OllamaWrapper(memori);
+const anthropicAI = new MemoriAI({
+  databaseUrl: 'file:./memori.db',  // Same database for shared memory
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  model: 'claude-3-5-sonnet-20241022',
+  provider: 'anthropic',
+  mode: 'automatic'
+});
+
+const ollamaAI = new MemoriAI({
+  databaseUrl: 'file:./memori.db',  // Same database for shared memory
+  apiKey: 'ollama-local',
+  baseUrl: 'http://localhost:11434',
+  model: 'llama2',
+  provider: 'ollama',
+  mode: 'automatic'
+});
 
 // Use any provider - they all share the same memory pool
-const openaiResponse = await openai.chat({
+const openaiResponse = await openaiAI.chat({
   messages: [{ role: 'user', content: 'Remember: I love TypeScript' }]
 });
 
-const claudeResponse = await anthropic.chat({
+const claudeResponse = await anthropicAI.chat({
   messages: [{ role: 'user', content: 'What does the user love?' }]
 });
 
 // Search works across all providers
-const memories = await memori.searchMemories('TypeScript');
+const memories = await openaiAI.searchMemories('TypeScript');
 ```
 
 ### Testing Providers
 
 ```typescript
-import { Memori, OpenAIWrapper } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-// Create Memori instance
-const memori = new Memori({
-  databaseUrl: 'sqlite:./test.db',
-  namespace: 'test',
-  apiKey: 'test-key',
-  autoMemory: true
+// Create MemoriAI instance
+const ai = new MemoriAI({
+  databaseUrl: 'file:./test.db',
+  apiKey: process.env.OPENAI_API_KEY || 'test-key',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 
-// Create provider wrapper
-const openai = new OpenAIWrapper(memori);
-
 // Test chat functionality
-const response = await openai.chat({
+const response = await ai.chat({
   messages: [{ role: 'user', content: 'Hello!' }]
 });
 
-console.log('Chat test passed:', response.content.length > 0);
+console.log('Chat test passed:', response.message.content.length > 0);
 console.log('Memory recorded:', response.chatId);
 
 // Test memory search
-const memories = await memori.searchMemories('Hello');
+const memories = await ai.searchMemories('Hello');
 console.log('Memory search test passed:', memories.length > 0);
 ```
 
 ### Simple Performance Check
 
 ```typescript
-import { Memori, OpenAIWrapper } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-const memori = new Memori({
-  databaseUrl: 'sqlite:./benchmark.db',
-  namespace: 'benchmark',
-  apiKey: 'test-key',
-  autoMemory: true
+const ai = new MemoriAI({
+  databaseUrl: 'file:./benchmark.db',
+  apiKey: process.env.OPENAI_API_KEY || 'test-key',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
-
-const openai = new OpenAIWrapper(memori);
 
 // Simple performance test
 const startTime = Date.now();
 
-const response = await openai.chat({
+const response = await ai.chat({
   messages: [{ role: 'user', content: 'Performance test' }]
 });
 
@@ -171,7 +181,7 @@ The memory system provides unified processing across multi-provider applications
 - **Rich Metadata**: Comprehensive analytics and context tracking
 
 #### **🔧 Simple Architecture**
-- **Direct Integration**: Provider wrappers work directly with Memori instances
+- **Direct Integration**: MemoriAI works directly with providers (no wrappers needed)
 - **Clean Design**: Simple, maintainable memory functionality
 - **Easy to Use**: Obvious patterns for memory operations
 

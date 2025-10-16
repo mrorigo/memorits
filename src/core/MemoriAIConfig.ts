@@ -10,42 +10,50 @@ import { ChatMessage } from '../core/infrastructure/providers/types/ChatCompleti
 import { IProviderConfig } from './infrastructure/providers/IProviderConfig';
 
 /**
- * MemoriAI configuration interface that extends IProviderConfig
+ * Clean MemoriAI configuration interface
  *
- * This design provides the best of both worlds:
- * - Simple configuration for basic usage (just databaseUrl + apiKey)
- * - Full access to sophisticated features when needed via IProviderConfig
- * - Leverages existing IProviderConfig sophistication without duplication
+ * Simple, intuitive configuration that supports both basic and advanced use cases.
+ * Leverages existing IProviderConfig sophistication when needed.
  */
-export interface MemoriAIConfig extends IProviderConfig {
-  /** Database connection URL - only required field for MemoriAI */
+export interface MemoriAIConfig {
+  /** Database connection URL - required field */
   databaseUrl: string;
-  /** Namespace for memory operations (auto-generated if not provided) */
-  namespace?: string;
-  /** LLM provider type (optional - auto-detected if not provided) */
+  /** API key for LLM provider */
+  apiKey: string;
+  /** LLM provider type (optional - auto-detected from API key if not provided) */
   provider?: 'openai' | 'anthropic' | 'ollama';
-  /** Operating mode for the unified API */
+  /** Model to use (optional - provider default if not specified) */
+  model?: string;
+  /** Base URL for custom endpoints (optional) */
+  baseUrl?: string;
+  /** Operating mode for memory processing */
   mode?: 'automatic' | 'manual' | 'conscious';
+  /** Namespace for memory operations (optional) */
+  namespace?: string;
 
-  // Legacy configuration options for backward compatibility
-  /** Legacy option for auto-ingestion mode (use mode: 'automatic' instead) */
-  autoIngest?: boolean;
-  /** Legacy option for conscious ingestion mode (use mode: 'conscious' instead) */
-  consciousIngest?: boolean;
-  /** Enable relationship extraction in memories */
-  enableRelationshipExtraction?: boolean;
-  /** User context for personalization */
-  userContext?: {
-    userPreferences?: string[];
-    currentProjects?: string[];
-    relevantSkills?: string[];
+  // Optional: Different providers for different operations
+  /** Provider configuration for chat operations */
+  userProvider?: {
+    provider: 'openai' | 'anthropic' | 'ollama';
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
   };
 
-  // Note: All IProviderConfig options are available including:
-  // - apiKey, model, baseUrl, options (basic provider config)
-  // - memory (legacy memory configuration)
-  // - features.performance (connection pooling, caching, health monitoring)
-  // - features.memory (advanced memory processing, consolidation)
+  /** Provider configuration for memory processing (optional - defaults to userProvider) */
+  memoryProvider?: {
+    provider: 'openai' | 'anthropic' | 'ollama';
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  };
+
+  // Access to full IProviderConfig features when needed
+  /** Advanced configuration options */
+  features?: IProviderConfig['features'];
+
+  /** Enable relationship extraction for memory processing */
+  enableRelationshipExtraction?: boolean;
 }
 
 /**

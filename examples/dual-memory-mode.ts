@@ -15,9 +15,12 @@ async function autoIngestionExample(): Promise<void> {
   logInfo('🤖 Auto-Ingestion Mode Example', { component: 'dual-memory-mode-example', mode: 'auto' });
   logInfo('=====================================', { component: 'dual-memory-mode-example', mode: 'auto' });
 
-  const config = ConfigManager.loadConfig();
-  config.autoIngest = true;
-  config.consciousIngest = false;
+  const config = {
+    databaseUrl: 'file:./memori.db',
+    apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+    model: 'gpt-4o-mini',
+    mode: 'automatic' as const
+  };
 
   const memori = new Memori(config);
   await memori.enable();
@@ -67,9 +70,12 @@ async function consciousIngestionExample(): Promise<void> {
   logInfo('\n🧠 Conscious Ingestion Mode Example', { component: 'dual-memory-mode-example', mode: 'conscious' });
   logInfo('=====================================', { component: 'dual-memory-mode-example', mode: 'conscious' });
 
-  const config = ConfigManager.loadConfig();
-  config.autoIngest = false;
-  config.consciousIngest = true;
+  const config = {
+    databaseUrl: 'file:./memori.db',
+    apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+    model: 'gpt-4o-mini',
+    mode: 'conscious' as const
+  };
 
   const memori = new Memori(config);
   await memori.enable();
@@ -134,9 +140,12 @@ async function dualModeComparison(): Promise<void> {
   logInfo('\n⚖️ Dual Mode Comparison', { component: 'dual-memory-mode-example', mode: 'comparison' });
   logInfo('=====================================', { component: 'dual-memory-mode-example', mode: 'comparison' });
 
-  const config = ConfigManager.loadConfig();
-  config.autoIngest = false;
-  config.consciousIngest = false;
+  const config = {
+    databaseUrl: 'file:./memori.db',
+    apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+    model: 'gpt-4o-mini',
+    mode: 'manual' as const
+  };
 
   const memori = new Memori(config);
   await memori.enable();
@@ -189,10 +198,13 @@ async function relationshipExtractionControlExample(): Promise<void> {
   // Example 1: Auto-ingestion with relationship extraction enabled (default)
   logInfo('\n📝 Example 1: Auto-ingestion WITH relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
 
-  const configWithRelationships = ConfigManager.loadConfig();
-  configWithRelationships.autoIngest = true;
-  configWithRelationships.consciousIngest = false;
-  configWithRelationships.enableRelationshipExtraction = true;
+  const configWithRelationships = {
+    databaseUrl: 'file:./memori.db',
+    apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+    model: 'gpt-4o-mini',
+    mode: 'automatic' as const,
+    enableRelationshipExtraction: true
+  };
 
   const memoriWithRelationships = new Memori(configWithRelationships);
   await memoriWithRelationships.enable();
@@ -233,10 +245,13 @@ async function relationshipExtractionControlExample(): Promise<void> {
   // Example 2: Auto-ingestion with relationship extraction disabled
   logInfo('\n📝 Example 2: Auto-ingestion WITHOUT relationship extraction', { component: 'dual-memory-mode-example', mode: 'relationship-control' });
 
-  const configWithoutRelationships = ConfigManager.loadConfig();
-  configWithoutRelationships.autoIngest = true;
-  configWithoutRelationships.consciousIngest = false;
-  configWithoutRelationships.enableRelationshipExtraction = false;
+  const configWithoutRelationships = {
+    databaseUrl: 'file:./memori.db',
+    apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+    model: 'gpt-4o-mini',
+    mode: 'automatic' as const,
+    enableRelationshipExtraction: false
+  };
 
   const memoriWithoutRelationships = new Memori(configWithoutRelationships);
   await memoriWithoutRelationships.enable();

@@ -6,33 +6,27 @@ Memory management is at the heart of Memorits' functionality. Understanding how 
 
 Memorits operates in two fundamental modes for processing conversational data into long-term memories:
 
-### 1. Auto-Ingestion Mode
+### 1. Automatic Mode
 
 **Automatic, real-time memory processing** that captures and processes conversations immediately as they occur.
 
 ```typescript
-import { Memori, ConfigManager } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-const config = ConfigManager.loadConfig();
-Object.assign(config, {
-  autoIngest: true,        // Enable automatic processing
-  consciousIngest: false,  // Disable conscious mode
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'  // Enable automatic processing
 });
 
-const memori = new Memori(config);
-
-// Enable the memory system
-await memori.enable();
-
-// Conversations are automatically processed when recorded
-const chatId = await memori.recordConversation(
-  "What's the best way to implement a search algorithm?",
-  "For most applications, I'd recommend starting with a simple linear search...",
-  {
-    model: 'gpt-4o-mini',
-    sessionId: 'search-discussion'
-  }
-);
+// Conversations are automatically processed during chat
+const response = await ai.chat({
+  messages: [
+    { role: 'user', content: "What's the best way to implement a search algorithm?" }
+  ]
+});
 ```
 
 #### Auto-Ingestion Characteristics
@@ -46,48 +40,36 @@ const chatId = await memori.recordConversation(
 #### Configuration Options
 
 ```typescript
-interface AutoIngestionConfig {
-  autoIngest: true;
-  consciousIngest: false;
-  // Processing parameters
-  minImportanceLevel?: 'low' | 'medium' | 'high' | 'critical';
-  autoClassify?: boolean;
-  extractEntities?: boolean;
-  generateKeywords?: boolean;
+interface AutomaticModeConfig {
+  mode: 'automatic';
+  // Processing parameters are handled automatically
+  // Importance levels are configured via search options
+  // Entity extraction and keyword generation happen automatically
 }
 ```
 
-### 2. Conscious Processing Mode
+### 2. Conscious Mode
 
 **Background processing with human-like reflection** that accumulates conversations and processes them thoughtfully over time.
 
 ```typescript
-const config = ConfigManager.loadConfig();
-Object.assign(config, {
-  autoIngest: false,       // Disable automatic processing
-  consciousIngest: true,   // Enable conscious mode
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'conscious'  // Enable conscious processing
 });
 
-const memori = new Memori(config);
+// Conversations are stored for background processing
+const response = await ai.chat({
+  messages: [
+    { role: 'user', content: "I need to remember this complex algorithm explanation" }
+  ]
+});
 
-// Enable with conscious processing
-await memori.enable();
-
-// Configure background monitoring
-memori.setBackgroundUpdateInterval(60000); // Check every minute
-
-// Conversations are stored but not immediately processed
-const chatId = await memori.recordConversation(
-  "I need to remember this complex algorithm explanation",
-  "Here's a detailed walkthrough of the algorithm...",
-  {
-    model: 'gpt-4o-mini',
-    sessionId: 'algorithm-discussion'
-  }
-);
-
-// Check for new memories to process
-await memori.checkForConsciousContextUpdates();
+// Manually trigger conscious processing when needed
+await ai.checkForConsciousContextUpdates();
 ```
 
 #### Conscious Processing Characteristics
@@ -101,16 +83,13 @@ await memori.checkForConsciousContextUpdates();
 #### Background Monitoring
 
 ```typescript
-// Configure monitoring interval
-memori.setBackgroundUpdateInterval(30000); // 30 seconds
+// Background monitoring is automatic in conscious mode
+// Check if conscious mode is enabled
+const isConsciousEnabled = ai.isConsciousModeEnabled();
+console.log(`Conscious mode enabled: ${isConsciousEnabled}`);
 
-// Check if monitoring is active
-const isActive = memori.isBackgroundMonitoringActive();
-console.log(`Background monitoring: ${isActive}`);
-
-// Get current interval
-const interval = memori.getBackgroundUpdateInterval();
-console.log(`Monitoring interval: ${interval}ms`);
+// Manually trigger conscious processing
+await ai.checkForConsciousContextUpdates();
 ```
 
 ## Memory Types and Storage
@@ -215,16 +194,14 @@ enum MemoryClassification {
 Conversations are captured and stored in raw form:
 
 ```typescript
-// Raw conversation storage
-const chatId = await memori.recordConversation(
-  userInput,
-  aiOutput,
-  {
-    model: 'gpt-4o-mini',
-    sessionId: 'user-session',
-    metadata: { source: 'chat_interface' }
-  }
-);
+// Raw conversation storage (automatic during chat)
+const response = await ai.chat({
+  messages: [
+    { role: 'user', content: userInput }
+  ]
+});
+
+const chatId = response.chatId; // Chat ID is returned
 ```
 
 ### 2. Processing Phase
@@ -232,20 +209,8 @@ const chatId = await memori.recordConversation(
 Raw conversations are processed into structured memories:
 
 ```typescript
-// Memory processing (automatic in auto-ingestion mode)
-const processedMemory = await memoryAgent.processConversation({
-  chatId,
-  userInput,
-  aiOutput,
-  context: {
-    conversationId: chatId,
-    sessionId: sessionId,
-    modelUsed: 'gpt-4o-mini',
-    userPreferences: [],
-    currentProjects: ['memorits'],
-    relevantSkills: ['typescript', 'ai']
-  }
-});
+// Memory processing happens automatically in automatic mode
+// No manual processing needed - handled by MemoryAgent internally
 ```
 
 ### 3. Storage Phase
@@ -253,9 +218,8 @@ const processedMemory = await memoryAgent.processConversation({
 Processed memories are stored with full metadata:
 
 ```typescript
-// Note: storeLongTermMemory is handled internally by the Memori class
-// The processed memory is stored automatically during conversation recording
-// when auto-ingestion is enabled
+// Storage happens automatically - no manual intervention needed
+// MemoriAI handles the complete lifecycle internally
 ```
 
 ### 4. Retrieval Phase
@@ -264,7 +228,7 @@ Memories are retrieved using advanced search strategies:
 
 ```typescript
 // Search with multiple criteria
-const memories = await memori.searchMemories('algorithm implementation', {
+const memories = await ai.searchMemories('algorithm implementation', {
   minImportance: 'high',
   categories: ['essential', 'reference'],
   limit: 10,
@@ -389,14 +353,16 @@ const userMemori = new Memori({ namespace: 'user_123' });
 const projectMemori = new Memori({ namespace: 'project_alpha' });
 ```
 
-### 4. Monitor Memory Growth
+### 4. Monitor Memory Usage
 
 ```typescript
-// Regular monitoring
+// Regular monitoring with MemoriAI
 setInterval(async () => {
-  const stats = await dbManager.getDatabaseStats();
+  const stats = await ai.getMemoryStatistics();
   if (stats.totalMemories > 10000) {
     console.log('Memory count threshold reached');
+    // Access consolidation service for cleanup
+    const consolidationService = ai.getConsolidationService();
     // Trigger cleanup or scaling
   }
 }, 60000); // Check every minute
@@ -408,11 +374,12 @@ Memory operations include comprehensive error handling:
 
 ```typescript
 try {
-  const chatId = await memori.recordConversation(userInput, aiOutput, {
-    model: 'gpt-4o-mini',
-    sessionId: 'user-session'
+  const response = await ai.chat({
+    messages: [
+      { role: 'user', content: userInput }
+    ]
   });
-  const memories = await memori.searchMemories(query);
+  const memories = await ai.searchMemories(query);
 } catch (error) {
   // Handle memory operation errors
   console.error('Memory operation failed:', error instanceof Error ? error.message : String(error));

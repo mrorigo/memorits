@@ -10,17 +10,17 @@ Memorits transforms AI conversations from fleeting interactions into persistent,
 
 - **🔍 Perfect Recall**: Never lose context again with surgical-precision search
 - **🎯 Intelligent Classification**: Automatic categorization by importance and type
-- **⚡ Lightning Fast**: Sub-millisecond search using optimized SQLite FTS5 backend
+- **⚡ Lightning Fast**: Sub-millisecond search using optimized SQLite backend
 - **🔒 Type Safe**: 100% TypeScript coverage with compile-time validation
-- **🧠 Dual Memory Modes**: Conscious processing vs. automated background ingestion
-- **🎨 Multiple Search Strategies**: FTS5, LIKE, recent, semantic, temporal, and metadata filtering
+- **🧠 Unified Memory API**: Single `MemoriAI` class with multiple processing modes
+- **🎨 Multiple Search Strategies**: LIKE, recent, temporal, and metadata filtering strategies
 - **🤖 Multi-Provider Integration**: Support for OpenAI, Anthropic, Ollama, and custom providers
-- **⚙️ Advanced Configuration Management**: Real file system persistence, runtime updates, audit trails
-- **🛡️ Enterprise Error Handling**: Circuit breaker patterns, strategy-specific recovery, enhanced error context
-- **📈 Performance Monitoring**: Real-time dashboards, comprehensive analytics, system health monitoring
-- **🔗 Memory Relationship Processing**: LLM-powered relationship extraction, graph analysis, and traversal
-- **🔄 Intelligent Consolidation**: Multi-tier safety validation, quality scoring, and rollback capabilities
-- **📊 Search Index Maintenance**: Automated optimization, health monitoring, backup, and recovery
+- **⚙️ Advanced Configuration**: Runtime configuration with persistence and validation
+- **🛡️ Enterprise Error Handling**: Circuit breaker patterns and comprehensive error recovery
+- **📈 Performance Monitoring**: Real-time dashboards and system health monitoring
+- **🔗 Memory Relationship Processing**: LLM-powered relationship extraction and analysis
+- **🔄 Intelligent Consolidation**: Multi-tier safety validation and quality scoring
+- **📊 Search Index Management**: Automated optimization and health monitoring
 
 ## 🚀 Quick Start
 
@@ -33,26 +33,25 @@ npm install memorits
 ### Basic Usage
 
 ```typescript
-import { Memori, OpenAIWrapper } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-// Create Memori instance with simple configuration
-const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-openai-api-key',
-  autoMemory: true
+// Create unified MemoriAI instance with automatic memory processing
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+  baseUrl: 'http://localhost:11434/v1',
+  model: 'gpt-oss:20b',
+  provider: 'ollama',
+  mode: 'automatic'
 });
 
-// Create provider wrapper (direct integration)
-const openai = new OpenAIWrapper(memori);
-
 // Chat normally - memory is recorded automatically
-const response = await openai.chat({
+const response = await ai.chat({
   messages: [{ role: 'user', content: 'Remember this for later...' }]
 });
 
-// Search through conversation history (same Memori instance)
-const memories = await memori.searchMemories('urgent meeting notes', {
+// Search through conversation history
+const memories = await ai.searchMemories('urgent meeting notes', {
   minImportance: 'high',
   limit: 10
 });
@@ -91,7 +90,7 @@ This developer documentation is organized to help you build sophisticated AI age
 - **[Provider Documentation](providers/)** - Complete guides for OpenAI, Anthropic, Ollama, and custom providers
 
 ### 📖 API Reference
-- **[Core API](api/core-api.md)** - Memori class and primary interfaces
+- **[Core API](api/core-api.md)** - MemoriAI class and primary interfaces
 - **[Search API](api/search-api.md)** - Advanced search capabilities
 
 ### 💡 Examples
@@ -129,17 +128,17 @@ This documentation is specifically designed for:
 ## 🔧 Key Concepts You Should Understand
 
 ### Memory Modes
-- **Auto-Ingestion**: Automatic processing of conversations in real-time
-- **Conscious Processing**: Background processing with human-like reflection
+- **Automatic Mode**: Automatic processing of conversations in real-time (default)
+- **Manual Mode**: Manual control over memory recording and processing
+- **Conscious Mode**: Background processing with advanced reflection capabilities
 
 ### Search Strategies
-- **FTS5**: Full-text search with BM25 ranking and configurable weights
 - **LIKE**: Pattern-based text matching with relevance boosting
 - **Recent**: Time-based recent memory retrieval with time windows
-- **Semantic**: Vector-based similarity search (planned)
 - **Category Filter**: Classification-based filtering with hierarchy support
 - **Temporal Filter**: Time-based filtering with natural language parsing
 - **Metadata Filter**: Advanced metadata-based queries with nested access
+- **FTS5**: Full-text search with BM25 ranking (when available in SQLite build)
 - **Relationship**: Graph-based relationship traversal with confidence scoring
 
 ### Memory Classification

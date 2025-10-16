@@ -95,12 +95,14 @@ export class MemoryEnabledLLMProvider implements ILLMProvider, MemoryManager {
     // Initialize memory system if enabled and not already using existing Memori
     if ((this.memoryConfig.enableChatMemory || this.memoryConfig.enableEmbeddingMemory) && !existingMemori) {
       // Only create new Memori if none provided
+      const memoriMode = this.memoryConfig.memoryProcessingMode === 'auto' ? 'automatic' :
+                         this.memoryConfig.memoryProcessingMode === 'conscious' ? 'conscious' : 'manual';
+
       this.memori = new Memori({
         apiKey: config.apiKey,
         model: config.model,
         baseUrl: config.baseUrl,
-        autoIngest: this.memoryConfig.memoryProcessingMode === 'auto',
-        consciousIngest: this.memoryConfig.memoryProcessingMode === 'conscious',
+        mode: memoriMode,
         namespace: this.memoryConfig.sessionId || 'default',
       });
       logInfo('Created new Memori instance in MemoryEnabledLLMProvider', {

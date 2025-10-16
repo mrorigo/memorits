@@ -125,11 +125,32 @@ describe('Memori', () => {
       expect(MockMemoryAgent).toHaveBeenCalledWith(expect.any(MockOpenAIProvider));
     });
 
-    it('should merge provided config with default', () => {
+    it('should merge provided config with default', async () => {
       const customConfig = { model: 'gpt-4' };
-      new Memori(customConfig);
+      const memori = new Memori(customConfig);
 
-      expect(mockConfig.model).toBe('gpt-4');
+      // Enable to trigger provider initialization with merged config
+      await memori.enable();
+
+      // Verify that the provider was initialized with the merged config (gpt-4)
+      expect(MockOpenAIProvider).toHaveBeenCalledWith({
+        apiKey: mockConfig.apiKey,
+        model: 'gpt-4', // Should use custom model, not default
+        baseUrl: mockConfig.baseUrl,
+        features: {
+          memory: {
+            enableChatMemory: false,
+            enableEmbeddingMemory: false,
+            memoryProcessingMode: 'auto',
+            minImportanceLevel: 'all',
+          },
+          performance: {
+            enableCaching: false,
+            enableConnectionPooling: false,
+            enableHealthMonitoring: false,
+          },
+        }
+      });
     });
   });
 

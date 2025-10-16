@@ -178,21 +178,19 @@ export class OllamaProvider extends UnifiedLLMProvider {
       // Convert messages to Ollama format
       const ollamaMessages = this.convertToOllamaMessages(params.messages);
 
-      const requestBody: OllamaChatRequest = {
+      const requestBody: any = {
         model: params.model || this.model,
         messages: ollamaMessages,
-        options: {
-          temperature: params.temperature,
-          top_p: params.top_p,
-          repeat_penalty: params.frequency_penalty,
-          presence_penalty: params.presence_penalty,
-          num_predict: params.max_tokens,
-          stop: Array.isArray(params.stop) ? params.stop : params.stop ? [params.stop] : undefined,
-        },
+        temperature: params.temperature,
+        top_p: params.top_p,
+        frequency_penalty: params.frequency_penalty,
+        presence_penalty: params.presence_penalty,
+        max_tokens: params.max_tokens,
+        stop: Array.isArray(params.stop) ? params.stop : params.stop ? [params.stop] : undefined,
         stream: params.stream || false,
       };
 
-      const response = await fetch(`${this.baseUrl}/api/chat`, {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -202,34 +200,42 @@ export class OllamaProvider extends UnifiedLLMProvider {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
+        throw new Error(`Ollama API error: URL: ${this.baseUrl}/chat/completions ${response.status} - ${errorText}`);
       }
 
-      const ollamaResponse = await response.json() as OllamaChatResponse;
+      const responseText = await response.text();
+
+      if (!responseText.trim()) {
+        throw new Error(`Ollama API returned empty response`);
+      }
+
+      const responseJson = JSON.parse(responseText);
 
       // Handle streaming response
       if (params.stream) {
         throw new Error('Streaming responses are not yet supported in this provider implementation');
       }
 
+      // Ollama returns OpenAI-compatible format
+      const choice = responseJson.choices?.[0];
+      if (!choice || !choice.message) {
+        throw new Error(`Invalid response format: ${responseText}`);
+      }
+
       return {
         message: {
-          role: ollamaResponse.message.role as 'user' | 'assistant',
-          content: ollamaResponse.message.content,
+          role: choice.message.role as 'user' | 'assistant',
+          content: choice.message.content,
         },
-        finish_reason: 'stop',
-        usage: ollamaResponse.prompt_eval_count ? {
-          prompt_tokens: ollamaResponse.prompt_eval_count,
-          completion_tokens: ollamaResponse.eval_count || 0,
-          total_tokens: (ollamaResponse.prompt_eval_count || 0) + (ollamaResponse.eval_count || 0),
+        finish_reason: choice.finish_reason || 'stop',
+        usage: responseJson.usage ? {
+          prompt_tokens: responseJson.usage.prompt_tokens || 0,
+          completion_tokens: responseJson.usage.completion_tokens || 0,
+          total_tokens: responseJson.usage.total_tokens || 0,
         } : undefined,
-        id: `ollama-${Date.now()}`,
-        model: ollamaResponse.model,
-        created: Date.parse(ollamaResponse.created_at),
-        metadata: {
-          total_duration: ollamaResponse.total_duration,
-          load_duration: ollamaResponse.load_duration,
-        },
+        id: responseJson.id || `ollama-${Date.now()}`,
+        model: responseJson.model,
+        created: responseJson.created,
       };
     } catch (error) {
       if (error instanceof Error) {
@@ -245,17 +251,15 @@ export class OllamaProvider extends UnifiedLLMProvider {
    */
   protected async executeEmbedding(params: EmbeddingParams): Promise<EmbeddingResponse> {
     try {
-      const inputText = Array.isArray(params.input) ? params.input[0] : params.input;
+      const inputText = Array.isArray(params.input) ? params.input.join(' ') : params.input;
 
       const requestBody: OllamaEmbeddingRequest = {
         model: params.model || this.model,
         prompt: inputText,
-        options: params.dimensions ? {
-          num_ctx: 2048,
-        } : undefined,
+        options: {},
       };
 
-      const response = await fetch(`${this.baseUrl}/api/embeddings`, {
+      const response = await fetch(`${this.baseUrl}/api/embed`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -277,10 +281,10 @@ export class OllamaProvider extends UnifiedLLMProvider {
           object: 'embedding',
         })),
         model: ollamaResponse.model,
-        usage: ollamaResponse.prompt_eval_count ? {
-          prompt_tokens: ollamaResponse.prompt_eval_count,
-          total_tokens: ollamaResponse.prompt_eval_count,
-        } : undefined,
+        usage: {
+          prompt_tokens: 1, // Ollama doesn't provide token counts
+          total_tokens: 1,
+        },
         id: `ollama-embedding-${Date.now()}`,
         created: Date.now(),
         metadata: {

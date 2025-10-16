@@ -4,29 +4,26 @@ This guide covers the essential usage patterns for Memorits, from simple memory 
 
 ## Core Operations
 
-### 1. Initialize Memori
+### 1. Initialize MemoriAI
 
 ```typescript
-import { Memori } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-// Create Memori instance with simple configuration
-const memori = new Memori({
-  databaseUrl: 'sqlite:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-openai-api-key',
-  autoMemory: true
+// Create MemoriAI instance with simple configuration
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 ```
 
-### 2. Use Provider Wrappers
+### 2. Use MemoriAI Directly
 
 ```typescript
-import { OpenAIWrapper } from 'memorits';
-
-const openai = new OpenAIWrapper(memori);
-
 // Chat normally - memory is recorded automatically
-const response = await openai.chat({
+const response = await ai.chat({
   messages: [
     { role: 'user', content: 'I need help with TypeScript interfaces' }
   ]
@@ -39,12 +36,12 @@ console.log('Conversation recorded with ID:', response.chatId);
 
 ```typescript
 // Basic text search
-const results = await memori.searchMemories('TypeScript interfaces', {
+const results = await ai.searchMemories('TypeScript interfaces', {
   limit: 5
 });
 
 // Advanced search with filtering
-const filteredResults = await memori.searchMemories('programming help', {
+const filteredResults = await ai.searchMemories('programming help', {
   limit: 10,
   minImportance: 'high',
   categories: ['essential', 'contextual']
@@ -119,7 +116,7 @@ enum MemoryClassification {
 ### 1. Simple Text Search
 
 ```typescript
-const results = await memori.searchMemories('TypeScript interfaces');
+const results = await ai.searchMemories('TypeScript interfaces');
 console.log(`Found ${results.length} memories`);
 
 // Each result includes:
@@ -132,7 +129,7 @@ console.log(`Found ${results.length} memories`);
 ### 2. Importance-Based Filtering
 
 ```typescript
-const importantMemories = await memori.searchMemories('programming', {
+const importantMemories = await ai.searchMemories('programming', {
   minImportance: 'high',  // Only show high+ importance memories
   limit: 20
 });
@@ -141,7 +138,7 @@ const importantMemories = await memori.searchMemories('programming', {
 ### 3. Category-Based Filtering
 
 ```typescript
-const technicalMemories = await memori.searchMemories('code', {
+const technicalMemories = await ai.searchMemories('code', {
   categories: ['essential', 'reference'],  // Only technical memories
   limit: 10
 });
@@ -150,7 +147,7 @@ const technicalMemories = await memori.searchMemories('code', {
 ### 4. Combined Filtering
 
 ```typescript
-const specificMemories = await memori.searchMemories('project planning', {
+const specificMemories = await ai.searchMemories('project planning', {
   minImportance: 'medium',
   categories: ['essential', 'contextual'],
   includeMetadata: true,
@@ -162,15 +159,15 @@ const specificMemories = await memori.searchMemories('project planning', {
 
 ```typescript
 // Get recent memories for context
-const recentContext = await memori.searchRecentMemories(5, true);
+const recentContext = await ai.searchRecentMemories(5, true);
 
 // Get recent memories from today only
-const todaysMemories = await memori.searchRecentMemories(10, false, {
+const todaysMemories = await ai.searchRecentMemories(10, false, {
   relativeExpressions: ['today']
 });
 
 // Get recent high-importance memories
-const recentImportant = await memori.searchMemories('', {
+const recentImportant = await ai.searchMemories('', {
   limit: 20,
   minImportance: 'high',
   temporalFilters: {
@@ -209,7 +206,7 @@ interface MemorySearchResult {
 
 ```typescript
 // Process search results
-const results = await memori.searchMemories('important information');
+const results = await ai.searchMemories('important information');
 
 for (const result of results) {
   console.log('Memory:', result.metadata.summary);
@@ -231,7 +228,7 @@ for (const result of results) {
 
 ```typescript
 try {
-  const memories = await memori.searchMemories('query');
+  const memories = await ai.searchMemories('query');
   console.log(`Found ${memories.length} memories`);
 } catch (error) {
   console.error('Search failed:', error);
@@ -246,9 +243,9 @@ try {
 ### Graceful Degradation
 
 ```typescript
-// Memori errors shouldn't break your application
+// MemoriAI errors shouldn't break your application
 try {
-  const memories = await memori.searchMemories('context');
+  const memories = await ai.searchMemories('context');
   // Use memories to enhance response
   enhancedContext = memories.slice(0, 3);
 } catch (error) {
@@ -264,7 +261,7 @@ try {
 
 ```typescript
 // Recommended: Use DatabaseManager for unified consolidation
-const dbManager = new DatabaseManager('your-database-url');
+const dbManager = new DatabaseManager('file:./memori.db');
 const consolidationService = dbManager.getConsolidationService();
 
 // Automatic DuplicateManager integration for sophisticated similarity analysis
@@ -293,17 +290,17 @@ console.log(`Success rate: ${metrics.consolidationSuccessRate}%`);
 
 ```typescript
 // For real-time applications
-const quickResults = await memori.searchMemories('urgent', { limit: 3 });
+const quickResults = await ai.searchMemories('urgent', { limit: 3 });
 
 // For analysis and reporting
-const comprehensiveResults = await memori.searchMemories('analysis', { limit: 50 });
+const comprehensiveResults = await ai.searchMemories('analysis', { limit: 50 });
 ```
 
 ### 2. Filter Before Searching
 
 ```typescript
 // Use importance and category filters to reduce search space
-const filteredSearch = await memori.searchMemories('specific topic', {
+const filteredSearch = await ai.searchMemories('specific topic', {
   minImportance: 'medium',
   categories: ['essential', 'reference'],
   limit: 10
@@ -354,11 +351,11 @@ if (recommendations.overallHealth === 'poor') {
 
 ```typescript
 class MemoryEnabledChat {
-  private memori: Memori;
+  private ai: MemoriAI;
 
   async processMessage(userMessage: string, sessionId: string) {
     // Search for relevant context
-    const context = await this.memori.searchMemories(userMessage, {
+    const context = await this.ai.searchMemories(userMessage, {
       limit: 5,
       minImportance: 'medium'
     });
@@ -369,19 +366,10 @@ class MemoryEnabledChat {
       { role: 'user' as const, content: userMessage }
     ];
 
-    // Get AI response
-    const response = await this.aiClient.chat.completions.create({
-      model: 'gpt-4o-mini',
+    // Get AI response using MemoriAI directly
+    const response = await this.ai.chat({
       messages
     });
-
-    // Record the conversation
-    await this.memori.recordConversation(
-      userMessage,
-      response.choices[0].message.content,
-      'gpt-4o-mini',
-      { sessionId }
-    );
 
     return response;
   }
@@ -394,7 +382,7 @@ class MemoryEnabledChat {
 class KnowledgeBaseAssistant {
   async answerQuestion(question: string) {
     // Search for relevant knowledge
-    const knowledge = await this.memori.searchMemories(question, {
+    const knowledge = await this.ai.searchMemories(question, {
       categories: ['reference', 'essential'],
       minImportance: 'high',
       limit: 10
@@ -404,8 +392,8 @@ class KnowledgeBaseAssistant {
     const context = knowledge.map(k => k.content).join('\n');
     const prompt = `Context: ${context}\n\nQuestion: ${question}`;
 
-    return this.aiClient.chat.completions.create({
-      model: 'gpt-4o-mini',
+    // Use MemoriAI directly for the response
+    return this.ai.chat({
       messages: [{ role: 'user', content: prompt }]
     });
   }
@@ -418,12 +406,12 @@ class KnowledgeBaseAssistant {
 
 ```typescript
 // Begin with basic search and filtering
-const results = await memori.searchMemories('your topic', {
+const results = await ai.searchMemories('your topic', {
   limit: 5
 });
 
 // Gradually add complexity as needed
-const advancedResults = await memori.searchMemories('your topic', {
+const advancedResults = await ai.searchMemories('your topic', {
   minImportance: 'high',
   categories: ['essential'],
   includeMetadata: true
@@ -433,7 +421,7 @@ const advancedResults = await memori.searchMemories('your topic', {
 ### 2. Handle Empty Results
 
 ```typescript
-const results = await memori.searchMemories('specific topic');
+const results = await ai.searchMemories('specific topic');
 
 if (results.length === 0) {
   console.log('No memories found for this topic');
@@ -447,7 +435,7 @@ if (results.length === 0) {
 
 ```typescript
 const startTime = Date.now();
-const results = await memori.searchMemories('performance test', { limit: 10 });
+const results = await ai.searchMemories('performance test', { limit: 10 });
 const duration = Date.now() - startTime;
 
 console.log(`Search took ${duration}ms and returned ${results.length} results`);
@@ -468,9 +456,9 @@ console.log(`Search took ${duration}ms and returned ${results.length} results`);
 - Check database indexes
 
 **"Memory not being recorded"**
-- Ensure `memori.enable()` was called
-- Check database permissions
-- Verify configuration is valid
+- Ensure MemoriAI is properly initialized with correct configuration
+- Check database permissions and path
+- Verify API key and provider settings are valid
 
 ### Debug Information
 
@@ -478,10 +466,9 @@ console.log(`Search took ${duration}ms and returned ${results.length} results`);
 // Enable debug logging
 process.env.DEBUG = 'memori:*';
 
-// Check system status
-const isEnabled = memori.isEnabled();
-const sessionId = memori.getSessionId();
-console.log('Memori status:', { isEnabled, sessionId });
+// Check system status (MemoriAI doesn't need explicit enable)
+const config = ai.getConfig();
+console.log('MemoriAI configuration:', config);
 ```
 
 ## Next Steps

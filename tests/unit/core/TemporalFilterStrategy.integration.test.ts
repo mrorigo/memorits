@@ -546,12 +546,6 @@ describe('Temporal Strategy Integration Tests', () => {
 
             const results = await temporalStrategy.search(query);
 
-            // Let's also check if the mock was called
-            console.log('Mock called:', mockPrismaClient.$queryRawUnsafe.mock.calls.length > 0);
-            if (mockPrismaClient.$queryRawUnsafe.mock.calls.length > 0) {
-                console.log('Mock call args:', JSON.stringify(mockPrismaClient.$queryRawUnsafe.mock.calls[0], null, 2));
-            }
-
             expect(results).toBeDefined();
             expect(results.length).toBeGreaterThan(0);
             expect(results[0].metadata.searchStrategy).toBe(SearchStrategy.TEMPORAL_FILTER);

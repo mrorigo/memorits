@@ -1,95 +1,92 @@
 # Core API Reference
 
-This document provides comprehensive documentation for the core Memorits API, including the main Memori class and its primary interfaces.
+This document provides comprehensive documentation for the core Memorits API, including the main MemoriAI class and its primary interfaces.
 
-## Memori Class
+## MemoriAI Class
 
-The `Memori` class is the main entry point for memory management operations.
+The `MemoriAI` class is the main entry point for memory-enabled AI operations, combining LLM provider integration with memory management capabilities.
 
 ### Constructor
 
 ```typescript
-constructor(config?: Partial<MemoriConfig>)
+constructor(config: MemoriAIConfig)
 ```
 
 **Parameters:**
-- `config` (optional): Partial configuration object
+- `config`: Complete configuration object
 
 **Example:**
 ```typescript
-import { Memori, ConfigManager } from 'memorits';
-
-// Using configuration manager
-const config = ConfigManager.loadConfig();
-const memori = new Memori(config);
+import { MemoriAI } from 'memorits';
 
 // Using custom configuration
-const memori = new Memori({
-  databaseUrl: 'sqlite:./my-memories.db',
-  namespace: 'my-app',
-  autoIngest: true
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 ```
 
 ### Core Methods
 
-#### `enable()`
+#### `chat()`
 
-Initialize the memory system and enable processing.
-
-```typescript
-async enable(): Promise<void>
-```
-
-**Returns:** Promise that resolves when system is ready
-
-**Throws:**
-- `ConfigurationError`: Invalid configuration
-- `DatabaseError`: Database connection failure
-
-**Example:**
-```typescript
-try {
-  await memori.enable();
-  console.log('Memorits is ready!');
-} catch (error) {
-  console.error('Failed to enable Memorits:', error);
-}
-```
-
-#### `recordConversation()`
-
-Record a conversation for memory processing.
+Send a chat completion request with automatic memory recording.
 
 ```typescript
-async recordConversation(
-  userInput: string,
-  aiOutput: string,
-  options?: RecordConversationOptions
-): Promise<string>
+async chat(options: ChatOptions): Promise<ChatResponse>
 ```
 
 **Parameters:**
-- `userInput`: The user's message content
-- `aiOutput`: The AI's response content
-- `options` (optional): Recording options including model and metadata
+- `options`: Chat completion options including messages and model settings
 
-**Returns:** The chat ID of the recorded conversation
+**Returns:** Chat response with content and metadata
 
 **Example:**
 ```typescript
-const chatId = await memori.recordConversation(
-  'What is TypeScript?',
-  'TypeScript is a programming language that builds on JavaScript...',
-  {
-    model: 'gpt-4o-mini',
-    metadata: {
-      sessionId: 'user-session-123',
-      topic: 'programming',
-      difficulty: 'beginner'
-    }
-  }
-);
+const response = await ai.chat({
+  messages: [
+    { role: 'user', content: 'What is TypeScript?' }
+  ],
+  model: 'gpt-4',
+  temperature: 0.7
+});
+
+console.log('Response:', response.message.content);
+console.log('Chat ID:', response.chatId);
+```
+
+#### `searchMemories()`
+
+Search for relevant memories using advanced filtering.
+
+```typescript
+async searchMemories(
+  query: string,
+  options?: SearchOptions
+): Promise<MemorySearchResult[]>
+```
+
+**Parameters:**
+- `query`: Search query text
+- `options` (optional): Search configuration options
+
+**Returns:** Array of matching memory results
+
+**Example:**
+```typescript
+// Basic search
+const results = await ai.searchMemories('TypeScript interfaces');
+
+// Advanced search with filtering
+const filteredResults = await ai.searchMemories('programming concepts', {
+  minImportance: 'high',
+  categories: ['essential', 'reference'],
+  limit: 10,
+  includeMetadata: true
+});
 ```
 
 #### `searchMemories()`
@@ -158,41 +155,25 @@ const optimizationResult = await memori.optimizeIndex('merge');
 console.log(`Optimization saved ${optimizationResult.spaceSaved} bytes`);
 ```
 
-#### `close()`
-
-Clean up resources and close database connections.
-
-```typescript
-async close(): Promise<void>
-```
-
-**Example:**
-```typescript
-await memori.close();
-console.log('Memorits shut down successfully');
-```
-
 ### Status Methods
 
-#### `isEnabled()`
+#### `getConfig()`
 
-Check if the memory system is enabled.
+Get the current configuration.
 
 ```typescript
-isEnabled(): boolean
+getConfig(): MemoriAIConfig
 ```
 
-**Returns:** `true` if system is enabled and ready
+**Returns:** Current configuration object
 
 **Example:**
 ```typescript
-if (memori.isEnabled()) {
-  // System is ready for use
-  const memories = await memori.searchMemories('test');
-}
+const config = ai.getConfig();
+console.log('Current config:', config);
 ```
 
-#### `getSessionId()`
+#### `getSessionId()` (if available)
 
 Get the current session identifier.
 
@@ -204,55 +185,32 @@ getSessionId(): string
 
 **Example:**
 ```typescript
-const sessionId = memori.getSessionId();
+const sessionId = ai.getSessionId?.();
 console.log('Current session:', sessionId);
 ```
 
-### Memory Processing Control
+### Memory Mode Configuration
 
-#### `isConsciousModeEnabled()`
+MemoriAI supports three memory processing modes configured at initialization:
 
-Check if conscious processing mode is active.
+#### Mode Options
 
-```typescript
-isConsciousModeEnabled(): boolean
-```
-
-**Returns:** `true` if conscious mode is enabled
-
-#### `isAutoModeEnabled()`
-
-Check if auto-ingestion mode is active.
-
-```typescript
-isAutoModeEnabled(): boolean
-```
-
-**Returns:** `true` if auto mode is enabled
-
-#### `checkForConsciousContextUpdates()`
-
-Check for and process new conscious memories.
-
-```typescript
-async checkForConsciousContextUpdates(): Promise<void>
-```
+- **`automatic`** (default): Auto-record conversations and process memories
+- **`manual`**: Manual control over memory recording and processing
+- **`conscious`**: Advanced background processing with human-like reflection
 
 **Example:**
 ```typescript
-// Manually trigger conscious context update
-await memori.checkForConsciousContextUpdates();
+// Check current mode
+const config = ai.getConfig();
+console.log('Current mode:', config.mode);
+
+// Mode is set at initialization and cannot be changed
+const ai = new MemoriAI({
+  // ... other config,
+  mode: 'automatic'  // Choose appropriate mode
+});
 ```
-
-#### `getBackgroundUpdateInterval()`
-
-Get the current background update interval.
-
-```typescript
-getBackgroundUpdateInterval(): number
-```
-
-**Returns:** Update interval in milliseconds
 
 ### Advanced Methods
 
@@ -563,29 +521,35 @@ if (strategies.includes(SearchStrategy.SEMANTIC)) {
 
 ## Configuration Management
 
-### MemoriConfig Interface
+### MemoriAIConfig Interface
 
 ```typescript
-interface MemoriConfig {
+interface MemoriAIConfig {
   databaseUrl: string;                    // Database connection URL
-  namespace: string;                      // Memory namespace
-  consciousIngest: boolean;               // Enable conscious processing
-  autoIngest: boolean;                    // Enable auto ingestion
-  model: string;                          // Default LLM model
-  apiKey?: string;                        // LLM provider API key (OpenAI, Anthropic, etc.)
+  apiKey: string;                         // LLM provider API key
+  model?: string;                         // Default LLM model (provider-specific)
+  provider: 'openai' | 'anthropic' | 'ollama'; // Required provider
   baseUrl?: string;                       // Custom API base URL
-  userContext?: UserContext;              // User-specific context
+  mode?: 'automatic' | 'manual' | 'conscious'; // Memory processing mode
+  namespace?: string;                     // Memory namespace
+  sessionId?: string;                     // Session identifier
+  memory?: {                              // Memory configuration (optional)
+    enableChatMemory?: boolean;
+    memoryProcessingMode?: 'auto' | 'manual' | 'conscious';
+  };
 }
 ```
 
-### RecordConversationOptions Interface
+### ChatOptions Interface
 
 ```typescript
-interface RecordConversationOptions {
+interface ChatOptions {
+  messages: ChatMessage[];                // Chat messages
+  model?: string;                         // Model override
+  temperature?: number;                   // Temperature setting
+  maxTokens?: number;                     // Max tokens
+  timeout?: number;                       // Request timeout
   sessionId?: string;                     // Session identifier
-  metadata?: Record<string, unknown>;     // Additional metadata
-  skipProcessing?: boolean;               // Skip memory processing
-  immediate?: boolean;                    // Process immediately
 }
 ```
 
@@ -678,12 +642,12 @@ class DatabaseError extends Error {
   constructor(message: string, operation?: string) {}
 }
 
-class SearchError extends Error {
-  constructor(message: string, strategy?: string) {}
+class ProviderError extends Error {
+  constructor(message: string, provider?: string) {}
 }
 
-class ValidationError extends Error {
-  constructor(message: string, field?: string) {}
+class SearchError extends Error {
+  constructor(message: string, strategy?: string) {}
 }
 ```
 
@@ -692,44 +656,28 @@ class ValidationError extends Error {
 ### Complete Application Example
 
 ```typescript
-import { Memori, ConfigManager } from 'memorits';
-import { MemoriOpenAIClient } from 'memorits/integrations/openai-dropin/client';
-import { SearchStrategy } from 'memorits/core/domain/search/types';
+import { MemoriAI } from 'memorits';
 
 class MemoryEnabledApplication {
-  private memori: Memori;
-  private openaiClient: any;
+  private ai: MemoriAI;
 
   constructor() {
-    // Initialize Memorits
-    const config = ConfigManager.loadConfig();
-    this.memori = new Memori(config);
+    // Initialize MemoriAI with all capabilities
+    this.ai = new MemoriAI({
+      databaseUrl: 'file:./memori.db',
+      apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
+      model: 'gpt-4',
+      provider: 'openai',
+      mode: 'automatic'
+    });
   }
 
-  async initialize() {
-    try {
-      // Enable memory processing
-      await this.memori.enable();
-
-      // Create OpenAI client with memory
-      this.openaiClient = new MemoriOpenAIClient(process.env.OPENAI_API_KEY!, {
-        enableChatMemory: true,
-        autoInitialize: true,
-      });
-
-      console.log('Application initialized with memory capabilities');
-    } catch (error) {
-      console.error('Initialization failed:', error);
-      throw error;
-    }
-  }
-
-  async processUserQuery(userMessage: string, sessionId: string) {
+  async processUserQuery(userMessage: string, sessionId?: string) {
     try {
       // Search for relevant context
-      const context = await this.memori.searchMemories(userMessage, {
+      const context = await this.ai.searchMemories(userMessage, {
         limit: 5,
-        minImportance: 'medium' as any
+        minImportance: 'medium'
       });
 
       // Include context in AI prompt
@@ -741,32 +689,30 @@ class MemoryEnabledApplication {
         { role: 'user' as const, content: userMessage }
       ];
 
-      // Get AI response
-      const response = await this.openaiClient.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages
+      // Get AI response with automatic memory recording
+      const response = await this.ai.chat({
+        messages,
+        sessionId
       });
 
-      // Record the conversation for future use
-      await this.memori.recordConversation(
-        userMessage,
-        response.choices[0].message.content,
-        {
-          model: 'gpt-4o-mini',
-          metadata: { sessionId }
-        }
-      );
-
-      return response.choices[0].message.content;
+      return response.message.content;
     } catch (error) {
       console.error('Error processing query:', error);
       throw error;
     }
   }
 
-  async shutdown() {
-    await this.memori.close();
-    console.log('Application shut down successfully');
+  async searchMemories(query: string) {
+    const memories = await this.ai.searchMemories(query, {
+      limit: 10,
+      includeMetadata: true
+    });
+
+    return memories;
+  }
+
+  async getConfig() {
+    return this.ai.getConfig();
   }
 }
 ```
@@ -774,25 +720,20 @@ class MemoryEnabledApplication {
 ### Configuration Example
 
 ```typescript
-import { MemoriConfigSchema } from 'memorits/core/infrastructure/config/ConfigManager';
+import { MemoriAI } from 'memorits';
 
-// Load configuration with validation
-const config = MemoriConfigSchema.parse({
-  databaseUrl: process.env.DATABASE_URL || 'sqlite:./memories.db',
-  namespace: process.env.MEMORI_NAMESPACE || 'default',
-  autoIngest: process.env.MEMORI_AUTO_INGEST === 'true',
-  consciousIngest: process.env.MEMORI_CONSCIOUS_INGEST === 'true',
-  model: process.env.MEMORI_MODEL || 'gpt-4o-mini',
-  apiKey: process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || '',
-  baseUrl: process.env.OPENAI_BASE_URL || process.env.ANTHROPIC_BASE_URL,
-  userContext: {
-    userPreferences: ['dark_mode', 'concise_responses'],
-    currentProjects: ['memorits_development'],
-    relevantSkills: ['typescript', 'node.js', 'ai_development']
-  }
+// Simple configuration
+const ai = new MemoriAI({
+  databaseUrl: process.env.DATABASE_URL || 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
+  model: process.env.MEMORI_MODEL || 'gpt-4',
+  provider: 'openai',
+  mode: process.env.MEMORI_MODE || 'automatic',
+  namespace: process.env.MEMORI_NAMESPACE || 'default'
 });
 
-const memori = new Memori(config);
+// Environment-based configuration is straightforward
+// No complex schema validation needed - MemoriAI handles validation
 ```
 
 ## Best Practices
@@ -802,11 +743,14 @@ const memori = new Memori(config);
 ```typescript
 // Always handle errors gracefully
 try {
-  const results = await memori.searchMemories('query');
+  const results = await ai.searchMemories('query');
 } catch (error) {
   if (error instanceof DatabaseError) {
     // Handle database issues
     console.error('Database error:', error);
+  } else if (error instanceof ProviderError) {
+    // Handle provider issues
+    console.error('Provider error:', error);
   } else if (error instanceof SearchError) {
     // Handle search issues
     console.error('Search error:', error);
@@ -817,15 +761,18 @@ try {
 }
 ```
 
-### 2. Resource Management
+### 2. Configuration Management
 
 ```typescript
-// Always clean up resources
-process.on('SIGINT', async () => {
-  console.log('Shutting down...');
-  await memori.close();
-  process.exit(0);
+// Use environment variables for configuration
+const ai = new MemoriAI({
+  databaseUrl: process.env.DATABASE_URL || 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
+  provider: 'openai',
+  mode: 'automatic'
 });
+
+// MemoriAI validates configuration automatically
 ```
 
 ### 3. Performance Monitoring
@@ -833,7 +780,7 @@ process.on('SIGINT', async () => {
 ```typescript
 // Monitor performance
 const startTime = Date.now();
-const results = await memori.searchMemories('query', { limit: 10 });
+const results = await ai.searchMemories('query', { limit: 10 });
 const duration = Date.now() - startTime;
 
 console.log(`Search took ${duration}ms and returned ${results.length} results`);

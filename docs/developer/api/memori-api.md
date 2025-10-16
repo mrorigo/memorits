@@ -9,135 +9,132 @@ The **Memori API** provides a clean, intuitive interface for building applicatio
 ### Basic Setup
 
 ```typescript
-import { Memori, OpenAIWrapper } from 'memori-ts';
+import { MemoriAI } from 'memorits';
 
-const memori = new Memori({
-  databaseUrl: 'postgresql://localhost:5432/memori',
-  namespace: 'my-app',
-  apiKey: 'sk-your-openai-key',
-  autoMemory: true
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY || 'sk-your-openai-key',
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 
-const openai = new OpenAIWrapper(memori);
-
-const response = await openai.chat({
+const response = await ai.chat({
   messages: [{ role: 'user', content: 'Hello!' }]
 });
 
-console.log('Response:', response.content);
+console.log('Response:', response.message.content);
 console.log('Chat ID:', response.chatId);
 ```
 
 ### Multiple Providers
 
 ```typescript
-import { Memori, OpenAIWrapper, AnthropicWrapper } from 'memori-ts';
+import { MemoriAI } from 'memorits';
 
-const memori = new Memori({
-  databaseUrl: 'postgresql://localhost:5432/memori',
-  namespace: 'multi-provider-app',
-  apiKey: 'sk-your-key',
-  autoMemory: true
+// OpenAI provider
+const openaiAI = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 });
 
-const openai = new OpenAIWrapper(memori);
-const claude = new AnthropicWrapper(memori);
+// Anthropic provider (same database for shared memory)
+const anthropicAI = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  model: 'claude-3-5-sonnet-20241022',
+  provider: 'anthropic',
+  mode: 'automatic'
+});
 
 // Both record to the same memory pool
-await openai.chat({ messages: [{ role: 'user', content: 'From OpenAI' }] });
-await claude.chat({ messages: [{ role: 'user', content: 'From Claude' }] });
+await openaiAI.chat({ messages: [{ role: 'user', content: 'From OpenAI' }] });
+await anthropicAI.chat({ messages: [{ role: 'user', content: 'From Claude' }] });
 
 // Search across all conversations
-const memories = await memori.searchMemories('AI');
+const memories = await openaiAI.searchMemories('AI');
 ```
 
 ### Local Development
 
 ```typescript
-import { Memori, OllamaWrapper } from 'memori-ts';
+import { MemoriAI } from 'memorits';
 
-const memori = new Memori({
-  databaseUrl: 'sqlite:./local.db',
-  namespace: 'local-dev',
+const ai = new MemoriAI({
+  databaseUrl: 'file:./local.db',
   apiKey: 'ollama-local',
   baseUrl: 'http://localhost:11434',
-  autoMemory: true
+  model: 'llama2',
+  provider: 'ollama',
+  mode: 'automatic'
 });
 
-const ollama = new OllamaWrapper(memori);
-const response = await ollama.chat({
+const response = await ai.chat({
   messages: [{ role: 'user', content: 'Local AI!' }]
 });
 ```
 
 ## 📚 API Reference
 
-### Memori Constructor
+### MemoriAI Constructor
 
 ```typescript
-new Memori(config: {
+new MemoriAI(config: {
   databaseUrl: string;      // Database connection string
-  namespace: string;        // Application namespace
-  provider?: ProviderName;  // Optional: 'openai' | 'anthropic' | 'ollama'
   apiKey: string;           // Provider API key
-  model?: string;           // Model name (optional)
+  model?: string;           // Model name (default: provider-specific)
+  provider: 'openai' | 'anthropic' | 'ollama'; // Required provider
   baseUrl?: string;         // Custom API endpoint (optional)
-  autoMemory?: boolean;     // Enable automatic memory recording
-  consciousMemory?: boolean; // Enable conscious memory mode
+  mode?: 'automatic' | 'manual' | 'conscious'; // Memory processing mode
+  namespace?: string;       // Application namespace (optional)
+  sessionId?: string;       // Session identifier (optional)
+  memory?: {               // Memory configuration (optional)
+    enableChatMemory?: boolean;
+    memoryProcessingMode?: 'auto' | 'manual' | 'conscious';
+  };
 })
 ```
 
-### Provider Wrappers
+### Core Methods
 
-#### OpenAIWrapper
+#### chat()
 
 ```typescript
-const openai = new OpenAIWrapper(memori, {
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  timeout?: number;
-});
-
-const response = await openai.chat({
+const response = await ai.chat({
   messages: ChatMessage[];
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  timeout?: number;
 }): Promise<ChatResponse>;
 ```
 
-#### AnthropicWrapper
+#### searchMemories()
 
 ```typescript
-const claude = new AnthropicWrapper(memori, {
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  timeout?: number;
-});
-
-const response = await claude.chat({
-  messages: ChatMessage[];
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-}): Promise<ChatResponse>;
+const memories = await ai.searchMemories(
+  query: string,
+  options?: {
+    limit?: number;
+    minImportance?: 'low' | 'medium' | 'high' | 'critical';
+    categories?: string[];
+    temporalFilters?: any;
+    includeMetadata?: boolean;
+  }
+): Promise<MemorySearchResult[]>;
 ```
 
-#### OllamaWrapper
+#### searchRecentMemories()
 
 ```typescript
-const ollama = new OllamaWrapper(memori, {
-  baseUrl?: string;
-  model?: string;
-  timeout?: number;
-});
-
-const response = await ollama.chat({
-  messages: ChatMessage[];
-  model?: string;
-}): Promise<ChatResponse>;
+const recentMemories = await ai.searchRecentMemories(
+  limit?: number,
+  includeCurrentSession?: boolean,
+  temporalFilters?: any
+): Promise<MemorySearchResult[]>;
 ```
 
 ## 🔧 Configuration Options
@@ -146,60 +143,64 @@ const response = await ollama.chat({
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `autoMemory` | `true` | Enable automatic memory recording |
-| `consciousMemory` | `false` | Enable conscious memory processing |
+| `mode` | `'automatic'` | Memory processing mode |
+| `automatic` | Auto-record conversations and process memories |
+| `manual` | Manual control over memory recording and processing |
+| `conscious` | Advanced background processing with human-like reflection |
 
 ### Provider-Specific Options
 
 #### OpenAI
-- `model`: `'gpt-4o-mini'` (default)
+- `model`: `'gpt-4'` (default)
 - `temperature`: `0.7`
 - `maxTokens`: `1000`
+- `baseUrl`: OpenAI API endpoint
 
 #### Anthropic
 - `model`: `'claude-3-5-sonnet-20241022'` (default)
 - `temperature`: `0.7`
 - `maxTokens`: `1000`
+- `baseUrl`: Anthropic API endpoint
 
 #### Ollama
 - `model`: `'llama2'` (default)
-- `baseUrl`: `'http://localhost:11434'`
+- `baseUrl`: `'http://localhost:11434'` (default)
+- `timeout`: Connection timeout in milliseconds
 
 ## 🛠️ Advanced Usage
 
 ### Custom Configuration
 
 ```typescript
-const memori = new Memori({
-  databaseUrl: 'postgresql://localhost:5432/memori',
-  namespace: 'enterprise-app',
-  provider: 'openai',
+const ai = new MemoriAI({
+  databaseUrl: 'file:./enterprise.db',
   apiKey: process.env.OPENAI_API_KEY!,
   model: 'gpt-4',
-  autoMemory: true,
-  consciousMemory: false
+  provider: 'openai',
+  mode: 'automatic',
+  namespace: 'enterprise-app'
 });
 ```
 
 ### Validation and Error Handling
 
 ```typescript
-import { validateConfig, createMemoriError } from 'memori-ts';
+import { MemoriAIConfig } from 'memorits';
 
-const config = {
-  databaseUrl: 'postgresql://localhost:5432/memori',
-  namespace: 'my-app',
-  apiKey: 'sk-your-key'
+const config: MemoriAIConfig = {
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4',
+  provider: 'openai',
+  mode: 'automatic'
 };
 
-const validation = validateConfig(config);
-if (!validation.isValid) {
-  console.error('Config errors:', validation.errors);
-  throw createMemoriError(
-    'Invalid configuration',
-    'INVALID_CONFIG',
-    ['Check your database URL', 'Verify API key format']
-  );
+// MemoriAI validates configuration automatically on creation
+try {
+  const ai = new MemoriAI(config);
+} catch (error) {
+  console.error('Configuration error:', error);
+  // Handle validation errors
 }
 ```
 
@@ -207,63 +208,70 @@ if (!validation.isValid) {
 
 ```typescript
 // Search memories
-const memories = await memori.searchMemories('cats');
+const memories = await ai.searchMemories('cats');
 
 // Advanced search with options
-const recentMemories = await memori.searchMemories('AI', {
+const recentMemories = await ai.searchMemories('AI', {
   limit: 10,
   includeMetadata: true
 });
 
-// Get memory statistics
-const stats = await memori.getMemoryStatistics();
-console.log(`Total memories: ${stats.totalMemories}`);
+// Search recent memories
+const recent = await ai.searchRecentMemories(5);
+
+// No need for manual statistics - search results provide all needed info
+console.log(`Found ${memories.length} memories`);
 ```
 
 ## 🎯 Design Principles
 
-### 1. **Single Creation Pattern**
+### 1. **Unified API**
 ```typescript
-// ✅ One obvious way to create Memori
-new Memori({
-  databaseUrl: 'postgresql://...',
-  namespace: 'my-app',
+// ✅ One class handles everything
+new MemoriAI({
+  databaseUrl: 'file:./memori.db',
   apiKey: 'sk-...',
-  autoMemory: true
+  provider: 'openai',
+  mode: 'automatic'
 });
 
-// ❌ No complex factory patterns or auto-detection
+// ❌ No wrapper classes needed
 ```
 
-### 2. **Direct Integration**
+### 2. **Direct Provider Integration**
 ```typescript
-// ✅ Provider wrappers use Memori instances directly
-const openai = new OpenAIWrapper(memori);
-const claude = new AnthropicWrapper(memori);
+// ✅ MemoriAI handles provider communication directly
+const ai = new MemoriAI({
+  provider: 'openai',
+  model: 'gpt-4'
+});
 
-// ❌ No separate configuration structs
+// ❌ No separate provider wrapper instances
 ```
 
-### 3. **Automatic Memory Recording**
+### 3. **Mode-Based Operation**
 ```typescript
-// ✅ Memory happens automatically
-const response = await openai.chat({ messages });
-
-// ✅ Search works across all providers
-const memories = await memori.searchMemories('topic');
-
-// ❌ No manual memory management needed
-```
-
-### 4. **Simple Boolean Flags**
-```typescript
-// ✅ Obvious configuration options
+// ✅ Choose your memory processing strategy
 {
-  autoMemory: true,        // Simple boolean
-  consciousMemory: false   // Simple boolean
+  mode: 'automatic',    // Auto-record everything
+  mode: 'manual',       // Manual control
+  mode: 'conscious'     // Advanced reflection
 }
 
-// ❌ No nested configuration objects
+// ❌ No complex configuration objects
+```
+
+### 4. **Simple Configuration**
+```typescript
+// ✅ Everything in one place
+{
+  databaseUrl: 'file:./memori.db',
+  apiKey: 'sk-...',
+  provider: 'openai',
+  mode: 'automatic'
+}
+
+// ❌ No nested provider configurations
 ```
 
 ## 🚨 Error Handling
@@ -272,64 +280,74 @@ const memories = await memori.searchMemories('topic');
 
 ```typescript
 try {
-  const memori = new Memori(config);
-  await memori.enable();
+  const ai = new MemoriAI({
+    databaseUrl: 'file:./memori.db',
+    apiKey: process.env.OPENAI_API_KEY,
+    provider: 'openai',
+    mode: 'automatic'
+  });
 } catch (error) {
   if (error.message.includes('databaseUrl')) {
-    console.error('Check your database connection string');
+    console.error('Check your database connection string format');
   }
 
   if (error.message.includes('apiKey')) {
     console.error('Verify your API key format');
   }
 
-  if (error.message.includes('namespace')) {
-    console.error('Choose a unique namespace for your app');
+  if (error.message.includes('provider')) {
+    console.error('Choose a valid provider: openai, anthropic, or ollama');
   }
 }
 ```
 
-### Validation Errors
+### Configuration Validation
 
 ```typescript
-import { validateConfig } from 'memori-ts';
-
-const validation = validateConfig(config);
-if (!validation.isValid) {
-  console.error('Configuration errors:');
-  validation.errors.forEach(error => console.error(`- ${error}`));
-
-  if (validation.warnings.length > 0) {
-    console.warn('Warnings:');
-    validation.warnings.forEach(warning => console.warn(`- ${warning}`));
-  }
+// MemoriAI validates configuration automatically
+try {
+  const ai = new MemoriAI({
+    databaseUrl: 'file:./memori.db',
+    apiKey: 'sk-...',
+    provider: 'openai'
+  });
+} catch (error) {
+  console.error('Configuration error:', error.message);
+  // Handle missing required fields, invalid formats, etc.
 }
 ```
 
 ## 📊 Performance Tips
 
-### 1. **Connection Reuse**
+### 1. **Instance Reuse**
 ```typescript
-// ✅ Reuse Memori instances
-const memori = new Memori(config);
+// ✅ Reuse MemoriAI instances
+const ai = new MemoriAI(config);
 
 // ❌ Don't create new instances for each operation
 ```
 
-### 2. **Batch Operations**
+### 2. **Efficient Searching**
 ```typescript
-// ✅ Enable once, use multiple times
-await memori.enable();
+// ✅ Use specific search terms and filters
+const memories = await ai.searchMemories('specific topic', {
+  limit: 10,
+  minImportance: 'medium'
+});
 
-// Use for multiple operations
-await openai.chat({ messages: [...] });
-await memori.searchMemories('query');
+// ✅ Use recent memories for current context
+const recent = await ai.searchRecentMemories(5);
 ```
 
-### 3. **Proper Cleanup**
+### 3. **Mode Selection**
 ```typescript
-// ✅ Always close when done
-await memori.close();
+// ✅ Choose appropriate mode for your use case
+const ai = new MemoriAI({
+  // ... config,
+  mode: 'automatic'  // For most applications
+  // mode: 'manual'     // For fine-grained control
+  // mode: 'conscious'  // For advanced reflection
+});
 ```
 
 ## 🔧 Troubleshooting
@@ -337,9 +355,9 @@ await memori.close();
 ### Common Issues
 
 **"Database connection failed"**
-- Check your `databaseUrl` format
-- Ensure database server is running
-- Verify network connectivity
+- Check your `databaseUrl` format (use `file:./memori.db` for SQLite)
+- Ensure database file path is writable
+- Verify PostgreSQL server is running (if using PostgreSQL)
 
 **"Invalid API key"**
 - Verify API key format for your provider
@@ -347,30 +365,32 @@ await memori.close();
 - Ensure key hasn't expired
 
 **"Memory recording failed"**
-- Ensure Memori is enabled with `await memori.enable()`
-- Check namespace uniqueness
-- Verify database write permissions
+- Verify database connection and permissions
+- Check provider configuration (model, baseUrl)
+- Ensure sufficient disk space for database
 
-### Debug Mode
+### Debug Information
 
 ```typescript
-const memori = new Memori({
-  // ... other config
-  debugMode: true  // Enable detailed logging
-});
+// Enable debug logging in your environment
+process.env.DEBUG = 'memori:*';
+
+// Check MemoriAI configuration
+const config = ai.getConfig?.();
+console.log('Current configuration:', config);
 ```
 
 ## 📝 Next Steps
 
-1. **Read the Examples**: Check `examples/unified-usage.ts` for copy-paste code
+1. **Read the Examples**: Check `examples/basic-usage.ts` for copy-paste code
 2. **Run the Tests**: Execute `npm test` to see the API in action
-3. **Explore Advanced Features**: Check `src/core/Memori.ts` for additional methods
+3. **Explore Advanced Features**: Check `src/core/MemoriAI.ts` for additional methods
 4. **Customize Configuration**: Adjust memory modes and provider settings as needed
 
 ## 💡 Key Benefits
 
-- **🎯 Simplicity**: One obvious way to do everything
-- **🔗 Integration**: Direct connection between providers and memory
+- **🎯 Simplicity**: One unified class for everything
+- **🔗 Direct Integration**: No wrapper classes needed
 - **🚀 Performance**: Optimized for speed and reliability
 - **🛡️ Reliability**: Comprehensive error handling and validation
 - **📚 Clarity**: Self-documenting API design
