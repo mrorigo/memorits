@@ -24,6 +24,22 @@ export interface MemoriAIConfig extends IProviderConfig {
   namespace?: string;
   /** LLM provider type (optional - auto-detected if not provided) */
   provider?: 'openai' | 'anthropic' | 'ollama';
+  /** Operating mode for the unified API */
+  mode?: 'automatic' | 'manual' | 'conscious';
+
+  // Legacy configuration options for backward compatibility
+  /** Legacy option for auto-ingestion mode (use mode: 'automatic' instead) */
+  autoIngest?: boolean;
+  /** Legacy option for conscious ingestion mode (use mode: 'conscious' instead) */
+  consciousIngest?: boolean;
+  /** Enable relationship extraction in memories */
+  enableRelationshipExtraction?: boolean;
+  /** User context for personalization */
+  userContext?: {
+    userPreferences?: string[];
+    currentProjects?: string[];
+    relevantSkills?: string[];
+  };
 
   // Note: All IProviderConfig options are available including:
   // - apiKey, model, baseUrl, options (basic provider config)

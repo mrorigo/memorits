@@ -62,7 +62,7 @@ export class TestHelper {
 
       // For now, we'll reset the entire database since namespace cleanup is complex
       // This is still much faster than creating new database files
-      console.log(`🧹 Cleaning up namespace: ${namespace}`);
+      // console.log(`🧹 Cleaning up namespace: ${namespace}`);
       // Note: We'll implement namespace-specific cleanup later if needed
 
     } catch (error) {

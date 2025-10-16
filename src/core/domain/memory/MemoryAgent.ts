@@ -43,91 +43,6 @@ import { MemoryProcessingState } from './MemoryProcessingStateManager';
 import { RelationshipProcessor } from '../search/relationship/RelationshipProcessor';
 import { logWarn, logError } from '../../infrastructure/config/Logger';
 
-/**
- * Simple wrapper provider that bypasses memory processing for analysis
- * This prevents infinite recursion when MemoryAgent analyzes conversations
- */
-class AnalysisOnlyProvider implements ILLMProvider {
-  private wrappedProvider: ILLMProvider;
-
-  constructor(wrappedProvider: ILLMProvider) {
-    this.wrappedProvider = wrappedProvider;
-  }
-
-  getProviderType() {
-    return this.wrappedProvider.getProviderType();
-  }
-
-  getConfig() {
-    return this.wrappedProvider.getConfig();
-  }
-
-  async initialize(config?: any): Promise<void> {
-    // Skip initialization to avoid any potential recursion
-    return Promise.resolve();
-  }
-
-  async dispose(): Promise<void> {
-    // Skip disposal as this is just a wrapper
-    return Promise.resolve();
-  }
-
-  async isHealthy(): Promise<boolean> {
-    return this.wrappedProvider.isHealthy();
-  }
-
-  async getDiagnostics() {
-    return this.wrappedProvider.getDiagnostics();
-  }
-
-  getModel(): string {
-    return this.wrappedProvider.getModel();
-  }
-
-  getClient(): any {
-    return this.wrappedProvider.getClient();
-  }
-
-  // These methods bypass memory processing to prevent recursion
-  async createChatCompletion(params: any) {
-    // Directly call the underlying provider's core methods without memory processing
-    if (this.wrappedProvider.getClient() && this.wrappedProvider.getClient().chat) {
-      // Use the raw client to bypass all wrapper logic
-      const client = this.wrappedProvider.getClient();
-      const response = await client.chat.completions.create({
-        model: params.model || this.wrappedProvider.getModel(),
-        messages: params.messages,
-        temperature: params.temperature,
-        max_tokens: params.max_tokens,
-        stream: params.stream || false,
-      });
-
-      // Convert to expected format
-      return {
-        message: {
-          role: response.choices[0].message.role || 'assistant',
-          content: response.choices[0].message.content || '',
-        },
-        finish_reason: response.choices[0].finish_reason || 'stop',
-        usage: response.usage ? {
-          prompt_tokens: response.usage.prompt_tokens,
-          completion_tokens: response.usage.completion_tokens,
-          total_tokens: response.usage.total_tokens,
-        } : undefined,
-        id: response.id,
-        model: response.model,
-        created: response.created,
-      };
-    }
-
-    // Fallback to wrapped provider if direct client access fails
-    return this.wrappedProvider.createChatCompletion(params);
-  }
-
-  async createEmbedding(params: any) {
-    return this.wrappedProvider.createEmbedding(params);
-  }
-}
 
 // Memory processing schema definition for prompt generation
 const MEMORY_SCHEMA = {
@@ -191,66 +106,18 @@ export class MemoryAgent {
   }
 
   /**
-   * Create a raw provider for memory analysis that doesn't trigger memory processing
-   * This prevents infinite recursion when the MemoryAgent analyzes conversations
-   */
-  private createAnalysisProvider(baseProvider: ILLMProvider): ILLMProvider {
-    try {
-      // Get the base provider's configuration
-      const baseConfig = baseProvider.getConfig();
-
-      // Create a completely separate configuration for analysis
-      const analysisConfig = {
-        ...baseConfig,
-        features: {
-          ...baseConfig.features,
-          memory: {
-            ...baseConfig.features?.memory,
-            enableChatMemory: false, // Disable to prevent recursion during analysis
-            enableEmbeddingMemory: false,
-            memoryProcessingMode: 'none' as const,
-          },
-          performance: {
-            ...baseConfig.features?.performance,
-            enableConnectionPooling: false, // Disable pooling for analysis
-            enableCaching: false, // Disable caching for analysis
-            enableHealthMonitoring: false, // Disable health monitoring for analysis
-          }
-        }
-      };
-
-      // Create a new provider instance with all memory and performance features disabled
-      const ProviderClass = (baseProvider as any).constructor;
-
-      // Create the provider synchronously without going through the factory
-      // to avoid any potential initialization issues
-      const rawProvider = new ProviderClass(analysisConfig);
-
-      // Initialize it synchronously if possible
-      if (typeof rawProvider.initialize === 'function') {
-        // Use synchronous initialization if available
-        try {
-          rawProvider.initialize(analysisConfig);
-        } catch (error) {
-          // If sync initialization fails, we'll handle it differently
-          logWarn('Provider initialization may need async handling', {
-            component: 'MemoryAgent',
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      return rawProvider;
-    } catch (error) {
-      logWarn('Failed to create analysis provider, using fallback approach', {
-        component: 'MemoryAgent',
-        error: error instanceof Error ? error.message : String(error),
-      });
-
-      // Fallback: create a simple wrapper that bypasses memory processing
-      return new AnalysisOnlyProvider(baseProvider);
-    }
-  }
+    * Create a clean provider for memory analysis that doesn't trigger memory processing
+    * This prevents infinite recursion when the MemoryAgent analyzes conversations
+    *
+    * Since all providers now extend UnifiedLLMProvider, we can simply use the base provider
+    * directly - the UnifiedLLMProvider handles memory processing at the wrapper level, not
+    * at the individual provider level, so there's no recursion risk.
+    */
+   private createAnalysisProvider(baseProvider: ILLMProvider): ILLMProvider {
+     // Simply return the base provider - UnifiedLLMProvider architecture prevents recursion
+     // by handling memory processing at the MemoryEnabledLLMProvider wrapper level
+     return baseProvider;
+   }
 
   /**
    * Set database manager for state tracking

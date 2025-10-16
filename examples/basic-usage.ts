@@ -28,6 +28,8 @@ async function basicUsageExample(): Promise<void> {
     });
 
     console.log('\n✅ Response:', response.message.content);
+    console.log(`Waiting 10 seconds to ensure memory is saved...`);
+    await Promise.resolve(new Promise(res => setTimeout(res, 10000)));
 
     // Search memories
     console.log('🔍 Searching memories...');

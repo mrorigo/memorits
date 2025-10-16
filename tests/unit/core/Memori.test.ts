@@ -108,6 +108,19 @@ describe('Memori', () => {
         apiKey: mockConfig.apiKey,
         model: mockConfig.model,
         baseUrl: mockConfig.baseUrl,
+        features: {
+          memory: {
+            enableChatMemory: false,
+            enableEmbeddingMemory: false,
+            memoryProcessingMode: 'auto',
+            minImportanceLevel: 'all',
+          },
+          performance: {
+            enableCaching: false,
+            enableConnectionPooling: false,
+            enableHealthMonitoring: false,
+          },
+        }
       });
       expect(MockMemoryAgent).toHaveBeenCalledWith(expect.any(MockOpenAIProvider));
     });

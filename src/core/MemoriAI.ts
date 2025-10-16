@@ -14,14 +14,15 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { ProviderType } from './infrastructure/providers/ProviderType';
-import { IProviderConfig, extractPerformanceConfig, extractMemoryConfig, DEFAULT_PERFORMANCE_CONFIG, DEFAULT_MEMORY_CONFIG } from './infrastructure/providers/IProviderConfig';
-import { LLMProviderFactory } from './infrastructure/providers/LLMProviderFactory';
+import { IProviderConfig, DEFAULT_PERFORMANCE_CONFIG, DEFAULT_MEMORY_CONFIG } from './infrastructure/providers/IProviderConfig';
 import { MemoryEnabledLLMProvider } from './infrastructure/providers/MemoryEnabledLLMProvider';
 import { ILLMProvider } from './infrastructure/providers/ILLMProvider';
 import { Memori } from './Memori';
 import { MemoriConfig } from './infrastructure/config/ConfigManager';
 import { logInfo, logError } from './infrastructure/config/Logger';
 import { MemoryImportanceLevel, MemoryClassification } from './types/schemas';
+import { MemoryAgent } from './domain/memory/MemoryAgent';
+import { ConsciousAgent } from './domain/memory/ConsciousAgent';
 
 // Import simplified configuration types
 import {
@@ -41,14 +42,29 @@ import {
 export class MemoriAI {
   private providerType: ProviderType;
   private config: IProviderConfig;     // Internal complex config
-  private memoryProvider?: MemoryEnabledLLMProvider;
+  private mode: 'automatic' | 'manual' | 'conscious';
+
+  // Dual-provider architecture to prevent circular dependencies
+  private userProvider?: MemoryEnabledLLMProvider;     // For user chat() calls
+  private memoryProvider?: ILLMProvider;               // For internal memory processing
+
   private memori: Memori;
+  private memoryAgent?: MemoryAgent;
+  private consciousAgent?: ConsciousAgent;
+
   private sessionId: string;
   private initialized: boolean = false;
   private initializing: boolean = false;
 
+  // Conscious mode features
+  private backgroundInterval?: ReturnType<typeof setInterval>;
+  private backgroundUpdateInterval: number = 30000; // 30 seconds default
+
   constructor(config: MemoriAIConfig) {
     this.sessionId = uuidv4();
+
+    // Set mode with default
+    this.mode = config.mode || 'automatic';
 
     // Auto-detect provider from simple config
     this.providerType = this.detectProvider(config);
@@ -59,27 +75,40 @@ export class MemoriAI {
     logInfo('MemoriAI constructor started', {
       component: 'MemoriAI',
       sessionId: this.sessionId,
-      baseUrl: this.config.baseUrl,
+      mode: this.mode,
       providerType: this.providerType,
       databaseUrl: config.databaseUrl,
       model: this.config.model,
       namespace: this.config.features?.memory?.sessionId,
-      initialized: this.initialized,
-      initializing: this.initializing,
     });
 
     // Create Memori instance for database operations
     this.memori = new Memori(this.buildMemoriConfig(config));
 
-    // Initialize synchronously to avoid race conditions
-    this.initializeSync();
+    // Initialize asynchronously to avoid race conditions
+    this.initializeSync().catch(error => {
+      logError('MemoriAI initialization failed', {
+        component: 'MemoriAI',
+        sessionId: this.sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    });
 
     logInfo('MemoriAI constructor completed', {
       component: 'MemoriAI',
       sessionId: this.sessionId,
+      mode: this.mode,
       initialized: this.initialized,
       initializing: this.initializing,
     });
+  }
+
+  /**
+   * Complete initialization after construction
+   */
+  async initialize(): Promise<void> {
+    await this.initializeSync();
   }
 
   /**
@@ -99,8 +128,9 @@ export class MemoriAI {
        options: params.options,
      };
 
-     // Use memory-enabled provider for chat with automatic memory recording
-     const response = await this.memoryProvider!.createChatCompletion(providerParams);
+     // Use appropriate provider based on mode
+     const provider = this.userProvider!;
+     const response = await provider.createChatCompletion(providerParams);
 
      // Convert response to unified format
      return {
@@ -117,12 +147,7 @@ export class MemoriAI {
      };
 
    } catch (error) {
-     logError('Chat completion failed', {
-       component: 'MemoriAI',
-       sessionId: this.sessionId,
-       providerType: this.providerType,
-       error: error instanceof Error ? error.message : String(error),
-     });
+     this.logOperationError('Chat completion', error);
      throw error;
    }
  }
@@ -136,12 +161,7 @@ export class MemoriAI {
       const convertedOptions = this.convertSearchOptions(options);
       return await this.memori.searchMemories(query, convertedOptions);
     } catch (error) {
-      logError('Memory search failed', {
-        component: 'MemoriAI',
-        sessionId: this.sessionId,
-        query,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      this.logOperationError('Memory search', error, { query });
       throw error;
     }
   }
@@ -153,8 +173,8 @@ export class MemoriAI {
     await this.ensureInitialized();
 
     try {
-      // Use memory-enabled provider for embeddings
-      const response = await this.memoryProvider!.createEmbedding({
+      // Use user provider for embeddings
+      const response = await this.userProvider!.createEmbedding({
         input: params.input,
         model: params.model,
         encoding_format: params.encodingFormat,
@@ -189,8 +209,16 @@ export class MemoriAI {
    */
   async close(): Promise<void> {
     try {
+      // Stop background monitoring first
+      this.stopBackgroundMonitoring();
+
+      // Close user provider if initialized
+      if (this.userProvider) {
+        await this.userProvider.dispose();
+      }
+
       // Close memory provider if initialized
-      if (this.memoryProvider) {
+      if (this.memoryProvider && this.memoryProvider !== this.userProvider) {
         await this.memoryProvider.dispose();
       }
 
@@ -200,12 +228,14 @@ export class MemoriAI {
       logInfo('MemoriAI closed successfully', {
         component: 'MemoriAI',
         sessionId: this.sessionId,
+        mode: this.mode,
       });
 
     } catch (error) {
       logError('Error during MemoriAI close', {
         component: 'MemoriAI',
         sessionId: this.sessionId,
+        mode: this.mode,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
@@ -220,11 +250,323 @@ export class MemoriAI {
   }
 
   /**
-   * Get detected provider type
-   */
-  getProviderType(): ProviderType {
-    return this.providerType;
-  }
+    * Get detected provider type
+    */
+   getProviderType(): ProviderType {
+     return this.providerType;
+   }
+
+   /**
+    * Get current operating mode
+    */
+   getMode(): 'automatic' | 'manual' | 'conscious' {
+     return this.mode;
+   }
+
+   /**
+    * Manual conversation recording (for manual/conscious modes)
+    */
+   async recordConversation(
+     userInput: string,
+     aiOutput: string,
+     options?: {
+       model?: string;
+       metadata?: Record<string, any>;
+       namespace?: string;
+     }
+   ): Promise<string> {
+     if (this.mode === 'automatic') {
+       throw new Error('recordConversation() only available in manual/conscious modes. Use chat() for automatic mode.');
+     }
+
+     const chatId = uuidv4();
+
+     try {
+       await this.memori.recordConversation(userInput, aiOutput, options);
+
+       // Process memory if in manual mode
+       if (this.mode === 'manual') {
+         await this.processMemory(chatId);
+       }
+
+       logInfo(`Conversation recorded manually: ${chatId}`, {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         mode: this.mode,
+         chatId,
+       });
+
+       return chatId;
+     } catch (error) {
+       logError('Failed to record conversation manually', {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         error: error instanceof Error ? error.message : String(error),
+       });
+       throw error;
+     }
+   }
+
+   /**
+    * Manual memory processing trigger (for manual mode)
+    */
+   async processMemory(chatId: string): Promise<void> {
+     if (this.mode === 'automatic') {
+       throw new Error('processMemory() only available in manual mode.');
+     }
+
+     if (!this.memoryAgent) {
+       await this.initializeMemoryAgent();
+     }
+
+     try {
+       const chatHistoryManager = (this.memori.getDatabaseManager() as any).chatHistoryManager;
+       if (!chatHistoryManager) {
+         throw new Error('ChatHistoryManager not available');
+       }
+
+       const chatHistory = await chatHistoryManager.getChatHistory(chatId);
+       if (!chatHistory) {
+         throw new Error(`Chat history not found: ${chatId}`);
+       }
+
+       const processedMemory = await this.memoryAgent!.processConversation({
+         chatId,
+         userInput: chatHistory.userInput,
+         aiOutput: chatHistory.aiOutput,
+         context: {
+           conversationId: chatId,
+           sessionId: this.sessionId,
+           modelUsed: chatHistory.model || this.config.model,
+           userPreferences: [],
+           currentProjects: [],
+           relevantSkills: [],
+         },
+       });
+
+       await this.memori.storeProcessedMemory(processedMemory, chatId);
+
+       logInfo(`Memory processed manually for chat ${chatId}`, {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         chatId,
+         mode: this.mode,
+       });
+     } catch (error) {
+       logError(`Failed to process memory manually for chat ${chatId}`, {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         chatId,
+         error: error instanceof Error ? error.message : String(error),
+       });
+       throw error;
+     }
+   }
+
+   /**
+    * Check for conscious context updates (for conscious mode)
+    */
+   async checkForConsciousContextUpdates(): Promise<void> {
+     if (this.mode !== 'conscious') {
+       throw new Error('checkForConsciousContextUpdates() only available in conscious mode.');
+     }
+
+     if (!this.consciousAgent) {
+       throw new Error('ConsciousAgent not initialized');
+     }
+
+     try {
+       await this.consciousAgent.check_for_context_updates();
+
+       logInfo('Conscious context updates checked', {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         mode: this.mode,
+       });
+     } catch (error) {
+       logError('Error checking for conscious context updates', {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         error: error instanceof Error ? error.message : String(error),
+       });
+       throw error;
+     }
+   }
+
+   /**
+    * Initialize conscious context from existing memories (for conscious mode)
+    */
+   async initializeConsciousContext(): Promise<void> {
+     if (this.mode !== 'conscious') {
+       throw new Error('initializeConsciousContext() only available in conscious mode.');
+     }
+
+     if (!this.consciousAgent) {
+       throw new Error('ConsciousAgent not initialized');
+     }
+
+     try {
+       await this.consciousAgent.initialize_existing_conscious_memories();
+
+       logInfo('Conscious context initialized', {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         mode: this.mode,
+       });
+     } catch (error) {
+       logError('Error initializing conscious context', {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         error: error instanceof Error ? error.message : String(error),
+       });
+       throw error;
+     }
+   }
+
+   /**
+    * Get the ConsciousAgent instance (for advanced usage in conscious mode)
+    */
+   getConsciousAgent(): ConsciousAgent | undefined {
+     if (this.mode !== 'conscious') {
+       throw new Error('getConsciousAgent() only available in conscious mode.');
+     }
+     return this.consciousAgent;
+   }
+
+   /**
+    * Check if conscious mode is currently enabled
+    */
+   isConsciousModeEnabled(): boolean {
+     return this.mode === 'conscious' && this.consciousAgent !== undefined;
+   }
+
+   /**
+    * Check if manual mode is currently enabled
+    */
+   isManualModeEnabled(): boolean {
+     return this.mode === 'manual';
+   }
+
+   /**
+    * Get the ConsolidationService instance for advanced consolidation operations
+    */
+   getConsolidationService() {
+     return this.memori.getConsolidationService();
+   }
+
+   /**
+    * Get comprehensive memory statistics for the current namespace
+    */
+   async getMemoryStatistics(namespace?: string) {
+     return this.memori.getMemoryStatistics(namespace);
+   }
+
+   /**
+    * Search memories with specific strategy (advanced search)
+    */
+   async searchMemoriesWithStrategy(
+     query: string,
+     strategy: any,
+     options: SearchOptions = {}
+   ): Promise<MemorySearchResult[]> {
+     // Convert SearchOptions to match models.ts format
+     const convertedOptions = this.convertSearchOptions(options);
+     return this.memori.searchMemoriesWithStrategy(query, strategy, convertedOptions);
+   }
+
+   /**
+    * Get available search strategies
+    */
+   async getAvailableSearchStrategies() {
+     return this.memori.getAvailableSearchStrategies();
+   }
+
+   /**
+    * Start background monitoring for conscious updates (conscious mode only)
+    */
+   private startBackgroundMonitoring(): void {
+     if (this.mode !== 'conscious') return;
+
+     if (this.backgroundInterval) {
+       clearInterval(this.backgroundInterval);
+     }
+
+     logInfo(`Starting background monitoring with ${this.backgroundUpdateInterval}ms interval`, {
+       component: 'MemoriAI',
+       sessionId: this.sessionId,
+       mode: this.mode,
+       intervalMs: this.backgroundUpdateInterval,
+     });
+
+     this.backgroundInterval = setInterval(async () => {
+       try {
+         await this.checkForConsciousContextUpdates();
+       } catch (error) {
+         logError('Error in background monitoring', {
+           component: 'MemoriAI',
+           sessionId: this.sessionId,
+           mode: this.mode,
+           error: error instanceof Error ? error.message : String(error),
+         });
+       }
+     }, this.backgroundUpdateInterval);
+   }
+
+   /**
+    * Stop background monitoring
+    */
+   private stopBackgroundMonitoring(): void {
+     if (this.backgroundInterval) {
+       clearInterval(this.backgroundInterval);
+       this.backgroundInterval = undefined;
+       logInfo('Background monitoring stopped', {
+         component: 'MemoriAI',
+         sessionId: this.sessionId,
+         mode: this.mode,
+       });
+     }
+   }
+
+   /**
+    * Initialize memory agent for manual processing
+    */
+   private async initializeMemoryAgent(): Promise<void> {
+     if (this.memoryAgent) return;
+
+     logInfo('Initializing MemoryAgent for manual processing', {
+       component: 'MemoriAI',
+       sessionId: this.sessionId,
+       mode: this.mode,
+     });
+
+     this.memoryAgent = new MemoryAgent(this.memoryProvider!);
+   }
+
+   /**
+    * Initialize conscious mode components
+    */
+   private async initializeConsciousMode(): Promise<void> {
+     logInfo('Initializing ConsciousAgent for conscious mode', {
+       component: 'MemoriAI',
+       sessionId: this.sessionId,
+       mode: this.mode,
+     });
+
+     // Initialize memory agent first
+     await this.initializeMemoryAgent();
+
+     // Initialize conscious agent
+      this.consciousAgent = new ConsciousAgent(this.memori.getDatabaseManager(), this.config.features?.memory?.sessionId || this.sessionId);
+
+     // Start background monitoring
+     this.startBackgroundMonitoring();
+
+     logInfo('Conscious mode initialized successfully', {
+       component: 'MemoriAI',
+       sessionId: this.sessionId,
+       mode: this.mode,
+     });
+   }
 
   /**
    * Smart provider auto-detection from minimal configuration
@@ -245,40 +587,99 @@ export class MemoriAI {
   }
 
   /**
-   * Convert simple user config to complex internal config
-   */
-  private simplifyConfiguration(userConfig: MemoriAIConfig): IProviderConfig {
-    // Get smart defaults for the detected provider
-    const providerDefaults = this.getProviderDefaults(this.providerType);
+    * Convert simple user config to complex internal config with mode optimization
+    */
+   private simplifyConfiguration(userConfig: MemoriAIConfig): IProviderConfig {
+     // Get smart defaults for the detected provider
+     const providerDefaults = this.getProviderDefaults(this.providerType);
 
-    // Generate session ID if not provided
-    const sessionId = userConfig.namespace || `memoriai_${Date.now()}`;
-    console.log(`*** simplifyConfiguration sessionId: ${sessionId} baseUrl: ${userConfig.baseUrl} model: ${userConfig.model}`);
-    return {
-      apiKey: userConfig.apiKey || this.getDefaultApiKey(this.providerType),
-      model: userConfig.model || providerDefaults.defaultModel,
-      baseUrl: userConfig.baseUrl || providerDefaults.baseUrl,
+     // Generate session ID if not provided
+     const sessionId = userConfig.namespace || `memoriai_${Date.now()}`;
 
-      features: {
-        performance: {
-          ...DEFAULT_PERFORMANCE_CONFIG,
-          // Enable all performance optimizations by default
-          enableConnectionPooling: true,
-          enableCaching: true,
-          enableHealthMonitoring: true,
-        },
-        memory: {
-          ...DEFAULT_MEMORY_CONFIG,
-          sessionId,
-          // Enable chat memory by default for all providers
-          enableChatMemory: true,
-          enableEmbeddingMemory: false,
-          memoryProcessingMode: 'auto',
-          minImportanceLevel: 'all',
-        }
-      }
-    };
-  }
+     // Optimize configuration based on mode
+     const { performanceConfig, memoryConfig } = this.getOptimizedConfigs(userConfig.mode || 'automatic', sessionId);
+
+     return {
+       apiKey: userConfig.apiKey || this.getDefaultApiKey(this.providerType),
+       model: userConfig.model || providerDefaults.defaultModel,
+       baseUrl: userConfig.baseUrl || providerDefaults.baseUrl,
+
+       features: {
+         performance: performanceConfig,
+         memory: memoryConfig
+       }
+     };
+   }
+
+   /**
+    * Get optimized configurations based on operating mode
+    */
+   private getOptimizedConfigs(mode: 'automatic' | 'manual' | 'conscious', sessionId: string) {
+     const basePerformanceConfig = {
+       ...DEFAULT_PERFORMANCE_CONFIG,
+       enableHealthMonitoring: true, // Always enable health monitoring
+     };
+
+     const baseMemoryConfig = {
+       ...DEFAULT_MEMORY_CONFIG,
+       sessionId,
+       enableEmbeddingMemory: false,
+       minImportanceLevel: 'all' as const,
+     };
+
+     switch (mode) {
+       case 'automatic':
+         return {
+           performanceConfig: {
+             ...basePerformanceConfig,
+             // High performance for automatic mode
+             enableConnectionPooling: true,
+             enableCaching: true,
+           },
+           memoryConfig: {
+             ...baseMemoryConfig,
+             enableChatMemory: true,
+             memoryProcessingMode: 'auto' as const,
+           }
+         };
+
+       case 'manual':
+         return {
+           performanceConfig: {
+             ...basePerformanceConfig,
+             // Moderate performance for manual mode
+             enableConnectionPooling: false,
+             enableCaching: false,
+           },
+           memoryConfig: {
+             ...baseMemoryConfig,
+             enableChatMemory: false, // Manual control
+             memoryProcessingMode: 'none' as const, // Manual control - no auto processing
+           }
+         };
+
+       case 'conscious':
+         return {
+           performanceConfig: {
+             ...basePerformanceConfig,
+             // Balanced performance for conscious mode
+             enableConnectionPooling: true,
+             enableCaching: true,
+           },
+           memoryConfig: {
+             ...baseMemoryConfig,
+             enableChatMemory: false, // Conscious control
+             memoryProcessingMode: 'conscious' as const,
+           }
+         };
+
+       default:
+         return {
+           performanceConfig: basePerformanceConfig,
+           memoryConfig: baseMemoryConfig
+         };
+     }
+   }
 
   /**
    * Get default configuration for each provider type
@@ -344,9 +745,71 @@ export class MemoriAI {
   }
 
   /**
+    * Initialize providers with dual-provider architecture
+    */
+  private async initializeProviders(): Promise<void> {
+    logInfo('Initializing dual-provider architecture', {
+      component: 'MemoriAI',
+      sessionId: this.sessionId,
+      mode: this.mode,
+      providerType: this.providerType,
+    });
+
+    // Create the base provider for the detected provider type
+    const ProviderClass = this.getProviderClass(this.providerType);
+    const baseProvider = new ProviderClass(this.config);
+    baseProvider.initialize(this.config);
+
+    // Create user provider (MemoryEnabledLLMProvider for chat() calls)
+    this.userProvider = new MemoryEnabledLLMProvider(baseProvider, this.config);
+
+    // Create separate memory provider (basic provider for internal processing)
+    // This prevents circular dependencies during memory analysis
+    const memoryConfig = { ...this.config };
+    memoryConfig.features = {
+      ...memoryConfig.features,
+      memory: {
+        ...memoryConfig.features?.memory,
+        enableChatMemory: false, // Disable to prevent recursion
+      }
+    };
+    const memoryBaseProvider = new ProviderClass(memoryConfig);
+    memoryBaseProvider.initialize(memoryConfig);
+    this.memoryProvider = memoryBaseProvider;
+
+    // Initialize user provider with existing Memori instance
+    this.userProvider.initialize(this.config, this.memori);
+
+    logInfo('Dual-provider architecture initialized', {
+      component: 'MemoriAI',
+      sessionId: this.sessionId,
+      mode: this.mode,
+      providerType: this.providerType,
+    });
+  }
+
+  /**
+   * Initialize mode-specific components
+   */
+  private async initializeModeComponents(): Promise<void> {
+    switch (this.mode) {
+      case 'manual':
+        await this.initializeMemoryAgent();
+        break;
+      case 'conscious':
+        await this.initializeConsciousMode();
+        break;
+      case 'automatic':
+      default:
+        // No additional components needed for automatic mode
+        break;
+    }
+  }
+
+  /**
     * Initialize the provider infrastructure (synchronous version for constructor)
     */
-  private initializeSync(): void {
+  private async initializeSync(): Promise<void> {
     // Prevent double initialization
     if (this.initialized) {
       logInfo('MemoriAI already initialized, skipping', {
@@ -366,44 +829,21 @@ export class MemoriAI {
     });
 
     try {
-      // Register providers (synchronous)
-      LLMProviderFactory.registerDefaultProviders();
+      // Create providers with optimized configuration
+      await this.initializeProviders();
 
-      // Initialize Memori instance first (synchronous until enable)
-      logInfo('MemoriAI initializing Memori instance', {
-        component: 'MemoriAI',
-        sessionId: this.sessionId,
-        databaseUrl: this.config.features?.memory?.sessionId,
-      });
-
-      // Create the base provider synchronously - avoid the complex async factory pattern
-      const ProviderClass = this.getProviderClass(this.providerType);
-      const baseProvider = new ProviderClass(this.config);
-
-      // Initialize base provider synchronously
-      baseProvider.initialize(this.config);
-
-      // Create memory-enabled provider wrapper
-      this.memoryProvider = new MemoryEnabledLLMProvider(baseProvider, this.config);
-
-      // Initialize memory provider with existing Memori instance synchronously
-      this.memoryProvider.initialize(this.config, this.memori);
+      // Initialize mode-specific components
+      await this.initializeModeComponents();
 
       this.initialized = true;
 
-      logInfo('MemoriAI initialization completed successfully', {
-        component: 'MemoriAI',
-        sessionId: this.sessionId,
+      this.logOperationSuccess('MemoriAI initialization', {
         providerType: this.providerType,
         model: this.config.model,
       });
 
     } catch (error) {
-      logError('MemoriAI initialization failed', {
-        component: 'MemoriAI',
-        sessionId: this.sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      this.logOperationError('MemoriAI initialization', error);
       throw error;
     }
   }
@@ -480,5 +920,31 @@ export class MemoriAI {
       case ProviderType.OLLAMA: return OllamaProvider;
       default: return OpenAIProvider;
     }
+  }
+
+  /**
+   * Create consistent error logging for all operations
+   */
+  private logOperationError(operation: string, error: unknown, extraContext?: Record<string, any>): void {
+    logError(`${operation} failed`, {
+      component: 'MemoriAI',
+      sessionId: this.sessionId,
+      mode: this.mode,
+      providerType: this.providerType,
+      error: error instanceof Error ? error.message : String(error),
+      ...extraContext,
+    });
+  }
+
+  /**
+   * Create consistent operation logging for all operations
+   */
+  private logOperationSuccess(operation: string, extraContext?: Record<string, any>): void {
+    logInfo(`${operation} completed successfully`, {
+      component: 'MemoriAI',
+      sessionId: this.sessionId,
+      mode: this.mode,
+      ...extraContext,
+    });
   }
 }

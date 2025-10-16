@@ -14,11 +14,10 @@ async function consciousMemoryExample(): Promise<void> {
   console.log('🚀 Memori Conscious Memory Management Example');
 
   const memori = new Memori({
-    databaseUrl: 'file:./conscious-memories.db',
+    databaseUrl: 'file:./memori.db',
     apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
     namespace: 'conscious-demo',
-    autoIngest: false, // Disable auto-ingestion for manual control
-    consciousIngest: true // Enable conscious mode for manual processing
+    mode: 'conscious' // Enable conscious mode for manual processing and control
   });
 
   try {
@@ -109,10 +108,9 @@ async function realWorldUsagePattern(): Promise<void> {
   console.log('============================');
 
   const memori = new Memori({
-    databaseUrl: 'file:./app-memories.db',
+    databaseUrl: 'file:./memori.db',
     namespace: 'my-application',
-    autoIngest: false, // Manual control
-    consciousIngest: true
+    mode: 'conscious' // Manual control with conscious processing
   });
 
   try {

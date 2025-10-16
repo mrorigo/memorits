@@ -3,8 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from './infrastructure/database/DatabaseManager';
 import { MemoryAgent } from './domain/memory/MemoryAgent';
 import { ConsciousAgent } from './domain/memory/ConsciousAgent';
-import { OpenAIProvider, OllamaProvider,AnthropicProvider, LLMProviderFactory, ProviderType } from './infrastructure/providers/';
+import { OpenAIProvider, OllamaProvider, AnthropicProvider, LLMProviderFactory, ProviderType, MemoryEnabledLLMProvider, UnifiedLLMProvider, ILLMProvider, IProviderConfig } from './infrastructure/providers/';
 import { ConfigManager, MemoriConfig } from './infrastructure/config/ConfigManager';
+import { MemoriAIConfig } from './MemoriAIConfig';
 import { logInfo, logError } from './infrastructure/config/Logger';
 import {
   MemorySearchResult,
@@ -21,79 +22,140 @@ export class Memori {
   private dbManager: DatabaseManager;
   private memoryAgent?: MemoryAgent;
   private consciousAgent?: ConsciousAgent;
-  private openaiProvider?: OpenAIProvider;
-  private config: MemoriConfig;
+
+  // Dual-provider architecture to prevent circular dependencies
+  private userProvider?: MemoryEnabledLLMProvider;     // For user operations
+  private memoryProvider?: ILLMProvider;                // For internal memory processing
+
+  private config: MemoriConfig & { mode?: 'automatic' | 'manual' | 'conscious' };
   private enabled: boolean = false;
   private sessionId: string;
   private backgroundInterval?: ReturnType<typeof setInterval>;
   private backgroundUpdateInterval: number = 30000; // 30 seconds default
 
-  constructor(config?: Partial<MemoriConfig>) {
-    this.config = ConfigManager.loadConfig();
+  constructor(config?: Partial<MemoriAIConfig>) {
+    // Start with default config and merge in unified config
+    const defaultConfig = ConfigManager.loadConfig();
+    this.config = { ...defaultConfig };
+
     if (config) {
+      // Handle mode configuration by mapping to legacy options
+      if (config.mode) {
+        switch (config.mode) {
+          case 'automatic':
+            this.config.autoIngest = true;
+            this.config.consciousIngest = false;
+            break;
+          case 'manual':
+            this.config.autoIngest = false;
+            this.config.consciousIngest = false;
+            break;
+          case 'conscious':
+            this.config.autoIngest = false;
+            this.config.consciousIngest = true;
+            break;
+        }
+      }
+
+      // Apply other config options
       Object.assign(this.config, config);
     }
 
     this.sessionId = uuidv4();
     this.dbManager = new DatabaseManager(this.config.databaseUrl);
-
-    // Register all default providers with the factory (optimized - only register once)
-    this.registerProvidersIfNeeded();
-  }
-
-  /**
-   * Optimized provider registration - only register if not already registered
-   */
-  private registerProvidersIfNeeded(): void {
-    try {
-      if (!LLMProviderFactory.isProviderRegistered(ProviderType.OPENAI)) {
-        LLMProviderFactory.registerProvider(ProviderType.OPENAI, OpenAIProvider);
-      }
-      if (!LLMProviderFactory.isProviderRegistered(ProviderType.OLLAMA)) {
-        LLMProviderFactory.registerProvider(ProviderType.OLLAMA, OllamaProvider);
-      }
-      if (!LLMProviderFactory.isProviderRegistered(ProviderType.ANTHROPIC)) {
-        LLMProviderFactory.registerProvider(ProviderType.ANTHROPIC, AnthropicProvider);
-      }
-    } catch (error) {
-      // Providers might already be registered, continue silently
-      logInfo('Provider registration check completed', {
-        component: 'Memori',
-        sessionId: this.sessionId,
-      });
-    }
   }
 
 
   /**
-   * Get default model for provider type
-   */
-  private getDefaultModel(providerType: ProviderType): string {
-    switch (providerType) {
-    case ProviderType.OPENAI: return 'gpt-4o-mini';
-    case ProviderType.ANTHROPIC: return 'claude-3-5-sonnet-20241022';
-    case ProviderType.OLLAMA: return 'llama2';
-    default: return 'gpt-4o-mini';
-    }
-  }
-
-  /**
-   * Initialize the Memori instance asynchronously
-   */
+    * Initialize the Memori instance with dual-provider architecture
+    */
   private async initializeProvider(): Promise<void> {
-    if (this.openaiProvider && this.memoryAgent) {
+    if (this.userProvider && this.memoryAgent) {
       return; // Already initialized
     }
 
-    // Create provider instance using factory
-    const providerConfig = {
-      apiKey: this.config.apiKey,
-      model: this.config.model,
-      baseUrl: this.config.baseUrl,
-    };
+    try {
+      // Create provider configuration
+      const providerConfig: IProviderConfig = {
+        apiKey: this.config.apiKey,
+        model: this.config.model,
+        baseUrl: this.config.baseUrl,
+        features: {
+          performance: {
+            enableConnectionPooling: false, // Disable for Memori class
+            enableCaching: false,
+            enableHealthMonitoring: false,
+          },
+          memory: {
+            enableChatMemory: false, // Disable to prevent recursion
+            enableEmbeddingMemory: false,
+            memoryProcessingMode: 'auto',
+            minImportanceLevel: 'all',
+          }
+        }
+      };
 
-    this.openaiProvider = await LLMProviderFactory.createProviderFromConfig(providerConfig) as OpenAIProvider;
-    this.memoryAgent = new MemoryAgent(this.openaiProvider);
+      // Detect provider type
+      const providerType = this.detectProviderType(providerConfig);
+
+      // Get provider class and create base provider
+      const ProviderClass = this.getProviderClass(providerType);
+      const baseProvider = new ProviderClass(providerConfig);
+      baseProvider.initialize(providerConfig);
+
+      // Create user provider (MemoryEnabledLLMProvider for any user operations)
+      this.userProvider = new MemoryEnabledLLMProvider(baseProvider, providerConfig);
+
+      // Create separate memory provider (basic provider for internal processing)
+      const memoryConfig = { ...providerConfig };
+      memoryConfig.features = {
+        ...memoryConfig.features,
+        memory: {
+          ...memoryConfig.features?.memory,
+          enableChatMemory: false, // Disable to prevent recursion
+        }
+      };
+      const memoryBaseProvider = new ProviderClass(memoryConfig);
+      memoryBaseProvider.initialize(memoryConfig);
+      this.memoryProvider = memoryBaseProvider;
+
+      // Initialize memory agent with memory provider (not user provider)
+      this.memoryAgent = new MemoryAgent(this.memoryProvider);
+
+    } catch (error) {
+      logError('Failed to initialize Memori providers', {
+        component: 'Memori',
+        sessionId: this.sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Detect provider type from configuration (simplified version)
+   */
+  private detectProviderType(config: IProviderConfig): ProviderType {
+    if (config.apiKey?.startsWith('sk-ant-')) return ProviderType.ANTHROPIC;
+    if (config.apiKey?.startsWith('sk-') && config.apiKey.length > 20) return ProviderType.OPENAI;
+    if (config.apiKey === 'ollama-local') return ProviderType.OLLAMA;
+    return ProviderType.OPENAI;
+  }
+
+  /**
+   * Get the provider class for the given provider type
+   */
+  private getProviderClass(providerType: ProviderType): new (config: IProviderConfig) => ILLMProvider {
+    const { OpenAIProvider } = require('./infrastructure/providers/OpenAIProvider');
+    const { AnthropicProvider } = require('./infrastructure/providers/AnthropicProvider');
+    const { OllamaProvider } = require('./infrastructure/providers/OllamaProvider');
+
+    switch (providerType) {
+      case ProviderType.OPENAI: return OpenAIProvider;
+      case ProviderType.ANTHROPIC: return AnthropicProvider;
+      case ProviderType.OLLAMA: return OllamaProvider;
+      default: return OpenAIProvider;
+    }
   }
 
   async enable(): Promise<void> {

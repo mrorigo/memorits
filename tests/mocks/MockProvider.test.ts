@@ -58,9 +58,12 @@ describe('Mock Provider Infrastructure', () => {
       await provider.initialize({ apiKey: 'test' });
 
       const results = [];
+      // Use deterministic pattern: fail on iterations 3, 7, 12, 15, 18 (25% failure rate)
+      const failurePattern = [3, 7, 12, 15, 18];
+
       for (let i = 0; i < 20; i++) {
-        // Randomly set error state to simulate intermittent failures (30% rate)
-        provider.setMockError(Math.random() < 0.3);
+        // Set error state based on deterministic pattern
+        provider.setMockError(failurePattern.includes(i));
 
         try {
           await provider.createChatCompletion({
@@ -72,10 +75,11 @@ describe('Mock Provider Infrastructure', () => {
         }
       }
 
-      // Should have both successes and errors in realistic proportions
+      // Should have both successes and errors in expected proportions (15 successes, 5 errors)
       expect(results).toContain('success');
       expect(results).toContain('error');
-      expect(results.filter(r => r === 'success').length).toBeGreaterThan(10); // More lenient expectation
+      expect(results.filter(r => r === 'success').length).toBe(15);
+      expect(results.filter(r => r === 'error').length).toBe(5);
     });
 
     test('should simulate performance characteristics', async () => {
