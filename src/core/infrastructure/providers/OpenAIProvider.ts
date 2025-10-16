@@ -21,17 +21,18 @@ export class OpenAIProvider extends UnifiedLLMProvider {
   }
 
   /**
-   * Initialize the OpenAI client
-   */
-  protected async initializeClient(): Promise<void> {
-    // Handle dummy API key for Ollama
-    const apiKey = this.config.apiKey === 'ollama-local' ? 'sk-dummy-key-for-ollama' : this.config.apiKey;
+    * Initialize the OpenAI client
+    */
+   protected initializeClient(): void {
+     // Handle dummy API key for Ollama
+     const apiKey = this.config.apiKey === 'ollama-local' ? 'sk-dummy-key-for-ollama' : this.config.apiKey;
 
-    this.client = new OpenAI({
-      apiKey: apiKey,
-      baseURL: this.config.baseUrl,
-    });
-  }
+     console.log(`*** initializeClient with apiKey: ${apiKey}, baseUrl: ${this.config.baseUrl}`);
+     this.client = new OpenAI({
+       apiKey: apiKey,
+       baseURL: this.config.baseUrl,
+     });
+   }
 
   /**
    * Dispose of the OpenAI client

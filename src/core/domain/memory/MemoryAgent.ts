@@ -43,6 +43,92 @@ import { MemoryProcessingState } from './MemoryProcessingStateManager';
 import { RelationshipProcessor } from '../search/relationship/RelationshipProcessor';
 import { logWarn, logError } from '../../infrastructure/config/Logger';
 
+/**
+ * Simple wrapper provider that bypasses memory processing for analysis
+ * This prevents infinite recursion when MemoryAgent analyzes conversations
+ */
+class AnalysisOnlyProvider implements ILLMProvider {
+  private wrappedProvider: ILLMProvider;
+
+  constructor(wrappedProvider: ILLMProvider) {
+    this.wrappedProvider = wrappedProvider;
+  }
+
+  getProviderType() {
+    return this.wrappedProvider.getProviderType();
+  }
+
+  getConfig() {
+    return this.wrappedProvider.getConfig();
+  }
+
+  async initialize(config?: any): Promise<void> {
+    // Skip initialization to avoid any potential recursion
+    return Promise.resolve();
+  }
+
+  async dispose(): Promise<void> {
+    // Skip disposal as this is just a wrapper
+    return Promise.resolve();
+  }
+
+  async isHealthy(): Promise<boolean> {
+    return this.wrappedProvider.isHealthy();
+  }
+
+  async getDiagnostics() {
+    return this.wrappedProvider.getDiagnostics();
+  }
+
+  getModel(): string {
+    return this.wrappedProvider.getModel();
+  }
+
+  getClient(): any {
+    return this.wrappedProvider.getClient();
+  }
+
+  // These methods bypass memory processing to prevent recursion
+  async createChatCompletion(params: any) {
+    // Directly call the underlying provider's core methods without memory processing
+    if (this.wrappedProvider.getClient() && this.wrappedProvider.getClient().chat) {
+      // Use the raw client to bypass all wrapper logic
+      const client = this.wrappedProvider.getClient();
+      const response = await client.chat.completions.create({
+        model: params.model || this.wrappedProvider.getModel(),
+        messages: params.messages,
+        temperature: params.temperature,
+        max_tokens: params.max_tokens,
+        stream: params.stream || false,
+      });
+
+      // Convert to expected format
+      return {
+        message: {
+          role: response.choices[0].message.role || 'assistant',
+          content: response.choices[0].message.content || '',
+        },
+        finish_reason: response.choices[0].finish_reason || 'stop',
+        usage: response.usage ? {
+          prompt_tokens: response.usage.prompt_tokens,
+          completion_tokens: response.usage.completion_tokens,
+          total_tokens: response.usage.total_tokens,
+        } : undefined,
+        id: response.id,
+        model: response.model,
+        created: response.created,
+      };
+    }
+
+    // Fallback to wrapped provider if direct client access fails
+    return this.wrappedProvider.createChatCompletion(params);
+  }
+
+  async createEmbedding(params: any) {
+    return this.wrappedProvider.createEmbedding(params);
+  }
+}
+
 // Memory processing schema definition for prompt generation
 const MEMORY_SCHEMA = {
   content: 'string',
@@ -92,12 +178,77 @@ export class MemoryAgent {
   private relationshipProcessor?: RelationshipProcessor;
 
   constructor(openaiProvider: ILLMProvider, dbManager?: DatabaseManager) {
-    this.llmProvider = openaiProvider;
+    // Create a raw provider for analysis that doesn't have memory processing
+    // This prevents infinite recursion when MemoryAgent analyzes conversations
+    this.llmProvider = this.createAnalysisProvider(openaiProvider);
     this.dbManager = dbManager;
 
     // Initialize relationship processor if database manager is available
-    if (dbManager && openaiProvider) {
-      this.relationshipProcessor = new RelationshipProcessor(dbManager, openaiProvider as any);
+    // Use the same analysis provider to avoid recursion during relationship extraction
+    if (dbManager && this.llmProvider) {
+      this.relationshipProcessor = new RelationshipProcessor(dbManager, this.llmProvider as any);
+    }
+  }
+
+  /**
+   * Create a raw provider for memory analysis that doesn't trigger memory processing
+   * This prevents infinite recursion when the MemoryAgent analyzes conversations
+   */
+  private createAnalysisProvider(baseProvider: ILLMProvider): ILLMProvider {
+    try {
+      // Get the base provider's configuration
+      const baseConfig = baseProvider.getConfig();
+
+      // Create a completely separate configuration for analysis
+      const analysisConfig = {
+        ...baseConfig,
+        features: {
+          ...baseConfig.features,
+          memory: {
+            ...baseConfig.features?.memory,
+            enableChatMemory: false, // Disable to prevent recursion during analysis
+            enableEmbeddingMemory: false,
+            memoryProcessingMode: 'none' as const,
+          },
+          performance: {
+            ...baseConfig.features?.performance,
+            enableConnectionPooling: false, // Disable pooling for analysis
+            enableCaching: false, // Disable caching for analysis
+            enableHealthMonitoring: false, // Disable health monitoring for analysis
+          }
+        }
+      };
+
+      // Create a new provider instance with all memory and performance features disabled
+      const ProviderClass = (baseProvider as any).constructor;
+
+      // Create the provider synchronously without going through the factory
+      // to avoid any potential initialization issues
+      const rawProvider = new ProviderClass(analysisConfig);
+
+      // Initialize it synchronously if possible
+      if (typeof rawProvider.initialize === 'function') {
+        // Use synchronous initialization if available
+        try {
+          rawProvider.initialize(analysisConfig);
+        } catch (error) {
+          // If sync initialization fails, we'll handle it differently
+          logWarn('Provider initialization may need async handling', {
+            component: 'MemoryAgent',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      return rawProvider;
+    } catch (error) {
+      logWarn('Failed to create analysis provider, using fallback approach', {
+        component: 'MemoryAgent',
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Fallback: create a simple wrapper that bypasses memory processing
+      return new AnalysisOnlyProvider(baseProvider);
     }
   }
 
@@ -554,11 +705,23 @@ export class MemoryAgent {
     }
 
     try {
-      const searchManager = (this.dbManager as any).searchManager;
-      return await searchManager.searchMemories('', {
-        namespace: sessionId,
-        limit,
+      // Use the correct method to search memories - don't access non-existent searchManager property
+      const prisma = this.dbManager.getPrismaClient();
+      const memories = await prisma.longTermMemory.findMany({
+        where: { namespace: sessionId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
       });
+
+      return memories.map(memory => ({
+        id: memory.id,
+        content: memory.searchableContent,
+        summary: memory.summary,
+        topic: memory.topic,
+        entities: memory.entitiesJson as string[] || [],
+        createdAt: memory.extractionTimestamp,
+        searchableContent: memory.searchableContent,
+      }));
     } catch (error) {
       logWarn('Failed to retrieve recent memories for relationship analysis', {
         component: 'MemoryAgent',
@@ -604,6 +767,10 @@ export class MemoryAgent {
     // Initialize state tracking if database manager is available
     if (this.dbManager && params.chatId) {
       try {
+        // First initialize the memory state if it doesn't exist
+        await this.dbManager.initializeExistingMemoryState(params.chatId, MemoryProcessingState.PENDING);
+
+        // Then transition to processing
         await this.dbManager.transitionMemoryState(
           params.chatId,
           MemoryProcessingState.PROCESSING,
@@ -708,11 +875,28 @@ Extract and classify this memory, including relationship analysis:`;
 
       if (this.dbManager) {
         try {
-          const searchManager = (this.dbManager as any).searchManager;
-          const existingMemories = await searchManager.searchMemories('', {
-            namespace: params.context.sessionId || 'default',
-            limit: 50, // Get recent memories for relationship analysis
+          // Use direct database access instead of non-existent searchManager property
+          const prisma = this.dbManager.getPrismaClient();
+          const memories = await prisma.longTermMemory.findMany({
+            where: { namespace: params.context.sessionId || 'default' },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
           });
+
+          const existingMemories = memories.map(memory => ({
+            id: memory.id,
+            content: memory.searchableContent,
+            summary: memory.summary,
+            topic: memory.topic,
+            entities: memory.entitiesJson as string[] || [],
+            createdAt: memory.extractionTimestamp,
+            searchableContent: memory.searchableContent,
+            processedData: {
+              content: memory.searchableContent,
+              topic: memory.topic,
+              entities: memory.entitiesJson,
+            },
+          }));
 
           // Extract memory relationships using the new RelationshipProcessor
           if (this.relationshipProcessor) {

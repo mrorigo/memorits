@@ -1,75 +1,34 @@
-// Memori Library - Unified API exports
-export { Memori } from './core/Memori';
+// 🚀 MemoriAI - Unified API (Clean & Simple)
+// Single class handles everything - no wrapper complexity!
 
-// Provider wrappers (the main API)
-export { OpenAIWrapper } from './providers/openai/wrapper';
-export { AnthropicWrapper } from './providers/anthropic/wrapper';
-export { OllamaWrapper } from './providers/ollama/wrapper';
+// Main unified API
+export { MemoriAI } from './core/MemoriAI';
 
-// Essential types for the unified API
+// Core configuration and types
 export type {
-  ProviderName,
-  ChatMessage,
+  MemoriAIConfig,
+  ChatParams,
   ChatResponse,
-  EmbeddingResponse,
-  MemoriError
-} from './providers/types';
-
-// Validation utilities
-export {
-  validateConfig,
-  detectProvider,
-} from './providers/validation';
-
-// Legacy exports (backward compatibility)
-export { ConfigManager } from './core/infrastructure/config/ConfigManager';
-
-// Search Strategy enum and types for public API access
-export { SearchStrategy } from './core/domain/search/types';
-
-// Core type exports for enhanced API access
-export type {
-  MemorySearchResult,
-  RecordConversationOptions,
   SearchOptions,
-  TemporalFilterOptions,
-  DatabaseStats,
-  TimeRange,
-  SortOption,
-  MetadataFilterOptions,
-  MemoriConfig,
+  MemorySearchResult,
+  EmbeddingParams,
+  EmbeddingResponse,
+  ProviderInfo
+} from './core/MemoriAIConfig';
+
+// Keep essential existing exports for backward compatibility
+export { Memori } from './core/Memori';
+export { ConfigManager } from './core/infrastructure/config/ConfigManager';
+export type {
+  MemorySearchResult as SearchResult,
+  MemoriConfig
 } from './core/types/models';
 
-// Performance monitoring exports for enterprise monitoring
-export { PerformanceDashboardService } from './core/performance/PerformanceDashboard';
-export { PerformanceAnalyticsService } from './core/performance/PerformanceAnalyticsService';
+// Essential search types that other modules depend on
+export type { SearchQuery } from './core/domain/search/SearchStrategy';
 
-export { ProcessedLongTermMemorySchema } from './core/types/schemas';
-
-// Search Strategy exports (new architecture)
-export {
-  ISearchStrategy,
-  BaseSearchStrategy,
-  SearchResultBuilder,
-  SearchError,
-  SearchStrategyError,
-  SearchValidationError,
-  SearchTimeoutError,
-  SearchConfigurationError,
-  StrategyValidator,
-  SearchCapability,
-  SearchQuery,
-  SearchResult,
-  SearchStrategyMetadata,
-  SearchStrategyConfig,
-  ValidationResult
-} from './core/domain/search/SearchStrategy';
-
-// OpenAI Drop-in Replacement exports
-// Main client and types
+// OpenAI Drop-in replacement (unchanged)
 export { default as MemoriOpenAIClient, MemoriOpenAI } from './integrations/openai-dropin/client';
-
-// Factory functions and classes
 export { MemoriOpenAIFactory, memoriOpenAIFactory } from './integrations/openai-dropin/factory';
 export {
   MemoriOpenAIFromConfig,
@@ -77,59 +36,10 @@ export {
   MemoriOpenAIFromDatabase,
 } from './integrations/openai-dropin/factory';
 
-// Type re-exports for type safety
+// Re-export key types from OpenAI drop-in for convenience
 export type {
-  // OpenAI SDK compatibility types
   ChatCompletion,
-  ChatCompletionChunk,
   ChatCompletionCreateParams,
-  ChatCompletionMessage,
-  ChatCompletionMessageParam,
-  ChatCompletionRole,
-  Embedding,
   EmbeddingCreateParams,
   CreateEmbeddingResponse,
-  Chat,
-  Embeddings,
-
-  // Memory processing types
-  MemoryProcessingMode,
-  MemoryImportanceFilter,
-  DatabaseType,
-  DatabaseConfig,
-
-  // Streaming types
-  StreamingMetadata,
-  BufferedStream,
-  StreamingBufferConfig,
-
-  // Memory recording types
-  OpenAIMemoryMetadata,
-  RecordChatCompletionOptions,
-  RecordEmbeddingOptions,
-  MemoryRecordingResult,
-
-  // Memory manager types
-  MemoryManager,
-  ConversationRecorder,
-  StreamingBuffer,
-
-  // Error handling types
-  MemoryErrorType,
-  MemoryError,
-  RecoveryStrategy,
-  ErrorRecoveryConfig,
-
-  // Metrics and monitoring types
-  OpenAIMetrics,
-  PerformanceMonitorConfig,
-
-  // Main interfaces
-  ChatProxyInterface,
-
-  // Utility types
-  DeepPartial,
-  OptionalConfigKeys,
-  RequiredConfigKeys,
-
 } from './integrations/openai-dropin/types';

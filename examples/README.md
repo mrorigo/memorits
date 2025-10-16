@@ -1,116 +1,128 @@
-# Memori TypeScript Examples
+# MemoriAI Library Examples
 
-This directory contains comprehensive examples demonstrating how to use the Memori TypeScript library for memory-enabled conversations with multiple AI providers including OpenAI, Ollama, and Anthropic.
+This directory contains examples demonstrating the two main usage patterns of the MemoriAI library:
+
+1. **MemoriAI (Unified API)** - Automatic memory management with LLM calls
+2. **Memori (Conscious API)** - Manual memory management with external LLM calls
 
 ## Prerequisites
 
 1. **Node.js** (version 16 or higher)
 2. **npm** or **yarn** package manager
 3. **Database**: SQLite (default) or PostgreSQL/MySQL
-4. **AI Backend**: Either OpenAI API or Ollama
+4. **AI Backend**: OpenAI API, Anthropic API, or Ollama
 
-## Simple Setup
+## API Overview
 
-The examples use a simple configuration approach:
+### MemoriAI - Unified API (Automatic Memory)
+Best for when you want LLM calls and memory management handled together automatically.
 
 ```typescript
-import { Memori, OpenAIWrapper } from 'memorits';
+import { MemoriAI } from 'memorits';
 
-// Simple configuration
-const memori = new Memori({
+const ai = new MemoriAI({
   databaseUrl: 'file:./memories.db',
-  namespace: 'my-app',
-  apiKey: 'your-api-key',
-  autoMemory: true
+  apiKey: process.env.OPENAI_API_KEY
+  // Everything else is automatic!
 });
 
-// Provider wrapper with direct integration
-const openai = new OpenAIWrapper(memori);
+const response = await ai.chat({
+  messages: [{ role: 'user', content: 'Hello!' }]
+});
+
+const memories = await ai.searchMemories('topic');
 ```
 
-### Setting up OpenAI
+### Memori - Conscious API (Manual Memory)
+Best for when you want to call the LLM externally and manually control memory recording.
 
-1. Get your API key from [OpenAI Platform](https://platform.openai.com/api-keys)
-2. Use it directly in your code:
-   ```typescript
-   const memori = new Memori({
-     databaseUrl: 'file:./memories.db',
-     namespace: 'my-app',
-     apiKey: 'your-openai-api-key',
-     autoMemory: true
-   });
-   ```
+```typescript
+import { Memori } from 'memorits';
 
-### Setting up Ollama
+const memori = new Memori({
+  databaseUrl: 'file:./memories.db',
+  autoIngest: false,    // Manual control
+  consciousIngest: true // Conscious processing
+});
 
-1. Install Ollama from [ollama.ai](https://ollama.ai)
-2. Start the Ollama server:
-   ```bash
-   ollama serve
-   ```
-3. Pull a model:
-   ```bash
-   ollama pull llama2
-   ollama pull codellama
-   ```
-4. Use it in your code:
-   ```typescript
-   const memori = new Memori({
-     databaseUrl: 'file:./memories.db',
-     namespace: 'my-app',
-     apiKey: 'ollama-local',
-     baseUrl: 'http://localhost:11434',
-     autoMemory: true
-   });
-   ```
+await memori.enable();
+
+// Your external LLM call
+const aiResponse = await callYourLLM(userMessage);
+
+// Manual memory recording
+await memori.recordConversation(userMessage, aiResponse);
+
+// Manual memory processing
+await memori.checkForConsciousContextUpdates();
+
+// Memory search
+const memories = await memori.searchMemories('topic');
+```
 
 ## Running Examples
 
-### Using npm Scripts
+### Running Examples Directly
 
-The examples can be run using the following npm scripts:
-
-```bash
-# Basic usage example
-npm run example:basic
-
-# Unified usage example
-npm run example:unified
-
-# Multi-provider usage demonstration
-npm run example:multi-provider
-```
-
-### Running Individual Examples Directly
-
-You can also run examples directly with tsx:
+You can run examples directly with tsx:
 
 ```bash
-# Basic usage
+# MemoriAI Unified API (Automatic Memory)
 npx tsx examples/basic-usage.ts
 
-# Unified usage (recommended)
-npx tsx examples/unified-usage.ts
+# Memory Search and Retrieval
+npx tsx examples/memory-search.ts
 
-# Multi-provider usage
-npx tsx examples/multi-provider-usage.ts
+# Conscious Memory Management (External LLM calls)
+npx tsx examples/conscious-memory-usage.ts
 ```
 
 ## Example Descriptions
 
-### 1. Basic Usage (`basic-usage.ts`)
+### 1. MemoriAI Unified API (`basic-usage.ts`)
 
-Demonstrates fundamental Memori operations:
-- Initializing Memori with environment configuration
-- Recording conversations
-- Searching and retrieving memories
-- Proper cleanup and error handling
+Demonstrates the unified MemoriAI API where LLM calls and memory management are handled together:
+- Simple configuration with automatic provider detection
+- Chat conversations with automatic memory recording
+- Memory search and retrieval
+- Clean resource management
 
-**Expected Output:**
-- Configuration loading confirmation
-- Conversation recording with IDs
-- Memory search results for "TypeScript" and "interfaces"
-- Successful cleanup confirmation
+**Key Features:**
+- 25 lines vs 137 lines (82% reduction in complexity)
+- Automatic memory recording during chat
+- Simple configuration with smart defaults
+
+### 2. Memory Search (`memory-search.ts`)
+
+Demonstrates advanced memory search and retrieval:
+- Creating conversations with automatic memory processing
+- Various search query patterns
+- Memory content analysis and categorization
+- Search result processing and display
+
+**Key Features:**
+- Automatic memory processing during conversations
+- Multiple search query types and patterns
+- Memory content analysis and relevance scoring
+
+### 3. Conscious Memory Management (`conscious-memory-usage.ts`)
+
+Demonstrates the Memori class for conscious memory management:
+- Manual control over when memories are recorded
+- External LLM integration with manual memory recording
+- Conscious memory processing with manual triggers
+- Advanced features like consolidation and optimization
+
+**Key Features:**
+- External LLM call integration
+- Manual memory recording and processing
+- Advanced memory management features
+- Full control over memory operations
+
+**Use Cases:**
+- Applications with existing LLM integrations
+- Scenarios requiring manual memory control
+- Advanced memory management workflows
 
 ### 2. Ollama Integration (`ollama-integration.ts`)
 

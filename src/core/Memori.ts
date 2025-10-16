@@ -424,6 +424,10 @@ export class Memori {
     return this.sessionId;
   }
 
+  getDatabaseManager(): DatabaseManager {
+    return this.dbManager;
+  }
+
   isEnabled(): boolean {
     return this.enabled;
   }

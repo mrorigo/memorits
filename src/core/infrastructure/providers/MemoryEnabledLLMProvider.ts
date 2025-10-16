@@ -72,12 +72,29 @@ export class MemoryEnabledLLMProvider implements ILLMProvider, MemoryManager {
     return { ...this.config };
   }
 
-  async initialize(config: IProviderConfig): Promise<void> {
+  initialize(config: IProviderConfig, existingMemori?: Memori): void {
     this.config = config;
-    await this.wrappedProvider.initialize(config);
 
-    // Initialize Memori for direct memory operations
-    if (this.memoryConfig.enableChatMemory || this.memoryConfig.enableEmbeddingMemory) {
+    // Use existing Memori instance if provided
+    if (existingMemori) {
+      this.memori = existingMemori;
+      logInfo('MemoryEnabledLLMProvider using existing Memori instance', {
+        component: 'MemoryEnabledLLMProvider',
+        providerType: this.getProviderType(),
+        reusedMemori: true,
+      });
+    }
+
+    // Initialize wrapped provider (base LLM client) with existing Memori
+    if (this.wrappedProvider instanceof require('./UnifiedLLMProvider').UnifiedLLMProvider) {
+      // For UnifiedLLMProvider, pass the existing Memori to avoid recursion
+      (this.wrappedProvider as any).memori = existingMemori;
+    }
+    this.wrappedProvider.initialize(config);
+
+    // Initialize memory system if enabled and not already using existing Memori
+    if ((this.memoryConfig.enableChatMemory || this.memoryConfig.enableEmbeddingMemory) && !existingMemori) {
+      // Only create new Memori if none provided
       this.memori = new Memori({
         apiKey: config.apiKey,
         model: config.model,
@@ -86,24 +103,28 @@ export class MemoryEnabledLLMProvider implements ILLMProvider, MemoryManager {
         consciousIngest: this.memoryConfig.memoryProcessingMode === 'conscious',
         namespace: this.memoryConfig.sessionId || 'default',
       });
-      await this.memori.enable();
+      logInfo('Created new Memori instance in MemoryEnabledLLMProvider', {
+        component: 'MemoryEnabledLLMProvider',
+        providerType: this.getProviderType(),
+        reusedMemori: false,
+      });
+    }
 
-      // Initialize memory agent for processing
-      const baseProvider = await LLMProviderFactory.createProviderFromConfig(config);
-
-      // Initialize MemoryAgent for sophisticated processing
-      // Database manager can be set later if needed for relationship processing
-      this.memoryAgent = new MemoryAgent(baseProvider);
+    // Initialize memory agent with wrapped provider and database manager
+    // The MemoryAgent will create its own analysis provider to avoid recursion
+    if (this.memori) {
+      this.memoryAgent = new MemoryAgent(this.wrappedProvider, this.memori.getDatabaseManager());
     }
 
     this.isInitialized = true;
 
-    logInfo('MemoryEnabledLLMProvider initialized', {
+    logInfo('MemoryEnabledLLMProvider initialized successfully', {
       component: 'MemoryEnabledLLMProvider',
       providerType: this.getProviderType(),
       enableChatMemory: this.memoryConfig.enableChatMemory,
       enableEmbeddingMemory: this.memoryConfig.enableEmbeddingMemory,
       memoryProcessingMode: this.memoryConfig.memoryProcessingMode,
+      reusedMemori: !!existingMemori,
     });
   }
 
@@ -394,32 +415,45 @@ export class MemoryEnabledLLMProvider implements ILLMProvider, MemoryManager {
       // Generate chat ID for this conversation
       const chatId = `record_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Use MemoryAgent for sophisticated processing
-      const processedMemory = await this.memoryAgent.processConversation({
-        chatId,
-        userInput,
-        aiOutput,
-        context: {
-          sessionId: this.memoryConfig.sessionId || 'default-session',
-          conversationId: chatId,
-          modelUsed: params.model || this.getModel(),
-          userPreferences: [],
-          currentProjects: [],
-          relevantSkills: [],
-        },
-      });
+      // Temporarily disable memory processing to prevent infinite recursion
+      const originalEnableChatMemory = this.config.memory?.enableChatMemory;
+      if (this.config.memory) {
+        this.config.memory.enableChatMemory = false; // Disable to prevent recursion
+      }
 
-      // Store the processed memory using Memori's database manager
-      await this.memori.storeProcessedMemory(processedMemory, chatId);
+      try {
+        // Use MemoryAgent for sophisticated processing
+        const processedMemory = await this.memoryAgent.processConversation({
+          chatId,
+          userInput,
+          aiOutput,
+          context: {
+            sessionId: this.memoryConfig.sessionId || 'default-session',
+            conversationId: chatId,
+            modelUsed: params.model || this.getModel(),
+            userPreferences: [],
+            currentProjects: [],
+            relevantSkills: [],
+          },
+        });
 
-      return {
-        success: true,
-        chatId,
-        duration: Date.now() - startTime,
-        wasStreaming: false,
-        classification: processedMemory.classification,
-        importance: processedMemory.importance,
-      };
+        // Store the processed memory using Memori's database manager
+        await this.memori.storeProcessedMemory(processedMemory, chatId);
+
+        return {
+          success: true,
+          chatId,
+          duration: Date.now() - startTime,
+          wasStreaming: false,
+          classification: processedMemory.classification,
+          importance: processedMemory.importance,
+        };
+      } finally {
+        // Restore original memory configuration
+        if (this.config.memory && originalEnableChatMemory !== undefined) {
+          this.config.memory.enableChatMemory = originalEnableChatMemory;
+        }
+      }
     } catch (error) {
       return {
         success: false,

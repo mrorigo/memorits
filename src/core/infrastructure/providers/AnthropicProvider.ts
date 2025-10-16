@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ILLMProvider } from './ILLMProvider';
+import { UnifiedLLMProvider } from './UnifiedLLMProvider';
 import { IProviderConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
 import { ChatCompletionParams } from './types/ChatCompletionParams';
@@ -9,25 +9,59 @@ import { EmbeddingResponse } from './types/EmbeddingResponse';
 import { ProviderDiagnostics } from './types/ProviderDiagnostics';
 
 /**
- * Anthropic provider implementation using official SDK
- * Implements the ILLMProvider interface for Anthropic Claude models
+ * Anthropic provider implementation using unified architecture
+ * Extends UnifiedLLMProvider to integrate performance optimizations and memory capabilities
  */
-export class AnthropicProvider implements ILLMProvider {
-  private client: Anthropic;
-  private config: IProviderConfig;
+export class AnthropicProvider extends UnifiedLLMProvider {
   private model: string;
-  private isInitialized = false;
 
   constructor(config: IProviderConfig) {
-    this.config = config;
+    super(config);
     this.model = config.model || 'claude-3-5-sonnet-20241022';
+  }
 
+  /**
+   * Initialize the Anthropic client
+   */
+  protected initializeClient(): void {
     // Handle dummy API key for testing
-    const apiKey = config.apiKey === 'anthropic-dummy' ? 'sk-ant-api03-dummy-key-for-testing' : config.apiKey;
+    const apiKey = this.config.apiKey === 'anthropic-dummy' ? 'sk-ant-api03-dummy-key-for-testing' : this.config.apiKey;
 
     this.client = new Anthropic({
       apiKey: apiKey,
-      baseURL: config.baseUrl,
+      baseURL: this.config.baseUrl,
+    });
+  }
+
+  /**
+   * Dispose of the Anthropic client
+   */
+  protected disposeClient(): Promise<void> {
+    // Anthropic client doesn't require explicit disposal
+    this.client = null as any;
+    return Promise.resolve();
+  }
+
+  /**
+   * Check if the Anthropic client is healthy
+   */
+  protected checkClientHealth(): Promise<boolean> {
+    try {
+      // Simple health check - try to list models
+      return this.client.models.list().then(() => true).catch(() => false);
+    } catch (error) {
+      return Promise.resolve(false);
+    }
+  }
+
+  /**
+   * Get base diagnostics from the Anthropic client
+   */
+  protected getBaseDiagnostics(): Promise<Record<string, any>> {
+    return Promise.resolve({
+      baseUrl: this.config.baseUrl,
+      hasApiKey: !!this.config.apiKey,
+      clientInitialized: !!this.client,
     });
   }
 
@@ -35,67 +69,21 @@ export class AnthropicProvider implements ILLMProvider {
     return ProviderType.ANTHROPIC;
   }
 
-  getConfig(): IProviderConfig {
-    return { ...this.config };
-  }
-
-  async initialize(config: IProviderConfig): Promise<void> {
-    this.config = config;
-    this.model = config.model || 'claude-3-5-sonnet-20241022';
-
-    // Reinitialize client if configuration changed
-    const apiKey = config.apiKey === 'anthropic-dummy' ? 'sk-ant-api03-dummy-key-for-testing' : config.apiKey;
-
-    this.client = new Anthropic({
-      apiKey: apiKey,
-      baseURL: config.baseUrl,
-    });
-
-    this.isInitialized = true;
-  }
-
-  async dispose(): Promise<void> {
-    this.isInitialized = false;
-  }
-
-  async isHealthy(): Promise<boolean> {
-    if (!this.isInitialized || !this.config.apiKey) {
-      return false;
-    }
-
-    try {
-      // Use the SDK's model listing for health check
-      await this.client.models.list();
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  async getDiagnostics(): Promise<ProviderDiagnostics> {
-    const isHealthy = await this.isHealthy();
-
-    return {
-      providerType: ProviderType.ANTHROPIC,
-      isInitialized: this.isInitialized,
-      isHealthy,
-      model: this.model,
-      metadata: {
-        baseUrl: this.config.baseUrl,
-        hasApiKey: !!this.config.apiKey,
-        apiKeyPrefix: this.config.apiKey?.substring(0, 7) + '...',
-      },
-      timestamp: new Date(),
-    };
-  }
-
   getModel(): string {
     return this.model;
   }
 
-  async createChatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
-    if (!this.isInitialized || !this.config.apiKey) {
-      throw new Error('Provider not initialized or missing API key');
+  getClient(): Anthropic {
+    return this.client;
+  }
+
+  /**
+   * Execute the actual Anthropic chat completion API call
+   * This is called by the base class when not using cache/pooling optimizations
+   */
+  protected async executeChatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
+    if (!this.client) {
+      throw new Error('Anthropic client not initialized');
     }
 
     try {
@@ -187,18 +175,13 @@ export class AnthropicProvider implements ILLMProvider {
     }
   }
 
-  async createEmbedding(params: EmbeddingParams): Promise<EmbeddingResponse> {
-    if (!this.isInitialized || !this.config.apiKey) {
-      throw new Error('Provider not initialized or missing API key');
-    }
-
+  /**
+   * Execute the actual Anthropic embedding API call (not supported)
+   */
+  protected async executeEmbedding(params: EmbeddingParams): Promise<EmbeddingResponse> {
     // Note: Anthropic doesn't have a public embeddings API as of now
     // This is a placeholder for future implementation if they add one
     throw new Error('Embeddings are not supported by Anthropic API');
-  }
-
-  getClient(): Anthropic {
-    return this.client;
   }
 
   /**

@@ -1,7 +1,6 @@
 import { ILLMProvider } from './ILLMProvider';
 import { IProviderConfig, PerformanceConfig, MemoryConfig, extractPerformanceConfig, extractMemoryConfig, extractLegacyMemoryConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
-import { LLMProviderFactory } from './LLMProviderFactory';
 import { ChatCompletionParams } from './types/ChatCompletionParams';
 import { ChatCompletionResponse } from './types/ChatCompletionResponse';
 import { EmbeddingParams } from './types/EmbeddingParams';
@@ -14,7 +13,7 @@ import { HealthMonitor, globalHealthMonitor } from './performance/HealthMonitor'
 
 import { Memori } from '../../Memori';
 import { MemoryAgent } from '../../domain/memory/MemoryAgent';
-import { logInfo, logError } from '../config/Logger';
+import { logInfo, logError, logWarn } from '../config/Logger';
 
 /**
  * Unified LLM Provider that integrates performance optimizations and memory capabilities
@@ -116,9 +115,9 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
   }
 
   /**
-   * Initialize the provider with the given configuration
-   */
-  async initialize(config?: IProviderConfig): Promise<void> {
+    * Initialize the provider with the given configuration
+    */
+   initialize(config?: IProviderConfig): void {
     if (config) {
       this.config = config;
       this.performanceConfig = extractPerformanceConfig(config);
@@ -126,20 +125,24 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
       this.initializeComponents();
     }
 
-    // Initialize the underlying LLM client (implemented by subclasses)
-    await this.initializeClient();
+    // Initialize the underlying LLM client (implemented by subclasses, synchronous)
+    this.initializeClient();
 
-    // Initialize memory system if enabled
+    // Initialize memory system if enabled (synchronous)
     if (this.memoryConfig.enableChatMemory || this.memoryConfig.enableEmbeddingMemory) {
-      await this.initializeMemorySystem();
+      this.initializeMemorySystem();
     }
 
     this.isInitialized = true;
 
-    // Start health monitoring if enabled
+    // Start health monitoring if enabled (check if not already monitoring)
     if (this.performanceConfig.enableHealthMonitoring && this.healthMonitor) {
-      this.healthMonitor.startMonitoring(this);
-    }
+       // Only start monitoring if not already being monitored
+       const existingHealth = this.healthMonitor.getProviderHealth(this);
+       if (!existingHealth) {
+         this.healthMonitor.startMonitoring(this);
+       }
+     }
 
     logInfo('UnifiedLLMProvider initialized', {
       component: 'UnifiedLLMProvider',
@@ -156,34 +159,37 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
   }
 
   /**
-   * Initialize the underlying LLM client (implemented by subclasses)
+   * Initialize the underlying LLM client (implemented by subclasses, synchronous)
    */
-  protected abstract initializeClient(): Promise<void>;
+ protected abstract initializeClient(): void;
 
   /**
-   * Initialize the memory management system
-   */
-  private async initializeMemorySystem(): Promise<void> {
+     * Initialize the memory management system (synchronous)
+     * Note: Memori instance should be provided externally to avoid recursion
+     */
+  private initializeMemorySystem(): void {
     try {
-      // Initialize Memori for direct memory operations
-      this.memori = new Memori({
-        apiKey: this.config.apiKey,
-        model: this.config.model || 'gpt-4o-mini',
-        baseUrl: this.config.baseUrl,
-        autoIngest: this.memoryConfig.memoryProcessingMode === 'auto',
-        consciousIngest: this.memoryConfig.memoryProcessingMode === 'conscious',
-        namespace: this.memoryConfig.sessionId || 'default',
-      });
-      await this.memori.enable();
+      // Skip if no external Memori provided (avoiding recursion)
+      if (!this.memori) {
+        logInfo('Skipping memory system initialization - no external Memori provided', {
+          component: 'UnifiedLLMProvider',
+          providerType: this.getProviderType(),
+          processingMode: this.memoryConfig.memoryProcessingMode,
+        });
+        return;
+      }
 
-      // Initialize MemoryAgent for sophisticated processing
-      const baseProvider = await LLMProviderFactory.createProviderFromConfig(this.config);
-      this.memoryAgent = new MemoryAgent(baseProvider);
+      // Initialize MemoryAgent for sophisticated processing using existing Memori's database
+      // The MemoryAgent will create its own analysis provider to avoid recursion
+      if (!this.memoryAgent) {
+        this.memoryAgent = new MemoryAgent(this, this.memori.getDatabaseManager());
+      }
 
-      logInfo('Memory system initialized', {
+      logInfo('Memory system initialized with external Memori', {
         component: 'UnifiedLLMProvider',
         providerType: this.getProviderType(),
         processingMode: this.memoryConfig.memoryProcessingMode,
+        reusedMemori: true,
       });
     } catch (error) {
       logError('Failed to initialize memory system', {
@@ -319,43 +325,55 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
     this.metrics.totalRequests++;
 
     try {
-      // 1. Check cache first if enabled (performance optimization)
-      if (this.performanceConfig.enableCaching && this.requestCache) {
-        const cachedResponse = this.requestCache.getChatCompletion(params);
-        if (cachedResponse) {
-          this.metrics.cacheHits++;
-          this.recordHealthMetrics(true, Date.now() - startTime);
-          return cachedResponse;
-        }
-        this.metrics.cacheMisses++;
-      }
+      // 1. DISABLE cache checking for now to prevent recursion
+      // if (this.performanceConfig.enableCaching && this.requestCache) {
+      //   const cachedResponse = this.requestCache.getChatCompletion(params);
+      //   if (cachedResponse) {
+      //     this.metrics.cacheHits++;
+      //     this.recordHealthMetrics(true, Date.now() - startTime);
+      //     return cachedResponse;
+      //   }
+      //   this.metrics.cacheMisses++;
+      // }
 
-      // 2. Get provider from connection pool if enabled (performance optimization)
+      // 2. DISABLE connection pooling for now to prevent recursion issues
       let providerToUse: ILLMProvider = this;
-      if (this.performanceConfig.enableConnectionPooling && this.connectionPool) {
-        providerToUse = await this.connectionPool.getConnection(
-          this.getProviderType(),
-          this.config
-        );
-      }
+      // Temporarily disable connection pooling to isolate the recursion issue
+      // if (this.performanceConfig.enableConnectionPooling && this.connectionPool) {
+      //   try {
+      //     providerToUse = await this.connectionPool.getConnection(
+      //       this.getProviderType(),
+      //       this.config
+      //     );
+      //   } catch (error) {
+      //     logInfo('Connection pool failed, using direct provider', {
+      //       component: 'UnifiedLLMProvider',
+      //       providerType: this.getProviderType(),
+      //       error: error instanceof Error ? error.message : String(error),
+      //     });
+      //     providerToUse = this;
+      //   }
+      // }
 
       // 3. Execute the actual chat completion
-      const response = await providerToUse.createChatCompletion(params);
+      // Since providerToUse is 'this' (UnifiedLLMProvider), we need to call the concrete subclass implementation
+      // Cast to 'any' to access the executeChatCompletion method implemented by subclasses
+      const response = await (providerToUse as any).executeChatCompletion(params);
       const responseTime = Date.now() - startTime;
 
-      // 4. Process memory if enabled (memory capability)
-      if (this.memoryConfig.enableChatMemory) {
-        await this.processChatMemory(params, response);
-      }
+      // 4. DISABLE memory processing for now to prevent recursion
+      // if (this.memoryConfig.enableChatMemory && providerToUse === this) {
+      //   await this.processChatMemory(params, response);
+      // }
 
-      // 5. Cache the response if enabled (performance optimization)
-      if (this.performanceConfig.enableCaching && this.requestCache) {
-        this.requestCache.setChatCompletion(
-          params,
-          response,
-          this.performanceConfig.cacheTTL.chat
-        );
-      }
+      // 5. DISABLE caching for now to prevent recursion
+      // if (this.performanceConfig.enableCaching && this.requestCache && providerToUse === this) {
+      //   this.requestCache.setChatCompletion(
+      //     params,
+      //     response,
+      //     this.performanceConfig.cacheTTL.chat
+      //   );
+      // }
 
       // 6. Record metrics (health monitoring)
       this.recordHealthMetrics(true, responseTime);
@@ -364,17 +382,29 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
       if (this.performanceConfig.enableConnectionPooling &&
           this.connectionPool &&
           providerToUse !== this) {
-        await this.connectionPool.returnConnection(providerToUse);
+        try {
+          await this.connectionPool.returnConnection(providerToUse);
+        } catch (error) {
+          logWarn('Failed to return connection to pool', {
+            component: 'UnifiedLLMProvider',
+            providerType: this.getProviderType(),
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
-      logInfo('Chat completion completed', {
-        component: 'UnifiedLLMProvider',
-        providerType: this.getProviderType(),
-        responseTime,
-        cached: false,
-        tokensUsed: response.usage?.total_tokens,
-        model: params.model || this.getModel(),
-      });
+      // Only log completions occasionally to reduce noise (every 10 requests)
+      if (this.metrics.totalRequests % 10 === 0) {
+        logInfo('Chat completion completed', {
+          component: 'UnifiedLLMProvider',
+          providerType: this.getProviderType(),
+          responseTime,
+          cached: false,
+          tokensUsed: response.usage?.total_tokens,
+          model: params.model || this.getModel(),
+          totalRequests: this.metrics.totalRequests,
+        });
+      }
 
       return response;
 
@@ -487,8 +517,8 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
   }
 
   /**
-   * Process chat memory using the integrated MemoryAgent
-   */
+    * Process chat memory using the integrated MemoryAgent
+    */
   private async processChatMemory(
     params: ChatCompletionParams,
     response: ChatCompletionResponse
@@ -512,39 +542,57 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
       // Generate chat ID for this conversation
       const chatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Use MemoryAgent for sophisticated processing
-      const processedMemory = await this.memoryAgent.processConversation({
-        chatId,
-        userInput,
-        aiOutput,
-        context: {
-          sessionId: this.memoryConfig.sessionId || 'default-session',
-          conversationId: chatId,
-          modelUsed: params.model || this.getModel(),
-          userPreferences: [],
-          currentProjects: [],
-          relevantSkills: [],
-        },
-      });
+      // Temporarily disable memory processing to prevent infinite recursion
+      // The MemoryAgent will use the LLM provider for analysis, which would trigger more memory processing
+      const originalMemoryConfig = this.memoryConfig;
+      this.memoryConfig = {
+        ...this.memoryConfig,
+        enableChatMemory: false, // Disable to prevent recursion
+      };
 
-      // Store the processed memory using Memori's database manager
-      await this.memori.storeProcessedMemory(processedMemory, chatId);
+      try {
+        // Use MemoryAgent for sophisticated processing
+        const processedMemory = await this.memoryAgent.processConversation({
+          chatId,
+          userInput,
+          aiOutput,
+          context: {
+            sessionId: this.memoryConfig.sessionId || 'default-session',
+            conversationId: chatId,
+            modelUsed: params.model || this.getModel(),
+            userPreferences: [],
+            currentProjects: [],
+            relevantSkills: [],
+          },
+        });
+
+        // Store the processed memory using Memori's database manager
+        await this.memori.storeProcessedMemory(processedMemory, chatId);
+
+        this.metrics.memoryRecordingSuccess++;
+
+        // Only log occasionally to reduce noise
+        if (this.metrics.memoryRecordingSuccess % 10 === 0) {
+          logInfo('Chat memory processed', {
+            component: 'UnifiedLLMProvider',
+            providerType: this.getProviderType(),
+            chatId,
+            classification: processedMemory.classification,
+            importance: processedMemory.importance,
+            entitiesCount: processedMemory.entities.length,
+            relationshipsCount: processedMemory.relatedMemories?.length || 0,
+          });
+        }
+
+      } finally {
+        // Restore original memory configuration
+        this.memoryConfig = originalMemoryConfig;
+      }
 
       const memoryDuration = Date.now() - memoryStartTime;
       const totalRequests = this.metrics.totalRequests;
       this.metrics.averageMemoryProcessingTime =
         (this.metrics.averageMemoryProcessingTime * (totalRequests - 1) + memoryDuration) / totalRequests;
-      this.metrics.memoryRecordingSuccess++;
-
-      logInfo('Chat memory processed', {
-        component: 'UnifiedLLMProvider',
-        providerType: this.getProviderType(),
-        chatId,
-        classification: processedMemory.classification,
-        importance: processedMemory.importance,
-        entitiesCount: processedMemory.entities.length,
-        relationshipsCount: processedMemory.relatedMemories?.length || 0,
-      });
 
     } catch (error) {
       this.metrics.memoryRecordingFailures++;
@@ -557,8 +605,8 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
   }
 
   /**
-   * Process embedding memory using the integrated MemoryAgent
-   */
+    * Process embedding memory using the integrated MemoryAgent
+    */
   private async processEmbeddingMemory(
     params: EmbeddingParams,
     response: EmbeddingResponse
@@ -584,38 +632,55 @@ export abstract class UnifiedLLMProvider implements ILLMProvider {
       // Generate chat ID for this embedding request
       const chatId = `embedding_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Use MemoryAgent for sophisticated processing of embedding request
-      const processedMemory = await this.memoryAgent.processConversation({
-        chatId,
-        userInput: `Embedding request: ${inputSummary}`,
-        aiOutput: `Generated ${response.data.length} embeddings with ${response.data[0]?.embedding?.length || 0} dimensions`,
-        context: {
-          sessionId: this.memoryConfig.sessionId || 'default-session',
-          conversationId: chatId,
-          modelUsed: params.model || 'text-embedding-3-small',
-          userPreferences: [],
-          currentProjects: [],
-          relevantSkills: [],
-        },
-      });
+      // Temporarily disable memory processing to prevent infinite recursion
+      const originalMemoryConfig = this.memoryConfig;
+      this.memoryConfig = {
+        ...this.memoryConfig,
+        enableEmbeddingMemory: false, // Disable to prevent recursion
+      };
 
-      // Store the processed memory using Memori's database manager
-      await this.memori.storeProcessedMemory(processedMemory, chatId);
+      try {
+        // Use MemoryAgent for sophisticated processing of embedding request
+        const processedMemory = await this.memoryAgent.processConversation({
+          chatId,
+          userInput: `Embedding request: ${inputSummary}`,
+          aiOutput: `Generated ${response.data.length} embeddings with ${response.data[0]?.embedding?.length || 0} dimensions`,
+          context: {
+            sessionId: this.memoryConfig.sessionId || 'default-session',
+            conversationId: chatId,
+            modelUsed: params.model || 'text-embedding-3-small',
+            userPreferences: [],
+            currentProjects: [],
+            relevantSkills: [],
+          },
+        });
+
+        // Store the processed memory using Memori's database manager
+        await this.memori.storeProcessedMemory(processedMemory, chatId);
+
+        this.metrics.memoryRecordingSuccess++;
+
+        // Only log occasionally to reduce noise
+        if (this.metrics.memoryRecordingSuccess % 10 === 0) {
+          logInfo('Embedding memory processed', {
+            component: 'UnifiedLLMProvider',
+            providerType: this.getProviderType(),
+            chatId,
+            classification: processedMemory.classification,
+            importance: processedMemory.importance,
+            entitiesCount: processedMemory.entities.length,
+          });
+        }
+
+      } finally {
+        // Restore original memory configuration
+        this.memoryConfig = originalMemoryConfig;
+      }
 
       const memoryDuration = Date.now() - memoryStartTime;
       const totalRequests = this.metrics.totalRequests;
       this.metrics.averageMemoryProcessingTime =
         (this.metrics.averageMemoryProcessingTime * (totalRequests - 1) + memoryDuration) / totalRequests;
-      this.metrics.memoryRecordingSuccess++;
-
-      logInfo('Embedding memory processed', {
-        component: 'UnifiedLLMProvider',
-        providerType: this.getProviderType(),
-        chatId,
-        classification: processedMemory.classification,
-        importance: processedMemory.importance,
-        entitiesCount: processedMemory.entities.length,
-      });
 
     } catch (error) {
       this.metrics.memoryRecordingFailures++;

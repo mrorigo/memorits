@@ -67,12 +67,15 @@ export class ConnectionPool {
       if (connection.isHealthy && this.isConnectionValid(connection)) {
         connection.lastUsedAt = new Date();
         connection.usageCount++;
-        logInfo('Reusing pooled connection', {
-          component: 'ConnectionPool',
-          providerType,
-          poolSize: pool.length,
-          usageCount: connection.usageCount,
-        });
+        // Only log every 10 reuses to reduce noise
+        if (connection.usageCount % 10 === 0) {
+          logInfo('Reusing pooled connection', {
+            component: 'ConnectionPool',
+            providerType,
+            poolSize: pool.length,
+            usageCount: connection.usageCount,
+          });
+        }
         return connection.provider;
       }
     }
@@ -91,11 +94,14 @@ export class ConnectionPool {
 
         pool.push(pooledConnection);
 
-        logInfo('Created new pooled connection', {
-          component: 'ConnectionPool',
-          providerType,
-          poolSize: pool.length,
-        });
+        // Only log new connections occasionally to reduce noise
+        if (Math.random() < 0.1) { // Log ~10% of new connections
+          logInfo('Created new pooled connection', {
+            component: 'ConnectionPool',
+            providerType,
+            poolSize: pool.length,
+          });
+        }
 
         return provider;
       } catch (error) {
@@ -238,7 +244,21 @@ export class ConnectionPool {
   ): Promise<ILLMProvider> {
     // Import dynamically to avoid circular dependencies
     const { LLMProviderFactory } = await import('../LLMProviderFactory');
-    return LLMProviderFactory.createProvider(providerType, config);
+
+    // Create config with connection pooling disabled to prevent infinite recursion
+    // The pooled providers should be "raw" providers that just make API calls
+    const poolConfig = {
+      ...config,
+      features: {
+        ...config.features,
+        performance: {
+          ...config.features?.performance,
+          enableConnectionPooling: false, // Disable pooling for pooled providers
+        }
+      }
+    };
+
+    return LLMProviderFactory.createProvider(providerType, poolConfig);
   }
 
   private isConnectionValid(connection: PooledConnection): boolean {

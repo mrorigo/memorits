@@ -22,9 +22,9 @@ export interface ILLMProvider {
   getConfig(): IProviderConfig;
 
   /**
-   * Initialize the provider
+   * Initialize the provider (synchronous)
    */
-  initialize(config: IProviderConfig): Promise<void>;
+  initialize(config: IProviderConfig): void;
 
   /**
    * Dispose of the provider and clean up resources

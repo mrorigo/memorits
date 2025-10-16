@@ -1,4 +1,4 @@
-import { ILLMProvider } from './ILLMProvider';
+import { UnifiedLLMProvider } from './UnifiedLLMProvider';
 import { IProviderConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
 import { ChatCompletionParams } from './types/ChatCompletionParams';
@@ -85,102 +85,95 @@ interface OllamaEmbeddingResponse {
 }
 
 /**
- * Ollama provider implementation
- * Implements the ILLMProvider interface for local Ollama models
+ * Ollama provider implementation using unified architecture
+ * Extends UnifiedLLMProvider to integrate performance optimizations and memory capabilities
  */
-export class OllamaProvider implements ILLMProvider {
-  private config: IProviderConfig;
+export class OllamaProvider extends UnifiedLLMProvider {
   private model: string;
-  private isInitialized = false;
   private baseUrl: string;
 
   constructor(config: IProviderConfig) {
-    this.config = config;
+    super(config);
     this.model = config.model || 'llama2:7b';
     this.baseUrl = config.baseUrl || 'http://localhost:11434';
+  }
+
+  /**
+   * Initialize the Ollama provider (no-op since we use HTTP requests)
+   */
+  protected initializeClient(): void {
+    // Ollama uses HTTP requests, no client initialization needed
+  }
+
+  /**
+   * Dispose of the Ollama provider (no-op since we use HTTP requests)
+   */
+  protected disposeClient(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
+   * Check if the Ollama service is healthy
+   */
+  protected checkClientHealth(): Promise<boolean> {
+    try {
+      // Check if Ollama service is running by listing local models
+      return fetch(`${this.baseUrl}/api/tags`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }).then(response => {
+        if (response.ok) {
+          return true;
+        }
+        // If tags endpoint fails, try the version endpoint
+        return fetch(`${this.baseUrl}/api/version`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }).then(versionResponse => versionResponse.ok).catch(() => false);
+      }).catch(() => false);
+    } catch (error) {
+      return Promise.resolve(false);
+    }
+  }
+
+  /**
+   * Get base diagnostics for Ollama
+   */
+  protected getBaseDiagnostics(): Promise<Record<string, any>> {
+    return Promise.resolve({
+      baseUrl: this.baseUrl,
+      hasApiKey: !!this.config.apiKey,
+      apiKey: this.config.apiKey || 'ollama-local',
+      localModel: true,
+    });
   }
 
   getProviderType(): ProviderType {
     return ProviderType.OLLAMA;
   }
 
-  getConfig(): IProviderConfig {
-    return { ...this.config };
-  }
-
-  async initialize(config: IProviderConfig): Promise<void> {
-    this.config = config;
-    this.model = config.model || 'llama2:7b';
-    if (config.baseUrl) {
-      this.baseUrl = config.baseUrl;
-    }
-    this.isInitialized = true;
-  }
-
-  async dispose(): Promise<void> {
-    this.isInitialized = false;
-  }
-
-  async isHealthy(): Promise<boolean> {
-    if (!this.isInitialized) {
-      return false;
-    }
-
-    try {
-      // Check if Ollama service is running by listing local models
-      const response = await fetch(`${this.baseUrl}/api/tags`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        return true;
-      }
-
-      // If tags endpoint fails, try the version endpoint
-      const versionResponse = await fetch(`${this.baseUrl}/api/version`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      return versionResponse.ok;
-    } catch (error) {
-      // Network errors or connection refused means Ollama is not running
-      return false;
-    }
-  }
-
-  async getDiagnostics(): Promise<ProviderDiagnostics> {
-    const isHealthy = await this.isHealthy();
-
-    return {
-      providerType: ProviderType.OLLAMA,
-      isInitialized: this.isInitialized,
-      isHealthy,
-      model: this.model,
-      metadata: {
-        baseUrl: this.baseUrl,
-        hasApiKey: !!this.config.apiKey,
-        apiKey: this.config.apiKey || 'ollama-local',
-        localModel: true,
-      },
-      timestamp: new Date(),
-    };
-  }
-
   getModel(): string {
     return this.model;
   }
 
-  async createChatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
-    if (!this.isInitialized) {
-      throw new Error('Provider not initialized');
-    }
+  getClient(): any {
+    return {
+      providerType: 'ollama',
+      model: this.model,
+      baseUrl: this.baseUrl,
+      local: true,
+    };
+  }
 
+  /**
+   * Execute the actual Ollama chat completion API call
+   * This is called by the base class when not using cache/pooling optimizations
+   */
+  protected async executeChatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
     try {
       // Convert messages to Ollama format
       const ollamaMessages = this.convertToOllamaMessages(params.messages);
@@ -246,11 +239,11 @@ export class OllamaProvider implements ILLMProvider {
     }
   }
 
-  async createEmbedding(params: EmbeddingParams): Promise<EmbeddingResponse> {
-    if (!this.isInitialized) {
-      throw new Error('Provider not initialized');
-    }
-
+  /**
+   * Execute the actual Ollama embedding API call
+   * This is called by the base class when not using cache/pooling optimizations
+   */
+  protected async executeEmbedding(params: EmbeddingParams): Promise<EmbeddingResponse> {
     try {
       const inputText = Array.isArray(params.input) ? params.input[0] : params.input;
 
@@ -300,15 +293,6 @@ export class OllamaProvider implements ILLMProvider {
       }
       throw new Error(`Ollama embeddings request failed: ${String(error)}`);
     }
-  }
-
-  getClient(): any {
-    return {
-      providerType: 'ollama',
-      model: this.model,
-      baseUrl: this.baseUrl,
-      local: true,
-    };
   }
 
   /**
