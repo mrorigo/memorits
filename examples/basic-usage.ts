@@ -11,11 +11,11 @@ async function basicUsageExample(): Promise<void> {
   console.log('🚀 Starting Basic MemoriAI Usage Example');
 
   const ai = new MemoriAI({
-    databaseUrl: 'file:./memories.db',
+    databaseUrl: 'file:./memori.db',
     apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
-    baseUrl: 'http://localhost:11434/v1', 
-    model: 'gemma3:4b'
-    // Everything else is automatic!
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'gemma3:4b',
+    mode: 'automatic'
   });
 
   try {

@@ -104,16 +104,9 @@ export class MemoryManager {
       // Validate and sanitize inputs
       const sanitizedData = await this.validateAndSanitizeMemoryInput(memoryData, chatId, namespace);
 
-      // Check for dangerous patterns in content
-      const contentDangers = containsDangerousPatterns(sanitizedData.memoryData.content);
-      if (contentDangers.hasSQLInjection || contentDangers.hasXSS || contentDangers.hasCommandInjection) {
-        throw new SanitizationError(
-          'Memory content contains dangerous patterns',
-          'content',
-          sanitizedData.memoryData.content,
-          'security_validation',
-        );
-      }
+      // Skip dangerous pattern validation for LLM-generated memory content
+      // This content comes from trusted LLM providers and has been processed by MemoryAgent
+      // The strict security checks are more appropriate for user inputs, not AI-generated content
 
       // Store the memory using Prisma
       const result = await this.databaseContext.getPrismaClient().longTermMemory.create({

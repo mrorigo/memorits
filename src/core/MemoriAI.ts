@@ -724,16 +724,15 @@ export class MemoriAI {
   }
 
   /**
-   * Build Memori configuration from simple config
+   * Build Memori configuration from simple config with mode support
    */
-  private buildMemoriConfig(userConfig: MemoriAIConfig): Partial<MemoriConfig> {
+  private buildMemoriConfig(userConfig: MemoriAIConfig): MemoriAIConfig {
     return {
       databaseUrl: userConfig.databaseUrl,
       apiKey: userConfig.apiKey,
       model: userConfig.model || this.getDefaultModel(),
       namespace: userConfig.namespace,
-      autoIngest: true, // Enable auto-ingestion by default
-      consciousIngest: false, // Disable conscious mode by default
+      mode: userConfig.mode || 'automatic', // Pass the mode to Memori
     };
   }
 
@@ -829,6 +828,9 @@ export class MemoriAI {
     });
 
     try {
+      // Enable Memori instance for memory operations
+      await this.memori.enable();
+
       // Create providers with optimized configuration
       await this.initializeProviders();
 
@@ -859,21 +861,20 @@ export class MemoriAI {
       initializing: this.initializing,
     });
 
-    if (!this.initialized) {
+    if (!this.initialized && !this.initializing) {
       logInfo('MemoriAI not initialized, calling initialize', {
         component: 'MemoriAI',
         sessionId: this.sessionId,
         initialized: this.initialized,
         initializing: this.initializing,
       });
-      this.initializeSync();
-    } else {
-      logInfo('MemoriAI already initialized in ensureInitialized', {
-        component: 'MemoriAI',
-        sessionId: this.sessionId,
-        initialized: this.initialized,
-        initializing: this.initializing,
-      });
+      this.initializing = true;
+      await this.initializeSync();
+    } else if (this.initializing) {
+      // Wait for initialization to complete if it's in progress
+      while (this.initializing) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
     }
   }
 
