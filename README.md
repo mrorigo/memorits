@@ -1,10 +1,10 @@
 <img src="docs/memorits.jpg">
 
-# 🎯 Memorits: Production-Ready Memory Engine for AI Applications
+# 🎯 Memorits: Memory Engine for AI Applications
 
-**Enterprise-grade conversational memory with AI-powered processing, advanced search, intelligent consolidation, and comprehensive monitoring.**
+**A type-safe memory engine for AI conversations with LLM-powered processing, search capabilities, and multi-provider support.**
 
-Memorits delivers enterprise-grade memory management for AI applications - featuring **sophisticated MemoryAgent integration** with AI-powered classification, importance scoring, entity extraction, and relationship detection across all LLM providers.
+Memorits provides memory management for AI applications with **MemoryAgent integration** for conversation processing, relationship detection, and multi-provider LLM support.
 
 <div align="center">
   <p>
@@ -44,27 +44,18 @@ Memorits delivers enterprise-grade memory management for AI applications - featu
 
 ## Why Memorits?
 
-**In enterprise AI applications, conversational context is mission-critical.** Every interaction represents institutional knowledge, compliance requirements, and business value that must be captured, preserved, and made instantly accessible across your entire organization.
+Memorits provides structured memory management for AI applications, helping maintain conversational context and enabling learning from interactions.
 
-### 🚀 Enterprise-Grade Capabilities
+### ✨ Key Features
 
-- **🏢 Enterprise-Ready Architecture**: Robust memory management with enterprise-scale reliability and performance
-- **📊 Comprehensive Observability**: Real-time monitoring, alerting, and analytics for complete operational visibility
-- **🔒 Enterprise Security**: Type-safe operations with comprehensive audit trails and data governance
-- **⚡ High-Performance Search**: Sub-millisecond query response across millions of memories with advanced indexing
-- **🔄 Intelligent Memory Lifecycle**: Automated consolidation, deduplication, and archival with rollback capabilities
-- **🛡️ Fault-Tolerant Operations**: Circuit breaker patterns, graceful degradation, and automatic recovery mechanisms
-- **📈 Advanced Analytics**: Performance dashboards, trend analysis, and predictive monitoring
-- **⚙️ Enterprise Configuration Management**: Dynamic configuration updates, version control, and policy enforcement
-
-### 🎯 Enterprise Use Cases
-
-- **Enterprise AI Assistants** requiring institutional memory and compliance tracking
-- **Customer Experience Platforms** that learn from every interaction across channels
-- **Knowledge Management Systems** that capture and organize organizational expertise
-- **Compliance & Audit Systems** that maintain complete conversation histories
-- **Research & Development Platforms** that build searchable knowledge bases from collaborations
-- **Customer Support Automation** that learns from every case and provides consistent responses
+- **🏗️ Clean Architecture**: Well-structured TypeScript implementation with domain-driven design
+- **🤖 MemoryAgent Processing**: LLM-powered conversation analysis and memory extraction
+- **🔍 Search Capabilities**: Multiple search strategies with filtering and relationship detection
+- **🔧 Multi-Provider Support**: Compatible with OpenAI, Anthropic, and Ollama providers
+- **💾 SQLite Backend**: Local database storage with Prisma ORM for reliability
+- **🔗 Memory Relationships**: Automatic detection of connections between memories
+- **⚡ Type Safety**: Full TypeScript coverage with runtime validation
+- **🛠️ OpenAI Drop-in**: Zero-code-change replacement for existing OpenAI integrations
 
 ---
 
@@ -101,43 +92,37 @@ const memories = await memori.searchMemories('TypeScript', {
 console.log(`Found ${memories.length} relevant memories`);
 ```
 
-### OpenAI Drop-in Replacement with AI-Powered Memory
+### OpenAI Drop-in Replacement with Memory Processing
 
-**Transform your OpenAI code with zero breaking changes and AI-powered memory processing:**
+**Transform your OpenAI code with zero breaking changes and integrated memory processing:**
 
 ```typescript
 import { MemoriOpenAI } from 'memorits';
 
-// Replace your OpenAI client - conversations auto-processed with MemoryAgent!
+// Replace your OpenAI client with memory-enabled version
 const client = new MemoriOpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
   model: 'gpt-4o-mini',
   memory: {
     enableChatMemory: true,
-    memoryProcessingMode: 'auto', // 🤖 AI-powered analysis enabled
+    memoryProcessingMode: 'auto',
     sessionId: 'my-app'
   }
 });
 
-// Use exactly like OpenAI SDK - now with sophisticated memory processing!
+// Use exactly like OpenAI SDK - conversations are automatically recorded
 const response = await client.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Remember this for later...' }]
 });
 
-// Every conversation is automatically processed with:
-// 🤖 AI-Powered Classification: 'essential', 'contextual', 'conversational'
-// ⭐ Intelligent Importance Scoring: 'critical', 'high', 'medium', 'low'
-// 🏷️ Advanced Entity Extraction: People, places, concepts, code elements
-// 🔗 Smart Relationship Detection: Memory connections and dependencies
-// 📊 Rich Metadata Generation: Provider, model, context, analytics
-
-// Search through AI-enhanced conversation history
+// Conversations are processed and stored for future reference
+// Search through recorded conversation history
 const memories = await client.memory.searchMemories('later');
-console.log(`Found ${memories.length} AI-processed memories`);
+console.log(`Found ${memories.length} recorded memories`);
 ```
 
-**That's it!** Your AI now has **enterprise-grade memory** with AI analysis and zero configuration.
+**That's it!** Your AI now has integrated memory management with zero configuration changes.
 
 ---
 
@@ -467,180 +452,59 @@ MEMORI_MIN_IMPORTANCE_LEVEL=medium
 
 ## Architecture Overview
 
-Memorits follows **Domain-Driven Design (DDD)** principles with a clear separation of concerns:
+Memorits follows a clean, modular architecture with clear separation of concerns:
 
-### 🏗️ **Architecture Overview**
+### 🏗️ **Architecture Structure**
 
 ```
 src/
-├── core/                           # 🏢 Core Business Logic
-│   ├── domain/                     # 🎯 Business Logic Layer (DDD Bounded Contexts)
-│   │   ├── conversation/           # Conversation Management Domain
-│   │   ├── memory/                 # Memory Processing & State Management Domain
-│   │   └── search/                 # Search Strategies & Filtering Domain
-│   ├── infrastructure/             # 🔧 External Concerns Layer
-│   │   ├── config/                 # Configuration & Logging Infrastructure
-│   │   ├── database/               # Database Access & Repository Infrastructure
-│   │   └── providers/              # External Service Provider Infrastructure
-│   ├── types/                      # 📋 Shared Type Definitions
-│   └── performance/                # ⚡ Performance Monitoring & Analytics
-├── integrations/                   # 🔗 External Integrations
+├── core/                           # Core Business Logic
+│   ├── domain/                     # Business Logic Layer
+│   │   ├── conversation/           # Conversation Management
+│   │   ├── memory/                 # Memory Processing & State Management
+│   │   └── search/                 # Search Strategies & Filtering
+│   ├── infrastructure/             # External Concerns Layer
+│   │   ├── config/                 # Configuration & Logging
+│   │   ├── database/               # Database Access & Repositories
+│   │   └── providers/              # External Service Providers
+│   ├── types/                      # Shared Type Definitions
+│   └── performance/                # Performance Monitoring
+├── integrations/                   # External Integrations
 │   └── openai-dropin/              # OpenAI Drop-in Replacement
-└── index.ts                        # 🚪 Main Entry Point
+└── index.ts                        # Main Entry Point
 ```
 
-### 🏢 **Domain Layer** (`src/core/domain/`)
-- **Memory Domain**: Memory processing, classification, consolidation, and state management
-- **Search Domain**: Search strategies, filtering, relationship processing, and indexing
-- **Conversation Domain**: Chat history and conversation management
-
-### 🔧 **Infrastructure Layer** (`src/core/infrastructure/`)
-- **Database Layer**: Prisma ORM, SQLite backend, repositories, and data access objects
-- **Provider Layer**: Multi-provider LLM integration supporting OpenAI, Anthropic, Ollama, and extensible architecture
-- **Configuration Layer**: Winston logging, configuration management, and utilities
-
-### 🔗 **Integration Layer** (`src/integrations/`)
-- External system integrations (OpenAI drop-in replacement, etc.)
-
-### 🎯 **Domain-Driven Design Benefits**
-
-**🏢 Clear Business Focus**
-- **🎯 Domain-Centric Organization**: Business logic organized by bounded contexts (Memory, Search, Conversation)
-- **🔒 Ubiquitous Language**: Consistent terminology between business logic and implementation
-- **📋 Explicit Business Rules**: Domain models enforce business invariants and validation
-
-**🔧 Technical Excellence**
-- **⚡ Enhanced Testability**: Pure domain logic testable without infrastructure dependencies
-- **🔄 Infrastructure Independence**: Business rules isolated from technical implementation details
-- **🧪 Focused Testing**: Each bounded context can be tested in isolation with mocked dependencies
-
-**🚀 Operational Advantages**
-- **🔧 Easier Maintenance**: Changes in one domain don't cascade to unrelated areas
-- **👥 Better Team Organization**: Teams can own specific domains without conflicts
-- **📈 Scalable Architecture**: Each domain can evolve independently as business needs grow
+### 🏢 **Core Components**
+- **Memory Processing**: Conversation analysis and structured memory extraction
+- **Search System**: Multiple search strategies with filtering capabilities
+- **Provider Integration**: Support for multiple LLM providers
+- **Data Storage**: SQLite database with Prisma ORM for reliable storage
 
 ---
 
 ## Key Features
 
-### 🔍 Advanced Search & Filtering
+### 🔍 Search & Memory Processing
 
-- **Importance-based filtering**: Prioritize critical, high, medium, or low importance memories
-- **Category filtering**: Filter by essential, contextual, conversational, reference, personal, or conscious-info
-- **Temporal filtering**: Time-based search with natural language expressions ("yesterday", "last week", "2 hours ago")
-- **Time range queries**: Specify exact date ranges or relative time windows for precise temporal filtering
-- **Pattern matching**: Find recurring events and temporal patterns ("daily standup", "weekly review")
-- **Metadata inclusion**: Get rich context with timestamps, sources, and relationships
-- **Full-text search**: Lightning-fast search across all memory content
-- **Filter Expressions**: Advanced boolean logic with field comparisons, ranges, and operators
-- **Multi-Strategy Search**: Intelligent orchestration of FTS5, LIKE, semantic, and relationship search strategies
-- **Relationship-based Search**: Find memories connected through relationship graphs with traversal capabilities
+- **MemoryAgent Integration**: LLM-powered conversation analysis for structured memory extraction
+- **Relationship Detection**: Automatic identification of memory connections and dependencies
+- **Multi-Strategy Search**: Support for different search approaches with filtering capabilities
+- **Memory Consolidation**: Duplicate detection and merging with transaction safety
+- **State Management**: Processing state tracking for memory workflows
 
-### 🛡️ Enterprise-Grade Type Safety
+### 🔧 Provider Integration
 
-- **100% TypeScript coverage** with compile-time validation
-- **15+ Clean Interfaces** replacing inline types for better maintainability
-- **Self-documenting APIs** with clear method signatures
-- **Zod validation** for runtime type checking
-- **Prisma ORM** for type-safe database operations
+- **Multi-Provider Support**: Compatible with OpenAI, Anthropic, and Ollama providers
+- **OpenAI Drop-in Replacement**: Zero-code-change integration for existing OpenAI applications
+- **Unified Configuration**: Single configuration interface across all supported providers
+- **Type-Safe Operations**: Full TypeScript coverage with runtime validation
 
-### 🤖 Multi-Provider LLM Integration
+### 💾 Data Management
 
-- **Universal drop-in replacement** supporting OpenAI, Anthropic, Ollama, and custom providers
-- **AI-powered memory processing** with sophisticated MemoryAgent integration
-- **Advanced entity extraction** and relationship detection across all providers
-- **Intelligent importance scoring** and classification using AI analysis
-- **Unified architecture** - single MemoryAgent implementation serves all providers
+- **SQLite Backend**: Local database storage with Prisma ORM
+- **Structured Storage**: Organized storage of conversations, memories, and relationships
+- **Memory Lifecycle**: Processing, storage, and retrieval of conversational data
 
-### ⚡ Performance Optimized
-
-- **SQLite backend** for fast local development and testing
-- **Optimized queries** with proper indexing and relationships
-- **Memory-efficient processing** for large conversation histories
-- **Background processing** for non-blocking memory ingestion
-
-### 🔗 Memory Relationships & Consolidation
-
-- **Relationship Extraction**: Automatically identify continuation, reference, related, superseding, and contradictory relationships between memories
-- **Relationship Confidence Scoring**: Calculate relationship strength and confidence using semantic similarity, temporal proximity, and entity overlap
-- **Intelligent Consolidation**: Detect and merge duplicate memories with transaction-safe operations
-- **Data Merging**: Intelligently combine entities, keywords, and metadata from duplicate memories
-- **Consolidation Tracking**: Maintain detailed history of consolidation operations with rollback capabilities
-- **Memory Processing States**: Comprehensive state tracking for memory processing workflows with validation and history
-
-### 📊 Search Index Management
-
-- **Automated Health Monitoring**: Continuous monitoring of search index health with corruption detection
-- **Index Optimization**: Automated optimization with merge, compact, rebuild, and vacuum operations
-- **Performance Analytics**: Detailed performance metrics including query time, throughput, and memory usage
-- **Backup & Recovery**: Automated index backups with integrity verification and corruption recovery
-- **Maintenance Scheduling**: Configurable automated maintenance with health checks, optimization, and backup schedules
-
----
-
-## Enterprise Features
-
-### 🏢 Production-Ready Architecture
-
-**Built for Enterprise Scale and Reliability**
-
-- **High Availability**: Fault-tolerant design with automatic failover and recovery mechanisms
-- **Horizontal Scalability**: Database-level scaling with read replicas and connection pooling
-- **Resource Optimization**: Memory-efficient processing with configurable buffer management
-- **Background Processing**: Non-blocking operations with intelligent queue management
-- **Unified Memory Processing**: Single MemoryAgent implementation across all LLM providers
-
-### 📊 Enterprise Observability
-
-**Comprehensive Monitoring and Alerting**
-
-- **Real-time Dashboards**: Live performance metrics and system health visualization
-- **Custom Alerting**: Configurable thresholds with multiple notification channels
-- **Performance Analytics**: Historical trend analysis with predictive insights
-- **Audit Trails**: Complete operation history with compliance reporting
-- **System Health Checks**: Automated diagnostics with actionable recommendations
-
-### 🔒 Enterprise Security & Compliance
-
-**Production-Grade Security and Governance**
-
-- **Data Sanitization**: Comprehensive input validation and XSS/SQL injection prevention
-- **Access Control**: Namespace-based isolation with granular permission management
-- **Encryption Ready**: Secure data handling with encryption hooks for sensitive environments
-- **Compliance Logging**: Detailed audit trails for regulatory compliance (GDPR, HIPAA, SOX)
-- **Data Retention**: Configurable retention policies with automated archival
-
-### ⚙️ Enterprise Configuration Management
-
-**Advanced Configuration for Production Environments**
-
-- **Environment-Based Config**: Separate configurations for dev/staging/production
-- **Configuration Templates**: Reusable configuration patterns for different deployment scenarios
-- **Runtime Configuration**: Hot-swapping of settings without service restart
-- **Configuration Validation**: Schema-based validation with detailed error reporting
-- **Backup & Recovery**: Automated configuration backups with rollback capabilities
-
-### 🛡️ Enterprise Error Handling
-
-**Robust Error Management for Critical Applications**
-
-- **Circuit Breaker Pattern**: Automatic failure detection and graceful degradation
-- **Strategy-Specific Recovery**: Individual error handling per search strategy
-- **Error Classification**: Intelligent categorization of errors by severity and type
-- **Recovery Automation**: Self-healing capabilities with configurable retry policies
-- **Error Context**: Enhanced debugging information for rapid issue resolution
-
-### 📈 Performance & Monitoring
-
-**Enterprise-Grade Performance Optimization**
-
-- **Performance Baselines**: Automated performance benchmarking and regression detection
-- **Load Testing Support**: Built-in load testing utilities for capacity planning
-- **Memory Profiling**: Detailed memory usage analysis and leak detection
-- **Query Optimization**: Automatic query plan analysis and optimization suggestions
-- **Caching Strategies**: Multi-level caching with intelligent cache invalidation
-
----
 
 ## Real-World Example
 
@@ -809,7 +673,7 @@ This TypeScript port maintains compatibility with the original Apache License 2.
 
 <div align="center">
   <p>
-    <strong>🚀 Ready to give your AI enterprise-grade memory?</strong>
+    <strong>🚀 Ready to add memory to your AI applications?</strong>
   </p>
   <p>
     <a href="#quick-start">Get Started</a> •
@@ -817,6 +681,6 @@ This TypeScript port maintains compatibility with the original Apache License 2.
     <a href="https://npmjs.com/package/memorits">Install from NPM</a>
   </p>
   <p>
-    <strong>🏢 Enterprise-grade • Production-designed • Mission-capable</strong>
+    <strong>Type-safe • Well-architected • Production-ready</strong>
   </p>
 </div>

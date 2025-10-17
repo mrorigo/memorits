@@ -3,9 +3,9 @@
 ## Core Architecture
 - **Memori Class**: Main memory management system with **MemoryAgent integration**
 - **Manager Pattern**: Specialized managers for different operations
-- **Search Strategies**: Multiple search algorithms with automatic selection
+- **Search Strategies**: Multiple search algorithms with filtering support
 - **Configuration**: Environment-based configuration with runtime updates
-- **MemoryAgent Processing**: **AI-powered classification, importance scoring, entity extraction, and relationship detection**
+- **MemoryAgent Processing**: **LLM-powered conversation analysis and memory extraction**
 
 ## Essential Setup
 
@@ -36,7 +36,7 @@ MEMORI_CONSCIOUS_INGEST=false
 
 ### Store Conversations with MemoryAgent Processing
 ```typescript
-// Record conversation for AI-powered memory processing
+// Record conversation for LLM-powered memory processing
 const chatId = await memori.recordConversation(
   'User question or statement',
   'AI response or action taken',
@@ -47,37 +47,37 @@ const chatId = await memori.recordConversation(
   }
 );
 
-// MemoryAgent automatically processes with:
-// 🤖 AI-Powered Classification: 'essential', 'contextual', 'conversational'
-// ⭐ Intelligent Importance Scoring: 'critical', 'high', 'medium', 'low'
-// 🏷️ Advanced Entity Extraction: People, places, concepts, code elements
-// 🔗 Smart Relationship Detection: Memory connections and dependencies
-// 📊 Rich Metadata Generation: Provider, model, context, analytics
+// MemoryAgent processes conversations with:
+// 🤖 LLM-Powered Classification: 'essential', 'contextual', 'conversational'
+// ⭐ Importance Scoring: 'critical', 'high', 'medium', 'low'
+// 🏷️ Entity Extraction: People, places, concepts, code elements
+// 🔗 Relationship Detection: Memory connections and dependencies
+// 📊 Metadata Generation: Provider, model, context, analytics
 ```
 
-### Search Memories with AI-Enhanced Results
+### Search Memories with LLM-Enhanced Results
 ```typescript
-// Basic search with MemoryAgent-powered results
+// Basic search with processed memory results
 const memories = await memori.searchMemories('query text', {
   limit: 5,
   minImportance: 'medium',
   categories: ['essential', 'contextual']
 });
 
-// Each result includes AI-powered enhancements:
-// 🤖 Classification: AI-categorized as 'essential', 'contextual', etc.
-// ⭐ Importance: AI-scored as 'critical', 'high', 'medium', 'low'
+// Each result includes processed enhancements:
+// 🤖 Classification: Categorized as 'essential', 'contextual', etc.
+// ⭐ Importance: Scored as 'critical', 'high', 'medium', 'low'
 // 🏷️ Entities: Extracted people, places, concepts, code elements
 // 🔗 Relationships: Detected connections to other memories
-// 📊 Metadata: Rich context and analytics
+// 📊 Metadata: Context and analytics
 
-// Advanced filtering with AI-enhanced metadata
+// Advanced filtering with metadata
 const filtered = await memori.searchMemories('specific topic', {
   filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
   includeMetadata: true
 });
 
-// Access AI-generated insights
+// Access processed insights
 filtered.forEach(memory => {
   console.log(`Category: ${memory.classification.category} (${memory.classification.confidence})`);
   console.log(`Entities: ${memory.entities.map(e => e.value).join(', ')}`);
@@ -99,35 +99,35 @@ const fts5Results = await memori.searchMemoriesWithStrategy(
 const recentResults = await memori.searchRecentMemories(5, true);
 ```
 
-## MemoryAgent AI-Powered Features
+## MemoryAgent LLM-Powered Features
 
-### 🤖 **Advanced Memory Processing Capabilities**
+### 🤖 **Memory Processing Capabilities**
 
-The MemoryAgent integration provides enterprise-grade AI-powered memory processing:
+The MemoryAgent integration provides LLM-powered memory processing:
 
-#### **AI-Powered Classification**
+#### **LLM-Powered Classification**
 - **Automatic Categorization**: Memories classified as 'essential', 'contextual', 'conversational', 'reference', 'personal', or 'conscious-info'
-- **Confidence Scoring**: AI provides confidence levels for each classification decision
-- **Dynamic Adaptation**: Classification adapts based on conversation context and user intent
+- **Confidence Scoring**: Processing provides confidence levels for each classification decision
+- **Context Adaptation**: Classification based on conversation context and content
 
-#### **Intelligent Importance Scoring**
+#### **Importance Scoring**
 - **Multi-Level Importance**: 'critical', 'high', 'medium', 'low' importance levels
-- **Context-Aware Assessment**: Importance determined by content significance, urgency, and relevance
-- **Business Logic Integration**: Importance scoring considers business context and user preferences
+- **Content-Based Assessment**: Importance determined by content significance and relevance
+- **Context Consideration**: Importance scoring considers conversation context
 
-#### **Advanced Entity Extraction**
+#### **Entity Extraction**
 - **Named Entity Recognition**: Automatic extraction of people, organizations, locations, dates
 - **Technical Entity Detection**: Identification of code elements, APIs, frameworks, technologies
-- **Concept Recognition**: Extraction of abstract concepts, methodologies, and domain knowledge
+- **Concept Recognition**: Extraction of abstract concepts and domain knowledge
 - **Confidence Scoring**: Each extracted entity includes confidence scores for reliability
 
-#### **Smart Relationship Detection**
+#### **Relationship Detection**
 - **Continuation Relationships**: Identifies follow-up discussions and related topics
 - **Reference Relationships**: Links to previously mentioned concepts or decisions
 - **Contradiction Detection**: Flags conflicting information across conversations
 - **Superseding Relationships**: Tracks when new information replaces previous knowledge
 
-#### **Rich Memory Metadata**
+#### **Memory Metadata**
 ```typescript
 // Example of MemoryAgent-enhanced memory structure
 const enhancedMemory = {
@@ -294,37 +294,37 @@ const restored = await memori.restoreIndexFromBackup(backup.id);
 
 ## OpenAI Integration with MemoryAgent
 
-### Drop-in Replacement with AI-Powered Memory
+### Drop-in Replacement with Memory Processing
 ```typescript
 import { MemoriOpenAI } from 'memorits/integrations/openai-dropin/client';
 
-// Replace OpenAI with zero code changes using MemoryAgent processing
+// Replace OpenAI with zero code changes and memory processing
 const client = new MemoriOpenAI({
   apiKey: 'your-api-key',
   model: 'gpt-4o-mini',
   memory: {
     enableChatMemory: true,
-    memoryProcessingMode: 'auto', // 🤖 MemoryAgent AI processing enabled
+    memoryProcessingMode: 'auto',
     sessionId: 'my-app'
   }
 });
 
-// Conversations automatically processed with MemoryAgent AI analysis
+// Conversations automatically recorded and processed
 const response = await client.chat.completions.create({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Remember this...' }]
 });
 
-// Every conversation receives AI-powered processing:
-// 🤖 Classification: AI-categorized as 'essential', 'contextual', etc.
-// ⭐ Importance Scoring: AI-determined 'critical', 'high', 'medium', 'low'
+// Every conversation receives processing:
+// 🤖 Classification: Categorized as 'essential', 'contextual', etc.
+// ⭐ Importance Scoring: 'critical', 'high', 'medium', 'low'
 // 🏷️ Entity Extraction: Automatic identification of key concepts
-// 🔗 Relationship Detection: Smart connection mapping
-// 📊 Rich Metadata: Comprehensive context and analytics
+// 🔗 Relationship Detection: Connection mapping
+// 📊 Rich Metadata: Context and analytics
 
-// Access AI-enhanced memory directly
+// Access processed memory directly
 const memories = await client.memory.searchMemories('important');
-console.log(`Found ${memories.length} AI-processed memories`);
+console.log(`Found ${memories.length} processed memories`);
 ```
 
 ### Factory Pattern

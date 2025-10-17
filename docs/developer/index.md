@@ -1,26 +1,20 @@
 # Memorits Developer Documentation
 
-Welcome to the comprehensive developer documentation for **Memorits** - the Type-Safe Memory Engine for AI Conversations. This guide is designed for developers who want to build sophisticated AI agents with advanced search strategies and persistent memory capabilities.
-
-## 🎯 What is Memorits?
-
-Memorits transforms AI conversations from fleeting interactions into persistent, searchable knowledge bases. It provides AI applications with **perfect recall** - automatically capturing, classifying, and retrieving conversational context with enterprise-grade type safety and lightning-fast search capabilities.
+Welcome to the developer documentation for **Memorits** - a memory engine for AI conversations. This guide helps developers build AI applications with conversation processing, search capabilities, and multi-provider support.
 
 ### Key Features
 
-- **🔍 Perfect Recall**: Never lose context again with surgical-precision search
-- **🎯 Intelligent Classification**: Automatic categorization by importance and type
-- **⚡ Lightning Fast**: Sub-millisecond search using optimized SQLite backend
-- **🔒 Type Safe**: 100% TypeScript coverage with compile-time validation
-- **🧠 Unified Memory API**: Single `MemoriAI` class with multiple processing modes
-- **🎨 Multiple Search Strategies**: LIKE, recent, temporal, and metadata filtering strategies
-- **🤖 Multi-Provider Integration**: Support for OpenAI, Anthropic, Ollama, and custom providers
-- **⚙️ Advanced Configuration**: Runtime configuration with persistence and validation
-- **🛡️ Enterprise Error Handling**: Circuit breaker patterns and comprehensive error recovery
-- **📈 Performance Monitoring**: Real-time dashboards and system health monitoring
-- **🔗 Memory Relationship Processing**: LLM-powered relationship extraction and analysis
-- **🔄 Intelligent Consolidation**: Multi-tier safety validation and quality scoring
-- **📊 Search Index Management**: Automated optimization and health monitoring
+- **🔍 Conversation Processing**: LLM-powered conversation analysis and memory extraction
+- **🎯 Memory Classification**: Automatic categorization by importance and type
+- **⚡ SQLite Backend**: Local database storage with Prisma ORM for reliability
+- **🔒 Type Safe**: Full TypeScript coverage with runtime validation
+- **🧠 Unified API**: Single `MemoriAI` class with multiple processing modes
+- **🎨 Search Strategies**: Multiple search approaches with filtering capabilities
+- **🤖 Multi-Provider Support**: Compatible with OpenAI, Anthropic, Ollama, and custom providers
+- **⚙️ Configuration Management**: Runtime configuration with environment variable support
+- **🛡️ Error Handling**: Comprehensive error handling and logging
+- **🔗 Memory Relationships**: Automatic detection of memory connections
+- **🔄 Memory Consolidation**: Duplicate detection and merging capabilities
 
 ## 🚀 Quick Start
 
@@ -198,4 +192,4 @@ This project is licensed under the Apache License 2.0. See the [LICENSE](../../.
 
 ---
 
-**Ready to give your AI perfect memory?** Start building with Memorits today! 🎯
+**Ready to add memory to your AI applications?** Start building with Memorits today! 🎯

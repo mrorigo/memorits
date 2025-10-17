@@ -4,29 +4,24 @@ This file provides guidance to agents when working with code in this repository.
 
 ## Build/Lint/Test Commands
 
-- Run single test: `npm test -- --testPathPatterns=tests/unit/core/MemoryAgent.test.ts` (uses custom Jest config with ts-jest)
-- Lint with auto-fix: `npm run lint:fix` (applies different rules for tests, examples, and main code)
-- Database commands: `npm run prisma:push` followed by `npm run prisma:generate` (required sequence)
-- Example scripts: Use `npm run example:*` (tsx-based execution, not standard node)
-- Search index management: `npm run index:health`, `npm run index:optimize`, `npm run index:backup` for advanced search features
+- Run tests: `npm test` (uses Jest with TypeScript support)
+- Lint with auto-fix: `npm run lint:fix` (applies ESLint rules)
+- Database setup: `npm run prisma:push` followed by `npm run prisma:generate` (required sequence)
+- Example scripts: Use `npm run example:*` (tsx-based execution)
+- Type checking: `npx tsc --noEmit` (validate types without building)
 
 ## Code Style Guidelines
 
 - **Import strategy**: Use domain-driven imports (e.g., `../../infrastructure/config/Logger`, `../types/models`)
-- **Error handling**: Always use structured logging with component context (see src/core/infrastructure/config/Logger.ts patterns)
-- **Type definitions**: Use comprehensive interface system (src/core/types/models.ts) for clean APIs + Zod schemas for runtime validation
-- **Interface-first**: All public APIs should use clean interfaces from models.ts for better IDE support
-- **Module system**: CommonJS required (non-standard for TypeScript, affects import/export patterns)
-- **DDD Architecture**: Follow domain/infrastructure separation - business logic in domain/, technical concerns in infrastructure/
-- **MemoryAgent Integration**: Leverage MemoryAgent for AI-powered memory processing across all LLM providers
-- **AI-Powered Classification**: Use MemoryAgent for automatic categorization and importance scoring
-- **Entity Extraction**: Implement entity extraction patterns for people, places, concepts, and code elements
-- **Relationship Detection**: Follow MemoryAgent patterns for smart relationship identification and mapping
-- **Memory relationships**: Follow established patterns for relationship extraction, confidence scoring, and validation
-- **Search strategies**: Implement proper error handling, timeout management, and fallback mechanisms for all search strategies
-- **State management**: Use ProcessingStateManager for memory workflow states with proper transition validation
-- **Index management**: Follow SearchIndexManager patterns for optimization, backup, and health monitoring
-- **Temporal filtering**: Use TemporalFilterOptions interface for time-based search with natural language expressions
+- **Error handling**: Use structured logging with component context (see Logger.ts patterns)
+- **Type definitions**: Use interface system from types/models.ts with Zod validation
+- **Interface-first**: Public APIs should use clean interfaces for IDE support
+- **Module system**: CommonJS required for compatibility
+- **Architecture**: Follow domain/infrastructure separation (business logic in domain/, technical concerns in infrastructure/)
+- **MemoryAgent**: Use for conversation processing and memory extraction
+- **Search strategies**: Implement with proper error handling and timeout management
+- **State management**: Use ProcessingStateManager for memory workflow states
+- **Provider integration**: Support for OpenAI, Anthropic, and Ollama providers
 
 ## Project-Specific Patterns
 
