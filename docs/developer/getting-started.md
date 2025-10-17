@@ -1,203 +1,140 @@
 # Getting Started with Memorits
 
-This guide will get you up and running with Memorits in minutes. Follow these simple steps to add memory capabilities to your AI application.
+This guide walks you from install to your first memory-backed completion using the real APIs provided in this repository. Everything below references the shipped TypeScript sources under `src/`.
 
 ## Prerequisites
 
-- **Node.js 18+** - For running Memorits
-- **LLM Provider** - OpenAI API key, Anthropic API key, or Ollama for local models
-- **Basic TypeScript Knowledge** - To understand the examples
+- Node.js **18.0.0 or newer** (ESM and fetch support are required).
+- SQLite 3.x (bundled with Prisma, but ensure the binary is available on your platform).
+- One provider credential:
+  - `OPENAI_API_KEY` for OpenAI / Azure OpenAI.
+  - `ANTHROPIC_API_KEY` for Anthropic.
+  - Running Ollama with the OpenAI-compatible server enabled (`ollama serve` exposes `http://localhost:11434/v1`).
+- Basic familiarity with TypeScript async/await.
 
-## Installation
-
-Install Memorits using npm:
+## 1. Install the package
 
 ```bash
 npm install memorits
 ```
 
-## Quick Start (5 minutes)
+Memorits ships compiled JS and type definitions from `dist/`.
 
-### 1. Basic Setup
+## 2. Configure environment
 
-```typescript
-import { MemoriAI } from 'memorits';
+The `ConfigManager` pulls configuration from environment variables and sanitises them for you. The recommended `.env` entries are:
 
-// Create MemoriAI instance (handles everything directly)
-const ai = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key',
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'
-});
-
-// Use directly - no wrapper needed
-const response = await ai.chat({
-  messages: [{ role: 'user', content: 'Hello! I am a software engineer who loves TypeScript.' }]
-});
-
-console.log('Response:', response.message.content);
-console.log('Memorits is ready!');
+```
+DATABASE_URL=file:./memori.db
+MEMORI_NAMESPACE=default
+MEMORI_AUTO_INGEST=true
+MEMORI_CONSCIOUS_INGEST=false
+MEMORI_ENABLE_RELATIONSHIP_EXTRACTION=true
+OPENAI_API_KEY=sk-...
+# For Ollama set OPENAI_BASE_URL=http://localhost:11434/v1 and leave api key empty.
 ```
 
-### 2. Search Memories
+Boolean values such as `MEMORI_AUTO_INGEST` are parsed with safe `true`/`false` handling; any other value triggers a validation error so typos surface early.
 
-```typescript
-// Search for relevant memories
-const memories = await ai.searchMemories('TypeScript', {
-  limit: 5
-});
+## 3. Prepare the database
 
-console.log(`Found ${memories.length} relevant memories`);
-```
-
-### 3. Advanced Memory Search
-
-```typescript
-// Search for relevant memories with filtering
-const relevantMemories = await ai.searchMemories('TypeScript', {
-  limit: 5,
-  minImportance: 'medium'
-});
-
-console.log(`Found ${relevantMemories.length} relevant memories`);
-```
-
-### 4. Multiple Providers (Optional)
-
-Use different AI providers with the same memory pool:
-
-```typescript
-import { MemoriAI } from 'memorits';
-
-// Create multiple MemoriAI instances with different providers
-const openaiAI = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'
-});
-
-const ollamaAI = new MemoriAI({
-  databaseUrl: 'file:./memori.db',  // Same database for shared memory
-  apiKey: 'ollama-local',
-  baseUrl: 'http://localhost:11434/v1',
-  model: 'llama2:7b',
-  provider: 'ollama',
-  mode: 'automatic'
-});
-
-// Both record to the same memory pool
-await openaiAI.chat({ messages: [{ role: 'user', content: 'From OpenAI' }] });
-await ollamaAI.chat({ messages: [{ role: 'user', content: 'From Ollama' }] });
-
-// Search across all conversations
-const memories = await openaiAI.searchMemories('AI');
-```
-
-## Configuration Options
-
-### Environment Variables (Recommended)
-
-Create a `.env` file in your project root:
+Memorits persists to SQLite via Prisma. Run the migration setup once before interacting with the library:
 
 ```bash
-# OpenAI Configuration
-OPENAI_API_KEY=your-openai-api-key-here
-
-# Memory Configuration
-DATABASE_URL=file:./memori.db
+npm run prisma:push
+npm run prisma:generate
 ```
 
-### Simple Configuration
+Both steps are required—the first synchronises the schema, the second emits the Prisma client used throughout `src/core/infrastructure/database`.
+
+## 4. Create your first MemoriAI instance
 
 ```typescript
 import { MemoriAI } from 'memorits';
 
 const ai = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'
+  databaseUrl: process.env.DATABASE_URL ?? 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY ?? 'sk-your-api-key',
+  provider: 'openai',             // optional; auto-detected for known key prefixes
+  model: 'gpt-4o-mini',           // default in ConfigManager, override here if needed
+  mode: 'automatic',              // automatic | manual | conscious
+  namespace: process.env.MEMORI_NAMESPACE ?? 'default'
 });
 ```
 
-## Memory Modes
+- **Automatic mode** records every `chat` call through `Memori.recordConversation`.
+- **Manual mode** skips auto-collection; call `ai.recordConversation(...)` yourself.
+- **Conscious mode** defers ingestion and lets `Memori.checkForConsciousContextUpdates()` promote memories later.
 
-### Automatic Mode (Default)
-
-**Best for**: Most applications that need automatic memory recording.
-
-```typescript
-const ai = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'  // Automatic memory recording and processing
-});
-```
-
-### Manual Mode
-
-**Best for**: Applications needing manual control over memory processing.
+## 5. Send a chat request and persist memory
 
 ```typescript
-const ai = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'manual'  // Manual control over memory recording
-});
-```
-
-### Conscious Mode
-
-**Best for**: Applications needing advanced background memory processing.
-
-```typescript
-const ai = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'conscious'  // Advanced background processing with human-like reflection
-});
-```
-
-## Testing Your Setup
-
-### 1. Use MemoriAI Directly
-
-```typescript
-// MemoriAI handles everything - no wrapper needed
-const response = await ai.chat({
+const reply = await ai.chat({
   messages: [
-    { role: 'user', content: 'I am building an AI assistant for developers' }
-  ]
+    { role: 'user', content: 'Please remember that launch day is next Friday.' }
+  ],
+  temperature: 0.2
 });
 
-console.log('Response:', response.message.content);
-console.log('Memories recorded automatically');
+console.log(reply.message.content);
 ```
 
-### 2. Search for Memories
+In automatic mode the conversation is summarised, scored, and written to SQLite immediately. All logging (see `src/core/infrastructure/config/Logger.ts`) includes the `MemoriAI` component tag so you can wire it into existing observability pipelines.
+
+## 6. Search stored memories
 
 ```typescript
-// Search for relevant memories
-const memories = await ai.searchMemories('AI assistant', {
-  limit: 5
+const results = await ai.searchMemories('launch day', {
+  limit: 5,
+  minImportance: 'medium',
+  includeMetadata: true
 });
 
-console.log('Found memories:', memories.length);
-memories.forEach(memory => {
-  console.log(`- ${memory.content?.substring(0, 100)}... (${memory.score})`);
+results.forEach(memory => {
+  console.log(`${memory.summary} -> importance: ${memory.importance}`);
 });
 ```
+
+`MemoriAI` exposes the simplified `SearchOptions` used inside `src/core/MemoriAI.ts`. For advanced search parameters (`temporalFilters`, `metadataFilters`, explicit strategy selection), instantiate `Memori` directly:
+
+```typescript
+import { Memori } from 'memorits';
+
+const memori = new Memori({
+  databaseUrl: 'file:./memori.db',
+  mode: 'conscious'
+});
+
+await memori.enable();
+
+const temporal = await memori.searchMemories('launch', {
+  limit: 10,
+  temporalFilters: {
+    relativeExpressions: ['last 7 days']
+  },
+  includeMetadata: true
+});
+```
+
+## 7. Clean up
+
+Always dispose providers and database connections when shutting down:
+
+```typescript
+await ai.close();
+```
+
+`MemoriAI.close()` disposes both the provider abstraction and the underlying `Memori` instance which in turn closes `DatabaseManager`.
+
+## 8. Validate the setup
+
+- **Type check**: `npx tsc --noEmit`
+- **Run tests**: `npm test`
+- **Smoke test**: `npm run example:basic`
+
+If you switch providers or adjust Prisma schema models, rerun `npm run prisma:push` followed by `npm run prisma:generate` to keep the generated client in sync.
+
+You are now ready to explore the deeper topics: memory modes, conscious processing, strategy-specific search, and provider integration. Continue with `basic-usage.md` for patterns you can lift directly into your project.
 
 ### 3. Verify Database
 

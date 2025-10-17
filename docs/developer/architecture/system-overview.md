@@ -1,484 +1,87 @@
-# System Overview: Memorits Architecture
+# System Overview
 
-This document provides a comprehensive overview of the Memorits system architecture, explaining how the TypeScript memory engine transforms AI conversations into persistent, searchable knowledge bases.
+Memorits follows a domain-driven architecture: domain logic lives separately from infrastructure, and the public API layers (`MemoriAI`, `Memori`, provider integrations) compose these building blocks. This document maps the folders in `src/` to their responsibilities so you can navigate the code confidently.
 
-## 🎯 System Purpose
-
-Memorits addresses the fundamental limitation of stateless AI conversations by providing **persistent memory capabilities** that transform ephemeral interactions into accumulated knowledge. The system automatically captures, classifies, and retrieves conversational context with enterprise-grade reliability and lightning-fast search capabilities.
-
-## 🏗️ High-Level Architecture
-
-### Core System Components
+## High-Level Layout
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Memorits System                          │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────┐ │
-│  │  Multi-     │  │  Memory     │  │  Search     │  │  Index  │ │
-│  │  Provider   │  │  Processing │  │  Engine     │  │  Mgmt   │ │
-│  │  Client     │  │  Engine     │  │             │  │         │ │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────┘ │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────┐ │
-│  │  Database   │  │  Memory     │  │  Advanced   │  │  Agent  │ │
-│  │  Manager    │  │  Agent      │  │  Filtering  │  │  System │ │
-│  │             │  │             │  │             │  │         │ │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────┘ │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │   SQLite    │  │  FTS5       │  │  Memory     │              │
-│  │  Database   │  │  Search     │  │  States     │              │
-│  │             │  │  Index      │  │  Tracking   │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
-└─────────────────────────────────────────────────────────────────┘
+src/
+├─ core/
+│  ├─ Memori.ts            // advanced API surface, orchestrates everything
+│  ├─ MemoriAI.ts          // simplified facade (chat + memory)
+│  ├─ domain/
+│  │  ├─ memory/           // MemoryAgent, ConsciousAgent, state managers
+│  │  └─ search/           // Strategies, configuration, relationship traversal
+│  ├─ infrastructure/
+│  │  ├─ database/         // Prisma-based management, search coordination
+│  │  ├─ providers/        // OpenAI/Anthropic/Ollama adapters + factory
+│  │  └─ config/           // ConfigManager, sanitisation, logger
+│  ├─ performance/         // Dashboard and analytics services
+│  └─ types/               // Zod schemas, models, enums
+├─ integrations/
+│  └─ openai-dropin/       // MemoriOpenAI drop-in client & factory
+└─ providers/              // Provider-specific helper docs (exported via docs)
 ```
 
-## 🔧 Core Components
-
-### 1. Multi-Provider Client (`MemoriOpenAI` & Provider Factory)
-
-**Universal LLM integration supporting OpenAI, Anthropic, Ollama, and custom providers with automatic memory recording.**
-
-```typescript
-// Zero breaking changes - existing OpenAI code works unchanged
-const openaiClient = new MemoriOpenAI('openai-api-key', {
-  enableChatMemory: true,
-  autoInitialize: true
-});
-
-// Multiple provider support with unified interface
-import { LLMProviderFactory, ProviderType } from '@memori/providers';
-
-const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
-  apiKey: 'anthropic-api-key',
-  model: 'claude-3-5-sonnet-20241022'
-});
-
-// Every conversation is automatically recorded across all providers
-const openaiResponse = await openaiClient.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: 'Remember this for later...' }]
-});
-
-// Search through conversation history across all providers
-const memories = await openaiClient.memory.searchMemories('later');
-```
-
-**Key Features:**
-- **100% API Compatibility**: Exact OpenAI SDK v5.x interface maintained
-- **Multi-Provider Support**: OpenAI, Anthropic, Ollama, and custom providers
-- **Transparent Recording**: Automatic conversation capture across all providers
-- **Provider Factory Pattern**: Unified LLMProviderFactory for provider management
-- **Streaming Support**: Complete memory capture for streaming responses
-- **Multiple Initialization Patterns**: Constructor, environment, database URL, advanced config
-
-### 2. Memory Processing Engine
-
-**Sophisticated conversation analysis and memory classification.**
-
-```typescript
-class MemoryAgent {
-  async processConversation(
-    userInput: string,
-    aiOutput: string,
-    context: ProcessingContext
-  ): Promise<ProcessedMemory> {
-    // 1. Content analysis and summarization
-    const summary = await this.summarizeContent(userInput, aiOutput);
-
-    // 2. Importance scoring
-    const importance = await this.calculateImportance(userInput, aiOutput);
-
-    // 3. Category classification
-    const category = await this.classifyCategory(userInput, aiOutput);
-
-    // 4. Entity and keyword extraction
-    const entities = await this.extractEntities(userInput, aiOutput);
-    const keywords = await this.extractKeywords(userInput, aiOutput);
-
-    return {
-      summary,
-      importance,
-      category,
-      entities,
-      keywords,
-      confidence: 0.9,
-      processingTime: Date.now() - startTime
-    };
-  }
-}
-```
-
-**Processing Modes:**
-- **Auto-Ingestion**: Automatic processing of all conversations
-- **Conscious Processing**: Background processing with human-like reflection
-- **Hybrid Mode**: Combination of both approaches
-
-### 3. Advanced Search Engine
-
-**Multi-strategy search with sophisticated filtering and ranking.**
-
-```typescript
-class SearchService {
-  private strategies: Map<SearchStrategy, ISearchStrategy> = new Map();
-
-  async searchMemories(query: SearchQuery): Promise<SearchResult[]> {
-    // 1. Query analysis and strategy selection
-    const analysis = this.analyzeQuery(query);
-    const strategies = this.selectOptimalStrategies(analysis);
-
-    // 2. Parallel strategy execution with error handling
-    const results = await this.executeStrategies(strategies, query);
-
-    // 3. Result merging, deduplication, and ranking
-    return this.mergeAndRankResults(results, query);
-  }
-}
-```
-
-**Search Strategies:**
-- **FTS5**: Full-text search with BM25 ranking (SQLite)
-- **LIKE**: Pattern-based fallback search
-- **Recent**: Time-based recent memory retrieval
-- **Category Filter**: Classification-based filtering
-- **Temporal Filter**: Time-based filtering with natural language
-- **Metadata Filter**: Advanced metadata-based queries
-- **Relationship Search**: Memory relationship graph traversal
-
-**Advanced Features:**
-- **Circuit Breaker Protection**: Failed strategies don't break the system
-- **Strategy Configuration Management**: Runtime configuration and tuning
-- **Performance Monitoring**: Comprehensive search metrics and analytics
-- **Error Recovery**: Automatic fallback and recovery mechanisms
-
-### 4. Manager Pattern (Database Layer)
-
-**Sophisticated manager-based architecture for database operations.**
-
-```typescript
-// DatabaseContext - owns Prisma lifecycle, metrics, health checks, and shared state
-const context = new DatabaseContext({
-  databaseUrl: 'file:./memori.db',
-  enablePerformanceMonitoring: true,
-});
-
-// DatabaseManager - main facade coordinating all specialized managers
-class DatabaseManager {
-  private readonly memoryManager = new MemoryManager(context);
-  private readonly searchManager = new SearchManager(context, this.ftsManager);
-  private readonly relationshipManager = new RelationshipManager(context);
-
-  async storeLongTermMemory(memory: ProcessedLongTermMemory, chatId: string, namespace: string) {
-    return this.memoryManager.storeLongTermMemory(memory, chatId, namespace);
-  }
-
-  async searchMemories(query: string, options: SearchOptions) {
-    return this.searchManager.searchMemories(query, options);
-  }
-}
-
-// BaseDatabaseService centralises sanitisation, metrics, and Prisma access
-abstract class BaseDatabaseService {
-  protected readonly prisma: PrismaClient;
-
-  protected constructor(protected readonly databaseContext: DatabaseContext) {
-    this.prisma = databaseContext.getPrismaClient();
-  }
-
-  protected sanitizeString(value: string, fieldName: string) {
-    return sanitizeString(value, { fieldName, allowNewlines: false, maxLength: 200 });
-  }
-
-  protected recordSuccess(operationType: string, startTime: number, recordCount?: number) {
-    this.databaseContext.recordOperationMetrics({ operationType, startTime, success: true, recordCount });
-  }
-}
-
-// MemoryManager - dedicated memory operations built on BaseDatabaseService
-class MemoryManager extends BaseDatabaseService {
-  constructor(context: DatabaseContext) {
-    super(context);
-  }
-
-  async storeLongTermMemory(memoryData: ProcessedLongTermMemory, chatId: string, namespace: string): Promise<string> {
-    const start = Date.now();
-
-    try {
-      const sanitizedNamespace = this.sanitizeString(namespace, 'namespace');
-
-      const result = await this.prisma.longTermMemory.create({
-        data: {
-          ...memoryData,
-          namespace: sanitizedNamespace,
-          chatId: this.sanitizeString(chatId, 'chatId'),
-        },
-      });
-
-      this.recordSuccess('store_long_term_memory', start, 1);
-      return result.id;
-    } catch (error) {
-      this.databaseContext.recordOperationMetrics({
-        operationType: 'store_long_term_memory',
-        startTime: start,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  }
-}
-```
-
-**Manager Architecture Benefits:**
-- **Separation of Concerns**: Each manager handles specific domain responsibilities
-- **State Tracking Integration**: Built-in workflow state management across all operations
-- **Performance Monitoring**: Comprehensive metrics and analytics
-- **Error Recovery**: Sophisticated error handling with circuit breakers
-- **Namespace Isolation**: Multi-tenant support with logical separation
-
-### 5. Memory State Management
-
-**Comprehensive workflow state tracking for memory processing.**
-
-```typescript
-class MemoryProcessingStateManager {
-  async trackStateTransition(
-    memoryId: string,
-    fromState: ProcessingState,
-    toState: ProcessingState,
-    metadata: StateTransitionMetadata
-  ): Promise<void> {
-    // Validate state transition
-    this.validateTransition(fromState, toState);
-
-    // Record transition with full audit trail
-    await this.recordTransition({
-      memoryId,
-      fromState,
-      toState,
-      timestamp: new Date(),
-      metadata,
-      performedBy: metadata.agent || 'system'
-    });
-
-    // Update current state
-    await this.updateCurrentState(memoryId, toState);
-  }
-}
-```
-
-## 🔄 Data Flow Architecture
-
-### Conversation Processing Flow
-
-```
-1. User Input → 2. LLM Provider → 3. Memory Recording → 4. Processing → 5. Storage
-     ↓               ↓                    ↓              ↓            ↓
-  - Context      - Response         - Conversation   - LLM         - SQLite
-  - Session       - Streaming         - Metadata       - Analysis    - FTS5
-  - Metadata      - Complete          - Classification - Importance  - Indexes
-                  - Response
-```
-
-### Memory Retrieval Flow
-
-```
-1. Search Query → 2. Strategy Selection → 3. Parallel Execution → 4. Result Processing
-       ↓                 ↓                       ↓                    ↓
-    - Text Analysis   - Query Intent        - FTS5, LIKE,         - Deduplication
-    - Intent          - Optimal Strategies   - Category,           - Composite Scoring
-    - Extraction                             - Temporal Filters    - Ranking
-```
-
-### Background Processing Flow
-
-```
-Conscious Processing Agent
-       ↓
-1. Memory Discovery → 2. Duplicate Detection → 3. Consolidation → 4. Relationship Extraction
-         ↓                    ↓                       ↓                    ↓
-      - Eligible         - Similarity           - Data Merge        - Graph Analysis
-      - Memories          - Analysis             - State Update      - Link Creation
-      - Prioritization    - Confidence Scoring   - Audit Trail       - Metadata Storage
-```
-
-## 🎨 Key Architectural Patterns
-
-### 1. Strategy Pattern (Search)
-
-**Pluggable search strategies with unified interface.**
-
-```typescript
-interface ISearchStrategy {
-  readonly name: SearchStrategy;
-  readonly priority: number;
-  readonly capabilities: SearchCapability[];
-
-  search(query: SearchQuery): Promise<SearchResult[]>;
-  getMetadata(): SearchStrategyMetadata;
-}
-```
-
-**Benefits:**
-- **Extensibility**: Easy to add new search strategies
-- **Testability**: Each strategy can be tested independently
-- **Performance**: Strategies can be optimized individually
-- **Reliability**: Failed strategies don't break the system
-
-### 2. Manager Pattern (Database)
-
-**Specialized managers for different operational domains.**
-
-```typescript
-// MemoryManager - Dedicated memory operations with state tracking
-class MemoryManager {
-  async storeLongTermMemory(memory: ProcessedLongTermMemory, chatId: string, namespace: string): Promise<string>;
-  async getMemoryById(id: string, namespace?: string): Promise<ProcessedLongTermMemory | null>;
-  async updateMemory(id: string, updates: Partial<ProcessedLongTermMemory>, namespace?: string): Promise<boolean>;
-  async getMemoriesByImportance(minImportance: MemoryImportanceLevel, namespace?: string): Promise<ProcessedLongTermMemory[]>;
-}
-
-// SearchManager - Dedicated search operations
-class SearchManager {
-  async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]>;
-  async searchWithStrategy(query: string, strategy: SearchStrategy): Promise<MemorySearchResult[]>;
-}
-
-// RelationshipManager - Memory relationship operations
-class RelationshipManager {
-  async storeMemoryRelationships(memoryId: string, relationships: MemoryRelationship[]): Promise<void>;
-  async getRelatedMemories(memoryId: string, options: RelationshipQueryOptions): Promise<RelatedMemory[]>;
-}
-```
-
-**Benefits:**
-- **Domain Expertise**: Each manager encapsulates specific business logic
-- **State Integration**: Built-in workflow state tracking across operations
-- **Performance Monitoring**: Comprehensive metrics and error handling
-- **Separation of Concerns**: Clear boundaries between different operational domains
-- **Testing**: Easy mocking and unit testing of specific functionality
-
-### 3. Observer Pattern (Memory Processing)
-
-**Event-driven memory processing with loose coupling.**
-
-```typescript
-interface MemoryProcessingObserver {
-  onMemoryCreated(memory: Memory): Promise<void>;
-  onMemoryUpdated(memory: Memory): Promise<void>;
-  onMemoryDeleted(memoryId: string): Promise<void>;
-}
-```
-
-**Benefits:**
-- **Decoupling**: Processing agents can be added/removed independently
-- **Scalability**: Multiple processing agents can work in parallel
-- **Reliability**: Failed observers don't affect others
-- **Monitoring**: Easy to track processing pipeline health
-
-## 📊 System Capabilities
-
-### Memory Management
-- **Dual Processing Modes**: Auto-ingestion and conscious processing
-- **Intelligent Classification**: Automatic categorization and importance scoring
-- **Duplicate Detection**: Advanced consolidation with transaction safety
-- **Relationship Extraction**: Memory graph construction and traversal
-- **State Tracking**: Complete workflow state management
-
-### Search & Retrieval
-- **Multi-Strategy Search**: Orchestrated search across multiple dimensions
-- **Advanced Filtering**: 25+ filter operators with boolean logic
-- **Natural Language Processing**: Temporal and intent understanding
-- **Relationship-Based Search**: Graph traversal for connected memories
-- **Performance Optimization**: Sub-millisecond search with intelligent caching
-
-### Data Integrity
-- **Transaction Safety**: All operations are ACID compliant
-- **Audit Trails**: Complete history of all changes and processing
-- **Backup & Recovery**: Automated index backup with corruption recovery
-- **Health Monitoring**: Continuous monitoring of system health
-
-## 🔒 Enterprise Features
-
-### Type Safety
-- **100% TypeScript Coverage**: Compile-time validation prevents runtime errors
-- **Clean Interfaces**: 15+ well-defined interfaces replace inline types
-- **Runtime Validation**: Zod schemas for additional safety
-- **IDE Support**: Rich autocomplete and IntelliSense
-
-### Performance
-- **Optimized SQLite Backend**: Fast local development and testing
-- **Efficient Indexing**: Strategic indexes for query performance
-- **Memory Management**: Optimized memory usage for large conversation histories
-- **Background Processing**: Non-blocking memory ingestion
-
-### Reliability
-- **Graceful Error Handling**: Memory failures don't break AI functionality
-- **Automatic Recovery**: Intelligent retry and fallback mechanisms
-- **Comprehensive Logging**: Detailed error tracking and debugging
-- **Health Monitoring**: Proactive system health monitoring
-
-## 🚀 Usage Patterns
-
-### Simple Integration
-```typescript
-// Replace OpenAI client with zero changes
-const openaiClient = new MemoriOpenAI('openai-api-key', { enableChatMemory: true });
-const response = await openaiClient.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: 'Hello world!' }]
-});
-
-// Multi-provider support
-import { LLMProviderFactory, ProviderType } from '@memori/providers';
-const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
-  apiKey: 'anthropic-api-key',
-  model: 'claude-3-5-sonnet-20241022'
-});
-```
-
-### Advanced Configuration
-```typescript
-// Sophisticated memory-enabled application
-const memori = new Memori({
-  databaseUrl: 'postgresql://localhost/memories',
-  processingMode: 'conscious',
-  namespace: 'production-app'
-});
-
-const memories = await memori.searchMemories('urgent project requirements', {
-  minImportance: 'high',
-  categories: ['essential', 'contextual'],
-  includeRelatedMemories: true
-});
-```
-
-## 📈 Scalability Considerations
-
-### Database Scaling
-- **Read Replicas**: Support for read-heavy workloads
-- **Partitioning**: Namespace-based logical partitioning
-- **Connection Pooling**: Efficient database connection management
-- **Query Optimization**: Intelligent query planning and execution
-
-### Memory Scaling
-- **Streaming Processing**: Handle large conversation volumes
-- **Batch Operations**: Efficient bulk memory operations
-- **Caching Strategy**: Intelligent result caching
-- **Resource Limits**: Configurable memory and processing limits
-
-### Search Scaling
-- **Index Optimization**: Automated index maintenance
-- **Query Parallelization**: Concurrent search execution
-- **Result Caching**: Intelligent caching of frequent queries
-- **Load Distribution**: Strategy-based load balancing
-
-This architecture provides a robust, scalable foundation for building sophisticated AI agents with persistent memory capabilities while maintaining the simplicity and reliability required for production applications.
-
-## Related Documentation
-
-- **[Multi-Provider Integration Guide](../integration/openai-integration.md)** - Integration patterns for different LLM providers
-- **[Provider Documentation](../providers/)** - Complete guides for OpenAI, Anthropic, Ollama, and custom providers
-- **[Database Schema Deep Dive](database-schema.md)** - Detailed database design and optimization strategies
-- **[Search Architecture](search-architecture.md)** - Multi-strategy search implementation details
+## Data Flow: From Chat to Memory
+
+1. **Entry point** – Applications call `MemoriAI.chat` or `Memori.recordConversation`.
+2. **Provider interaction** – `MemoriAI` uses an `ILLMProvider` implementation from `src/core/infrastructure/providers`. Providers share an interface so multi-provider support is uniform.
+3. **Memory processing** – Recorded exchanges are passed to `MemoryAgent` (`src/core/domain/memory/MemoryAgent.ts`) which:
+   - summarises the dialogue,
+   - assigns `MemoryClassification` and `MemoryImportanceLevel`,
+   - extracts entities and keywords,
+   - emits scores and metadata.
+4. **Persistence** – `DatabaseManager` (`src/core/infrastructure/database/DatabaseManager.ts`) writes the processed memory to Prisma models defined in `prisma/schema.prisma`.
+5. **Search orchestration** – `SearchManager` / `SearchService` (`src/core/infrastructure/database/SearchManager.ts` & `src/core/domain/search/SearchService.ts`) coordinate the search strategies and fallbacks when you query stored memories.
+6. **Conscious processing** – If enabled, `ConsciousAgent` copies long-term memories into short-term context, leveraging state tracking and duplicate checks.
+
+Each stage logs structured payloads using `Logger.ts`, tagging the component (e.g., `MemoriAI`, `MemoryAgent`, `SearchManager`) to simplify tracing.
+
+## Key Components
+
+### `MemoriAI`
+
+- Location: `src/core/MemoriAI.ts`
+- Designed for consumers who want a drop-in API: `chat`, `searchMemories`, `createEmbeddings`, `recordConversation` (manual mode), `getMemoryStatistics`, etc.
+- Delegates most heavy lifting to `Memori` while managing provider lifecycles.
+
+### `Memori`
+
+- Location: `src/core/Memori.ts`
+- Exposes the full surface: strategy-aware search, conscious processing, index maintenance, duplication checks, and backup/restore helpers.
+- Instantiates `DatabaseManager`, provider adapters, `MemoryAgent`, and optionally `ConsciousAgent`.
+
+### Providers
+
+- Location: `src/core/infrastructure/providers/`
+- `OpenAIProvider`, `AnthropicProvider`, `OllamaProvider` all extend `MemoryCapableProvider`.
+- `LLMProviderFactory` converts `ProviderType` + config into the correct provider instance.
+- Providers share connection pooling, request caching, and health monitoring utilities.
+
+### Database Infrastructure
+
+- `DatabaseContext` owns Prisma clients and operation metrics.
+- `MemoryManager`, `SearchManager`, and supporting managers inherit from `BaseDatabaseService` to share sanitisation and metrics recording.
+- Search coordination combines FTS5 queries with fallback strategies; see `SearchManager.searchMemories`.
+
+### Performance Monitoring
+
+- Services under `src/core/performance/` (`PerformanceDashboardService`, `PerformanceAnalyticsService`) collect metrics from search, database operations, and configuration changes. They are optional but useful for admin dashboards.
+
+### Integrations
+
+- `integrations/openai-dropin` exports `MemoriOpenAI` (a drop-in replacement for the official OpenAI SDK) and supporting factory helpers. It uses the same providers and memory pipeline described above.
+
+## Configuration & Environment
+
+- `ConfigManager` loads environment variables, sanitises them, and defaults to safe values. Expect keys like `DATABASE_URL`, `MEMORI_NAMESPACE`, `MEMORI_AUTO_INGEST`, `MEMORI_CONSCIOUS_INGEST`, `OPENAI_API_KEY`, and `OPENAI_BASE_URL`.
+- All configuration validations throw descriptive `ValidationError` / `SanitizationError` exceptions when inputs don't match expectations.
+
+## Extending the System
+
+- **New search strategy** – Implement `ISearchStrategy`, register it in `SearchService`, and add configuration defaults through `SearchStrategyConfigManager`.
+- **New provider** – Extend `MemoryCapableProvider`, implement `executeChatCompletion`/`executeEmbedding`, and register it with `LLMProviderFactory`.
+- **Custom storage** – Swap Prisma datasource by adjusting `prisma/schema.prisma` and re-running `npm run prisma:push && npm run prisma:generate`.
+
+Understanding these boundaries keeps the codebase approachable: domain components stay free from infrastructure dependencies, advanced features build on core services, and the public APIs wrap the full stack in developer-friendly facades.

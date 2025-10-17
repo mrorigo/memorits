@@ -1,195 +1,95 @@
 # Memorits Developer Documentation
 
-Welcome to the developer documentation for **Memorits** - a memory engine for AI conversations. This guide helps developers build AI applications with conversation processing, search capabilities, and multi-provider support.
+Welcome to the Memorits developer hub. Memorits is a TypeScript-first memory engine that pairs any LLM provider with durable conversational memory, rich search tooling, and strict runtime validation. This documentation keeps you grounded in the actual codebase, so every example and reference maps directly to the implementation you will find under `src/`.
 
-### Key Features
+## Why Memorits?
 
-- **🔍 Conversation Processing**: LLM-powered conversation analysis and memory extraction
-- **🎯 Memory Classification**: Automatic categorization by importance and type
-- **⚡ SQLite Backend**: Local database storage with Prisma ORM for reliability
-- **🔒 Type Safe**: Full TypeScript coverage with runtime validation
-- **🧠 Unified API**: Single `MemoriAI` class with multiple processing modes
-- **🎨 Search Strategies**: Multiple search approaches with filtering capabilities
-- **🤖 Multi-Provider Support**: Compatible with OpenAI, Anthropic, Ollama, and custom providers
-- **⚙️ Configuration Management**: Runtime configuration with environment variable support
-- **🛡️ Error Handling**: Comprehensive error handling and logging
-- **🔗 Memory Relationships**: Automatic detection of memory connections
-- **🔄 Memory Consolidation**: Duplicate detection and merging capabilities
+- **Agent-Friendly Memory** – `MemoriAI` captures conversations, scores importance, and stores summaries automatically.
+- **Prisma + SQLite Core** – A fully typed persistence layer with migrations managed through Prisma.
+- **Provider Abstraction** – Shared MemoryAgent pipelines for OpenAI, Anthropic, and Ollama via a unified provider factory.
+- **Search Engine** – FTS5, recency, metadata, temporal, and relationship strategies with configurable fallbacks.
+- **Structured Logging** – All components log with component metadata, ready for production observability.
+- **Type-Safe APIs** – Zod-backed schemas drive runtime validation, and all public types are exported for IDE support.
 
-## 🚀 Quick Start
+## Quick Start
 
-### Installation
+Install the package:
 
 ```bash
 npm install memorits
 ```
 
-### Basic Usage
+Create your first memory-enabled client:
 
 ```typescript
 import { MemoriAI } from 'memorits';
 
-// Create unified MemoriAI instance with automatic memory processing
 const ai = new MemoriAI({
   databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
-  baseUrl: 'http://localhost:11434/v1',
-  model: 'gpt-oss:20b',
-  provider: 'ollama',
-  mode: 'automatic'
+  apiKey: process.env.OPENAI_API_KEY ?? 'sk-your-api-key',
+  provider: 'openai',
+  model: 'gpt-4o-mini',
+  mode: 'automatic',            // automatic | manual | conscious
+  namespace: 'support-bot'      // optional logical partition
 });
 
-// Chat normally - memory is recorded automatically
-const response = await ai.chat({
-  messages: [{ role: 'user', content: 'Remember this for later...' }]
+const reply = await ai.chat({
+  messages: [{ role: 'user', content: 'Memorits should remember that I love TypeScript.' }]
 });
 
-// Search through conversation history
-const memories = await ai.searchMemories('urgent meeting notes', {
-  minImportance: 'high',
-  limit: 10
-});
+const memories = await ai.searchMemories('TypeScript', { limit: 5 });
 ```
 
-## 📚 Documentation Structure
+For Ollama or custom endpoints, supply `baseUrl` and the synthetic API key (`ollama-local`) that the providers expect. The `ConfigManager` also recognises environment settings such as `DATABASE_URL`, `MEMORI_NAMESPACE`, `MEMORI_AUTO_INGEST`, and `OPENAI_BASE_URL`.
 
-This developer documentation is organized to help you build sophisticated AI agents with Memorits:
+## Documentation Map
 
-### 🚀 Quick Start
-- **[Getting Started](getting-started.md)** - Installation and basic setup
-- **[Basic Usage](basic-usage.md)** - Your first memory-enabled application
+- **Foundations**
+  - `getting-started.md` – installation, environment setup, and first request.
+  - `basic-usage.md` – day-to-day patterns with `MemoriAI` plus pointers to advanced workflows.
+  - `core-concepts/memory-management.md` – automatic vs conscious ingestion aligned with `Memori`.
+  - `core-concepts/search-strategies.md` – how strategies in `src/core/domain/search` are orchestrated.
 
-### 🏗️ Core Concepts
-- **[Memory Management](core-concepts/memory-management.md)** - Auto-ingestion vs conscious processing modes
-- **[Search Strategies](core-concepts/search-strategies.md)** - FTS5, LIKE, recent, semantic, and advanced filtering
+- **Architecture**
+  - `architecture/system-overview.md` – code-level overview of domain and infrastructure layers.
+  - `architecture/database-schema.md` – Prisma models, migration workflow, and state tracking tables.
+  - `architecture/search-architecture.md` – SearchService orchestration, fallbacks, and index maintenance.
 
-### 🏛️ Architecture
- - **[System Overview](architecture/system-overview.md)** - High-level system design, Domain-Driven Design patterns, and data flow
- - **[Database Schema](architecture/database-schema.md)** - Database design and optimization
- - **[Search Architecture](architecture/search-architecture.md)** - Multi-strategy search implementation
+- **API Reference**
+  - `api/core-api.md` – `MemoriAI`, `Memori`, configuration types, and exported helpers.
+  - `api/search-api.md` – search shapes, `SearchOptions`, `searchMemoriesWithStrategy`, and recent-memory APIs.
+  - `api-reference/` – supplementary deep dives (consolidation, dashboards, etc.).
 
-### 🔧 Advanced Features
-- **[Temporal Filtering](advanced-features/temporal-filtering.md)** - Time-based search and pattern matching
-- **[Metadata Filtering](advanced-features/metadata-filtering.md)** - Advanced metadata-based queries
-- **[Duplicate Management](advanced-features/duplicate-management.md)** - Consolidation and cleanup strategies with service-oriented architecture
-- **[Conscious Processing](advanced-features/conscious-processing.md)** - Background memory processing
-- **[Configuration Management](advanced-features/configuration-management.md)** - Runtime configuration with persistence and audit trails
-- **[Performance Monitoring](advanced-features/performance-monitoring.md)** - Real-time dashboards and analytics
-- **[Consolidation Service Architecture](advanced-features/consolidation-service-architecture.md)** - Service-oriented design for memory consolidation
-- **[Service Monitoring](advanced-features/service-monitoring-metrics.md)** - Performance monitoring and metrics collection
-- **[Search API Fixup](features/SEARCH_FIXUP.md)** - Recent enhancements to temporal search capabilities and API improvements
+- **Advanced Features**
+  - `advanced-features/temporal-filtering.md` – how `TemporalFilterOptions` are applied.
+  - `advanced-features/metadata-filtering.md` – AdvancedFilterEngine usage and samples.
+  - `advanced-features/conscious-processing.md` – `ConsciousAgent` lifecycle driven by `Memori`.
+  - `advanced-features/performance-monitoring.md` – dashboard and analytics services in `src/core/performance`.
+  - `advanced-features/duplicate-management.md` – duplicate detection and consolidation helpers.
 
-### 🔗 Integration
-- **[Multi-Provider Integration](integration/openai-integration.md)** - Drop-in replacement and provider factory patterns
-- **[Provider Documentation](providers/)** - Complete guides for OpenAI, Anthropic, Ollama, and custom providers
+- **Integrations & Providers**
+  - `integration/openai-integration.md` – OpenAI drop-in client (`MemoriOpenAI`) and provider factory patterns.
+  - `providers/` – provider-specific setup notes for OpenAI, Anthropic, and Ollama.
 
-### 📖 API Reference
-- **[Core API](api/core-api.md)** - MemoriAI class and primary interfaces
-- **[Search API](api/search-api.md)** - Advanced search capabilities
+- **Examples**
+  - `examples/basic-usage.md` – walkthrough sourced from `examples/` in the repository.
+  - Explore the sibling `examples/` directory for runnable TypeScript scripts (`npm run example:*`).
 
-### 💡 Examples
-- **[Basic Usage Examples](examples/basic-usage.md)** - Getting started examples and practical patterns
-- **[Advanced Examples](../../../examples/)** - Real-world usage examples and demos
+## Architecture Snapshot
 
-## 🎯 Target Audience
+- **Domain (`src/core/domain/`)** – MemoryAgent, ConsciousAgent, search strategies, and state managers.
+- **Infrastructure (`src/core/infrastructure/`)** – Prisma-backed database managers, provider integrations, config sanitisation, and logging.
+- **Performance (`src/core/performance/`)** – Dashboard and analytics services used for runtime insight.
+- **Integrations (`src/integrations/`)** – Drop-in OpenAI client compatible with the official SDK.
 
-This documentation is specifically designed for:
+The project embraces DDD boundaries: domain logic is decoupled from persistence; provider details live in infrastructure; integrations expose polished wrappers.
 
-### AI Agent Developers
-- Building conversational agents that maintain context
-- Implementing long-term memory for chat applications
-- Creating research assistants with knowledge accumulation
-- Developing customer support systems with learning capabilities
+## Additional Resources
 
-### Search Strategy Experts
-- Implementing advanced search and filtering
-- Building custom search strategies
-- Optimizing search performance
-- Understanding multi-strategy search orchestration
-
-### System Architects
-- Designing memory-enabled AI systems
-- Planning multi-agent architectures
-- Integrating with existing AI infrastructure
-- Scaling memory systems for production
-
-### Backend Engineers
-- Understanding database schema and operations
-- Implementing custom integrations
-- Performance tuning and optimization
-- Production deployment and monitoring
-
-## 🔧 Key Concepts You Should Understand
-
-### Memory Modes
-- **Automatic Mode**: Automatic processing of conversations in real-time (default)
-- **Manual Mode**: Manual control over memory recording and processing
-- **Conscious Mode**: Background processing with advanced reflection capabilities
-
-### Search Strategies
-- **LIKE**: Pattern-based text matching with relevance boosting
-- **Recent**: Time-based recent memory retrieval with time windows
-- **Category Filter**: Classification-based filtering with hierarchy support
-- **Temporal Filter**: Time-based filtering with natural language parsing
-- **Metadata Filter**: Advanced metadata-based queries with nested access
-- **FTS5**: Full-text search with BM25 ranking (when available in SQLite build)
-- **Relationship**: Graph-based relationship traversal with confidence scoring
-
-### Memory Classification
-- **Importance Levels**: Critical, High, Medium, Low
-- **Categories**: Essential, Contextual, Conversational, Reference, Personal, Conscious-Info
-- **Metadata**: Rich context with timestamps, sources, and relationships
-
-## 🚀 Next Steps
-
-1. **Start with [Getting Started](getting-started.md)** for installation and basic setup
-2. **Learn [Basic Usage](basic-usage.md)** to understand core patterns
-3. **Explore [Core Concepts](core-concepts/memory-management.md)** to understand the fundamental ideas
-4. **Study [Architecture](architecture/system-overview.md)** to understand system design and data flow
-5. **Dive into [Advanced Features](advanced-features/temporal-filtering.md)** for sophisticated use cases
-6. **Check the [API Reference](api/core-api.md)** for detailed interface documentation
-## 🏗️ Project Architecture & Structure
-
-Memorits follows **Domain-Driven Design (DDD)** principles with a clear separation of concerns:
-
-### **Domain Layer** (`src/core/domain/`)
-- **Memory Domain**: Memory processing, classification, consolidation, and state management
-- **Search Domain**: Search strategies, filtering, relationship processing, and indexing
-- **Conversation Domain**: Chat history and conversation management
-
-### **Infrastructure Layer** (`src/core/infrastructure/`)
-- **Database Layer**: Prisma ORM, SQLite backend, repositories, and data access objects
-- **Provider Layer**: Multi-provider LLM integration supporting OpenAI, Anthropic, Ollama, and extensible architecture
-- **Configuration Layer**: Winston logging, configuration management, and utilities
-
-### **Integration Layer** (`src/integrations/`)
-- External system integrations (Multi-provider drop-in replacements, etc.)
-
-**Benefits of This Structure:**
-- **Clear Separation of Concerns**: Business logic separate from technical implementation
-- **Better Testability**: Domain logic can be tested independently of infrastructure
-- **Easier Maintenance**: Changes in one domain don't affect others
-- **Improved Developer Experience**: Logical organization makes code easier to find and understand
-
-
-## 📖 Additional Resources
-
- - **[GitHub Repository](https://github.com/mrorigo/memorits)** - Source code and issues
- - **[NPM Package](https://npmjs.com/package/memorits)** - Package installation and versions
- - **[Python Version](../../../memori/)** - Original Python implementation
-
-## 🤝 Contributing
-
-We welcome contributions! See our [Contributing Guide](../../../memori/CONTRIBUTING.md) for details on:
-- Reporting bugs and requesting features
-- Submitting pull requests
-- Development setup and testing
-- Documentation improvements
-
-## 📄 License
-
-This project is licensed under the Apache License 2.0. See the [LICENSE](../../../memori/LICENSE) file for details.
+- GitHub: <https://github.com/mrorigo/memorits>
+- npm: <https://www.npmjs.com/package/memorits>
+- License: Apache 2.0 (`LICENSE`)
 
 ---
 
-**Ready to add memory to your AI applications?** Start building with Memorits today! 🎯
+Memorits is designed to be the canonical, production-ready memory layer for TypeScript agents. Dive in, wire it to your provider of choice, and start building assistants that remember. 🚀

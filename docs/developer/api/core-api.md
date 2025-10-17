@@ -1,789 +1,137 @@
 # Core API Reference
 
-This document provides comprehensive documentation for the core Memorits API, including the main MemoriAI class and its primary interfaces.
+This reference covers the primary classes exported by Memorits: `MemoriAI`, `Memori`, and the OpenAI drop-in client. All types referenced below come directly from the TypeScript definitions in `src/`.
 
-## MemoriAI Class
+## `MemoriAI`
 
-The `MemoriAI` class is the main entry point for memory-enabled AI operations, combining LLM provider integration with memory management capabilities.
+High-level façade that combines provider access and memory management.
 
 ### Constructor
 
 ```typescript
-constructor(config: MemoriAIConfig)
+new MemoriAI(config: MemoriAIConfig)
 ```
 
-**Parameters:**
-- `config`: Complete configuration object
+`MemoriAIConfig` lives in `src/core/MemoriAIConfig.ts` and includes:
 
-**Example:**
+- `databaseUrl: string`
+- `apiKey: string`
+- `provider?: 'openai' | 'anthropic' | 'ollama'`
+- `model?: string`
+- `baseUrl?: string`
+- `mode?: 'automatic' | 'manual' | 'conscious'`
+- `namespace?: string`
+- Optional `userProvider` / `memoryProvider` overrides with provider-specific configuration.
+
+### Methods
+
+| Method | Description |
+| --- | --- |
+| `chat(params: ChatParams): Promise<ChatResponse>` | Performs a chat completion using the configured provider. In automatic mode the exchange is recorded as memory. |
+| `searchMemories(query: string, options?: SearchOptions): Promise<MemorySearchResult[]>` | Searches stored memories using the simplified search options from `MemoriAIConfig`. |
+| `searchMemoriesWithStrategy(query: string, strategy: SearchStrategy, options?: SearchOptions): Promise<MemorySearchResult[]>` | Forces a specific strategy (e.g., `SearchStrategy.RECENT`). |
+| `createEmbeddings(params: EmbeddingParams): Promise<EmbeddingResponse>` | Creates embeddings using the active provider. |
+| `recordConversation(userInput: string, aiOutput: string, options?): Promise<string>` | Available in manual/conscious mode to persist conversations explicitly. |
+| `getMemoryStatistics(namespace?: string)` | Returns counts from `DatabaseManager.getMemoryStatistics`. |
+| `getAvailableSearchStrategies(): Promise<SearchStrategy[]>` | Lists the strategies currently registered by `SearchService`. |
+| `getSessionId(): string` | Returns the generated session identifier for telemetry. |
+| `getMode(): 'automatic' | 'manual' | 'conscious'` | Indicates the configured ingestion mode. |
+| `close(): Promise<void>` | Disposes provider resources and closes database connections. |
+
+### Types
+
+`ChatParams`, `ChatResponse`, `SearchOptions`, `MemorySearchResult`, `EmbeddingParams`, and `EmbeddingResponse` are exported from `src/core/MemoriAIConfig.ts`. The `SearchOptions` shape here is the simplified version (namespace, limit, includeMetadata, minImportance, categories, sortBy, offset).
+
+## `Memori`
+
+Low-level API with access to advanced search, consolidation, and maintenance APIs. Constructor accepts a partial `MemoriAIConfig`; any omitted values fall back to `ConfigManager`.
+
 ```typescript
-import { MemoriAI } from 'memorits';
-
-// Using custom configuration
-const ai = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'
-});
+const memori = new Memori({ databaseUrl: 'file:./memori.db', mode: 'conscious' });
+await memori.enable();
 ```
 
-### Core Methods
+### Key Methods
 
-#### `chat()`
+| Method | Description |
+| --- | --- |
+| `enable(): Promise<void>` | Initialises providers, database managers, and agents. Must be called before other operations. |
+| `recordConversation(userInput, aiOutput, options?)` | Stores an exchange and processes it via `MemoryAgent`. |
+| `searchMemories(query, options: SearchOptions)` | Uses the full search options defined in `src/core/types/models.ts` (including `temporalFilters`, `metadataFilters`, `filterExpression`, etc.). |
+| `searchMemoriesWithStrategy(query, strategy, options)` | Executes a specific `SearchStrategy`. |
+| `searchRecentMemories(limit?, includeMetadata?, temporalFilters?, strategy?)` | Convenience wrapper for recent searches. |
+| `getAvailableSearchStrategies()` | Lists registered strategies. |
+| `getMemoryStatistics(namespace?)` / `getDetailedMemoryStatistics(namespace?)` | Returns aggregated database stats. |
+| `getIndexHealthReport()` | Proxy to `SearchIndexManager.getIndexHealthReport`. |
+| `optimizeIndex(type?)` | Runs index optimisation (`MERGE`, `REBUILD`, `COMPACT`, `VACUUM`). |
+| `createIndexBackup()` / `restoreIndexFromBackup(backupId)` | Manage search index backups. |
+| `findDuplicateMemories(content, options?)` | Surfaces potential duplicates using `DuplicateManager`. |
+| `getConsolidationService()` | Exposes the fully-fledged consolidation service for advanced workflows. |
+| `initializeConsciousContext()` / `checkForConsciousContextUpdates()` | Conscious processing helpers. |
+| `close()` | Disposes provider and database resources. |
 
-Send a chat completion request with automatic memory recording.
+Any method that reads or writes data requires `enable()` to have run first.
 
-```typescript
-async chat(options: ChatOptions): Promise<ChatResponse>
-```
+## `MemoriOpenAI`
 
-**Parameters:**
-- `options`: Chat completion options including messages and model settings
-
-**Returns:** Chat response with content and metadata
-
-**Example:**
-```typescript
-const response = await ai.chat({
-  messages: [
-    { role: 'user', content: 'What is TypeScript?' }
-  ],
-  model: 'gpt-4',
-  temperature: 0.7
-});
-
-console.log('Response:', response.message.content);
-console.log('Chat ID:', response.chatId);
-```
-
-#### `searchMemories()`
-
-Search for relevant memories using advanced filtering.
+Located under `integrations/openai-dropin/client`. Provides a drop-in replacement for the OpenAI SDK v5 while recording memories automatically.
 
 ```typescript
-async searchMemories(
-  query: string,
-  options?: SearchOptions
-): Promise<MemorySearchResult[]>
-```
+import { MemoriOpenAI } from 'memorits/integrations/openai-dropin/client';
 
-**Parameters:**
-- `query`: Search query text
-- `options` (optional): Search configuration options
-
-**Returns:** Array of matching memory results
-
-**Example:**
-```typescript
-// Basic search
-const results = await ai.searchMemories('TypeScript interfaces');
-
-// Advanced search with filtering
-const filteredResults = await ai.searchMemories('programming concepts', {
-  minImportance: 'high',
-  categories: ['essential', 'reference'],
-  limit: 10,
-  includeMetadata: true
-});
-```
-
-#### `searchMemories()`
-
-Search for relevant memories using advanced filtering.
-
-```typescript
-async searchMemories(
-  query: string,
-  options?: SearchOptions
-): Promise<MemorySearchResult[]>
-```
-
-**Parameters:**
-- `query`: Search query text
-- `options` (optional): Search configuration options
-
-**Returns:** Array of matching memory results
-
-**Example:**
-```typescript
-// Basic search
-const results = await memori.searchMemories('TypeScript interfaces');
-
-// Advanced search with filtering
-const filteredResults = await memori.searchMemories('programming concepts', {
-  minImportance: 'high' as any,
-  categories: ['essential' as any, 'reference' as any],
-  limit: 10,
-  includeMetadata: true
+const client = new MemoriOpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'support-bot'
+  }
 });
 
-// Advanced filter expressions
-const advancedResults = await memori.searchMemories('', {
-  filterExpression: 'importance_score >= 0.7 AND created_at > "2024-01-01"',
-  limit: 10
+const completion = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Remember that our stand-up is 9am PST.' }]
 });
 
-// Memory consolidation
-const consolidationResult = await memori.consolidateDuplicateMemories(
-  'memory-id-1',
-  ['memory-id-2', 'memory-id-3']
-);
-
-if (consolidationResult.consolidated > 0) {
-  console.log(`Consolidated ${consolidationResult.consolidated} duplicate memories`);
-}
-
-// Search with relationships using advanced strategies
-const relationshipSearch = await memori.searchMemoriesWithStrategy(
-  'related to project setup',
-  SearchStrategy.RELATIONSHIP,
-  {
-    limit: 10,
-    includeMetadata: true
-  }
-);
-
-// Get index health report
-const healthReport = await memori.getIndexHealthReport();
-console.log(`Index health: ${healthReport.health}`);
-console.log(`Issues found: ${healthReport.issues.length}`);
-
-// Optimize search index
-const optimizationResult = await memori.optimizeIndex('merge');
-console.log(`Optimization saved ${optimizationResult.spaceSaved} bytes`);
+const memories = await client.memory.searchMemories('stand-up');
 ```
 
-### Status Methods
+The factory helpers (`MemoriOpenAIFactory`, `memoriOpenAIFactory`, `MemoriOpenAIFromConfig`, etc.) mirror the constructors defined in `integrations/openai-dropin/factory.ts`.
 
-#### `getConfig()`
+## Provider Utilities
 
-Get the current configuration.
-
-```typescript
-getConfig(): MemoriAIConfig
-```
-
-**Returns:** Current configuration object
-
-**Example:**
-```typescript
-const config = ai.getConfig();
-console.log('Current config:', config);
-```
-
-#### `getSessionId()` (if available)
-
-Get the current session identifier.
+Provider abstractions live in `src/core/infrastructure/providers`. To initialise providers directly:
 
 ```typescript
-getSessionId(): string
-```
-
-**Returns:** Unique session ID string
-
-**Example:**
-```typescript
-const sessionId = ai.getSessionId?.();
-console.log('Current session:', sessionId);
-```
-
-### Memory Mode Configuration
-
-MemoriAI supports three memory processing modes configured at initialization:
-
-#### Mode Options
-
-- **`automatic`** (default): Auto-record conversations and process memories
-- **`manual`**: Manual control over memory recording and processing
-- **`conscious`**: Advanced background processing with human-like reflection
-
-**Example:**
-```typescript
-// Check current mode
-const config = ai.getConfig();
-console.log('Current mode:', config.mode);
-
-// Mode is set at initialization and cannot be changed
-const ai = new MemoriAI({
-  // ... other config,
-  mode: 'automatic'  // Choose appropriate mode
-});
-```
-
-### Advanced Methods
-
-#### `consolidateDuplicateMemories()`
-
-Consolidate duplicate memories with transaction safety and intelligent data merging.
-
-```typescript
-async consolidateDuplicateMemories(
-  primaryMemoryId: string,
-  duplicateIds: string[],
-  namespace?: string
-): Promise<ConsolidationResult>
-```
-
-**Parameters:**
-- `primaryMemoryId`: ID of the primary memory to keep
-- `duplicateIds`: Array of duplicate memory IDs to merge
-- `namespace` (optional): Memory namespace (default: 'default')
-
-**Returns:** Consolidation result with count and any errors
-
-**Example:**
-```typescript
-const result = await memori.consolidateDuplicateMemories(
-  'primary-memory-id',
-  ['duplicate-1', 'duplicate-2'],
-  'my-namespace'
-);
-
-console.log(`Consolidated ${result.consolidated} memories`);
-if (result.errors.length > 0) {
-  console.error('Consolidation errors:', result.errors);
-}
-```
-
-#### `getIndexHealthReport()`
-
-Get comprehensive health report for the search index.
-
-```typescript
-async getIndexHealthReport(): Promise<IndexHealthReport>
-```
-
-**Returns:** Detailed health report including statistics, issues, and recommendations
-
-**Example:**
-```typescript
-const report = await memori.getIndexHealthReport();
-console.log(`Index health: ${report.health}`);
-console.log(`Total documents: ${report.statistics.totalDocuments}`);
-console.log(`Issues: ${report.issues.join(', ')}`);
-```
-
-#### `optimizeIndex()`
-
-Perform index optimization with specified strategy.
-
-```typescript
-async optimizeIndex(type?: OptimizationType): Promise<OptimizationResult>
-```
-
-**Parameters:**
-- `type` (optional): Optimization type (default: 'merge')
-
-**Returns:** Optimization result with performance metrics
-
-**Example:**
-```typescript
-const result = await memori.optimizeIndex('rebuild');
-console.log(`Optimization completed in ${result.duration}ms`);
-console.log(`Space saved: ${result.spaceSaved} bytes`);
-```
-
-#### `createIndexBackup()`
-
-Create a backup of the current search index.
-
-```typescript
-async createIndexBackup(): Promise<BackupMetadata>
-```
-
-**Returns:** Backup metadata including timestamp, size, and checksum
-
-**Example:**
-```typescript
-const backup = await memori.createIndexBackup();
-console.log(`Backup created: ${backup.timestamp}`);
-console.log(`Document count: ${backup.documentCount}`);
-```
-
-#### `restoreIndexFromBackup()`
-
-Restore search index from a backup.
-
-```typescript
-async restoreIndexFromBackup(backupId: string): Promise<boolean>
-```
-
-**Parameters:**
-- `backupId`: ID of the backup to restore from
-
-**Returns:** `true` if restoration was successful
-
-**Example:**
-```typescript
-const success = await memori.restoreIndexFromBackup('backup-2024-01-01');
-if (success) {
-  console.log('Index restored successfully');
-}
-```
-
-#### `findDuplicateMemories()`
-
-Find potential duplicate memories for consolidation.
-
-```typescript
-async findDuplicateMemories(
-  content: string,
-  options?: {
-    similarityThreshold?: number;
-    namespace?: string;
-    limit?: number;
-  }
-): Promise<MemorySearchResult[]>
-```
-
-**Parameters:**
-- `content`: Content to find duplicates for
-- `options` (optional): Search configuration
-  - `similarityThreshold` (optional): Similarity threshold (default: 0.7)
-  - `namespace` (optional): Memory namespace
-  - `limit` (optional): Maximum results (default: 20)
-
-**Returns:** Array of potential duplicate memories
-
-**Example:**
-```typescript
-const duplicates = await memori.findDuplicateMemories(
-  'This is a test memory about TypeScript',
-  {
-    similarityThreshold: 0.8,
-    limit: 10
-  }
-);
-
-console.log(`Found ${duplicates.length} potential duplicates`);
-```
-
-#### `getMemoryStatistics()`
-
-Get comprehensive memory statistics for a namespace.
-
-```typescript
-async getMemoryStatistics(namespace?: string): Promise<DatabaseStats>
-```
-
-**Parameters:**
-- `namespace` (optional): Memory namespace (default: configured namespace)
-
-**Returns:** Database statistics including conversation and memory counts
-
-**Example:**
-```typescript
-const stats = await memori.getMemoryStatistics();
-console.log(`Total conversations: ${stats.totalConversations}`);
-console.log(`Total memories: ${stats.totalMemories}`);
-console.log(`Long-term memories: ${stats.longTermMemories}`);
-```
-
-#### `getDetailedMemoryStatistics()`
-
-Get detailed memory statistics with breakdowns by type, importance, and category.
-
-```typescript
-async getDetailedMemoryStatistics(namespace?: string): Promise<{
-  totalMemories: number;
-  byType: {
-    longTerm: number;
-    shortTerm: number;
-    conscious: number;
-  };
-  byImportance: Record<string, number>;
-  byCategory: Record<string, number>;
-  recentActivity: {
-    last24Hours: number;
-    last7Days: number;
-    last30Days: number;
-  };
-  averageConfidence: number;
-}>
-```
-
-**Parameters:**
-- `namespace` (optional): Memory namespace (default: configured namespace)
-
-**Returns:** Detailed statistics with multiple breakdowns
-
-**Example:**
-```typescript
-const detailedStats = await memori.getDetailedMemoryStatistics();
-console.log(`Long-term memories: ${detailedStats.byType.longTerm}`);
-console.log(`High importance: ${detailedStats.byImportance.high}`);
-console.log(`Recent activity (24h): ${detailedStats.recentActivity.last24Hours}`);
-```
-
-#### `extractMemoryRelationships()`
-
-Extract memory relationships using the sophisticated RelationshipProcessor.
-
-```typescript
-async extractMemoryRelationships(
-  content: string,
-  options?: {
-    namespace?: string;
-    minConfidence?: number;
-    maxRelationships?: number;
-  }
-): Promise<MemoryRelationship[]>
-```
-
-**Parameters:**
-- `content`: Content to extract relationships from
-- `options` (optional): Extraction configuration
-  - `namespace` (optional): Memory namespace
-  - `minConfidence` (optional): Minimum confidence threshold (default: 0.5)
-  - `maxRelationships` (optional): Maximum relationships to extract (default: 10)
-
-**Returns:** Array of extracted memory relationships
-
-**Example:**
-```typescript
-const relationships = await memori.extractMemoryRelationships(
-  'This is a follow-up to our previous discussion about the authentication system',
-  {
-    minConfidence: 0.7,
-    maxRelationships: 5
-  }
-);
-
-for (const rel of relationships) {
-  console.log(`${rel.type}: ${rel.targetMemoryId} (confidence: ${rel.confidence})`);
-}
-```
-
-#### `buildRelationshipGraph()`
-
-Build relationship graph for a namespace.
-
-```typescript
-async buildRelationshipGraph(
-  namespace?: string,
-  options?: {
-    maxDepth?: number;
-    includeWeakRelationships?: boolean;
-  }
-): Promise<{
-  nodes: Array<{ id: string; type: string; content: string }>;
-  edges: Array<{ source: string; target: string; type: string; strength: number }>;
-  clusters: Array<{ id: string; nodes: string[]; strength: number }>;
-}>
-```
-
-**Parameters:**
-- `namespace` (optional): Memory namespace (default: configured namespace)
-- `options` (optional): Graph building configuration
-  - `maxDepth` (optional): Maximum traversal depth (default: 3)
-  - `includeWeakRelationships` (optional): Include weak relationships (default: false)
-
-**Returns:** Relationship graph with nodes, edges, and clusters
-
-**Example:**
-```typescript
-const graph = await memori.buildRelationshipGraph('my-app', {
-  maxDepth: 3,
-  includeWeakRelationships: false
-});
-
-console.log(`Found ${graph.nodes.length} connected memories`);
-console.log(`Found ${graph.edges.length} relationships`);
-console.log(`Identified ${graph.clusters.length} memory clusters`);
-```
-
-#### `getAvailableSearchStrategies()`
-
-Get available search strategies.
-
-```typescript
-async getAvailableSearchStrategies(): Promise<SearchStrategy[]>
-```
-
-**Returns:** Array of available search strategy types
-
-**Example:**
-```typescript
-const strategies = await memori.getAvailableSearchStrategies();
-console.log('Available strategies:', strategies);
-
-// Use specific strategy
-if (strategies.includes(SearchStrategy.SEMANTIC)) {
-  const results = await memori.searchMemoriesWithStrategy(
-    'query',
-    SearchStrategy.SEMANTIC,
-    { limit: 10 }
-  );
-}
-```
-
-## Configuration Management
-
-### MemoriAIConfig Interface
-
-```typescript
-interface MemoriAIConfig {
-  databaseUrl: string;                    // Database connection URL
-  apiKey: string;                         // LLM provider API key
-  model?: string;                         // Default LLM model (provider-specific)
-  provider: 'openai' | 'anthropic' | 'ollama'; // Required provider
-  baseUrl?: string;                       // Custom API base URL
-  mode?: 'automatic' | 'manual' | 'conscious'; // Memory processing mode
-  namespace?: string;                     // Memory namespace
-  sessionId?: string;                     // Session identifier
-  memory?: {                              // Memory configuration (optional)
-    enableChatMemory?: boolean;
-    memoryProcessingMode?: 'auto' | 'manual' | 'conscious';
-  };
-}
-```
-
-### ChatOptions Interface
-
-```typescript
-interface ChatOptions {
-  messages: ChatMessage[];                // Chat messages
-  model?: string;                         // Model override
-  temperature?: number;                   // Temperature setting
-  maxTokens?: number;                     // Max tokens
-  timeout?: number;                       // Request timeout
-  sessionId?: string;                     // Session identifier
-}
-```
-
-## Search Options
-
-### Basic Search Options
-
-```typescript
-interface BasicSearchOptions {
-  namespace?: string;                     // Memory namespace (default: 'default')
-  limit?: number;                        // Number of results (default: 5)
-  includeMetadata?: boolean;             // Include additional metadata
-}
-```
-
-### Advanced Search Options
-
-```typescript
-interface AdvancedSearchOptions extends BasicSearchOptions {
-  minImportance?: MemoryImportanceLevel;  // Filter by importance level
-  categories?: MemoryClassification[];    // Filter by memory categories
-  temporalFilters?: TemporalFilterOptions; // Time-based filtering
-  metadataFilters?: MetadataFilterOptions; // Metadata-based filtering
-  sortBy?: SortOption;                    // Sort results
-  offset?: number;                        // Pagination offset
-}
-```
-
-## Memory Classification
-
-### MemoryImportanceLevel Enum
-
-```typescript
-enum MemoryImportanceLevel {
-  CRITICAL = 'critical',    // 0.9 score - Must remember
-  HIGH = 'high',           // 0.7 score - Important information
-  MEDIUM = 'medium',       // 0.5 score - Useful information
-  LOW = 'low'              // 0.3 score - Background information
-}
-```
-
-### MemoryClassification Enum
-
-```typescript
-enum MemoryClassification {
-  ESSENTIAL = 'essential',        // Critical information
-  CONTEXTUAL = 'contextual',      // Supporting context
-  CONVERSATIONAL = 'conversational', // General conversation
-  REFERENCE = 'reference',        // Reference material
-  PERSONAL = 'personal',          // Personal information
-  CONSCIOUS_INFO = 'conscious-info' // Conscious context
-}
-```
-
-## Search Results
-
-### MemorySearchResult Interface
-
-```typescript
-interface MemorySearchResult {
-  id: string;                           // Unique memory identifier
-  content: string;                      // Searchable content
-  metadata: {
-    summary: string;                    // Concise summary
-    category: string;                   // Memory classification
-    importanceScore: number;            // Importance score (0.0-1.0)
-    memoryType: string;                 // 'short_term' or 'long_term'
-    createdAt: Date;                   // Creation timestamp
-    entities: string[];                 // Extracted entities
-    keywords: string[];                 // Key terms
-    confidenceScore: number;            // Processing confidence
-    metadata?: Record<string, unknown>; // Additional metadata
-  };
-  score: number;                        // Relevance score (0.0-1.0)
-  strategy: string;                     // Search strategy used
-  timestamp: Date;                      // Memory timestamp
-}
-```
-
-## Error Types
-
-### Common Error Classes
-
-```typescript
-class ConfigurationError extends Error {
-  constructor(message: string, configField?: string) {}
-}
-
-class DatabaseError extends Error {
-  constructor(message: string, operation?: string) {}
-}
-
-class ProviderError extends Error {
-  constructor(message: string, provider?: string) {}
-}
-
-class SearchError extends Error {
-  constructor(message: string, strategy?: string) {}
-}
-```
-
-## Usage Examples
-
-### Complete Application Example
-
-```typescript
-import { MemoriAI } from 'memorits';
-
-class MemoryEnabledApplication {
-  private ai: MemoriAI;
-
-  constructor() {
-    // Initialize MemoriAI with all capabilities
-    this.ai = new MemoriAI({
-      databaseUrl: 'file:./memori.db',
-      apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
-      model: 'gpt-4',
-      provider: 'openai',
-      mode: 'automatic'
-    });
-  }
-
-  async processUserQuery(userMessage: string, sessionId?: string) {
-    try {
-      // Search for relevant context
-      const context = await this.ai.searchMemories(userMessage, {
-        limit: 5,
-        minImportance: 'medium'
-      });
-
-      // Include context in AI prompt
-      const messages = [
-        ...context.map(c => ({
-          role: 'system' as const,
-          content: `Context: ${c.content}`
-        })),
-        { role: 'user' as const, content: userMessage }
-      ];
-
-      // Get AI response with automatic memory recording
-      const response = await this.ai.chat({
-        messages,
-        sessionId
-      });
-
-      return response.message.content;
-    } catch (error) {
-      console.error('Error processing query:', error);
-      throw error;
+import { LLMProviderFactory, ProviderType } from 'memorits';
+
+const provider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  model: 'claude-3-5-sonnet-20241022',
+  features: {
+    memory: {
+      enableChatMemory: true,
+      memoryProcessingMode: 'auto',
+      sessionId: 'anthropic-session'
     }
   }
-
-  async searchMemories(query: string) {
-    const memories = await this.ai.searchMemories(query, {
-      limit: 10,
-      includeMetadata: true
-    });
-
-    return memories;
-  }
-
-  async getConfig() {
-    return this.ai.getConfig();
-  }
-}
-```
-
-### Configuration Example
-
-```typescript
-import { MemoriAI } from 'memorits';
-
-// Simple configuration
-const ai = new MemoriAI({
-  databaseUrl: process.env.DATABASE_URL || 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
-  model: process.env.MEMORI_MODEL || 'gpt-4',
-  provider: 'openai',
-  mode: process.env.MEMORI_MODE || 'automatic',
-  namespace: process.env.MEMORI_NAMESPACE || 'default'
 });
-
-// Environment-based configuration is straightforward
-// No complex schema validation needed - MemoriAI handles validation
 ```
 
-## Best Practices
+These utilities are considered advanced usage; most applications rely on `MemoriAI` or `Memori`.
 
-### 1. Error Handling
+## Logging
 
-```typescript
-// Always handle errors gracefully
-try {
-  const results = await ai.searchMemories('query');
-} catch (error) {
-  if (error instanceof DatabaseError) {
-    // Handle database issues
-    console.error('Database error:', error);
-  } else if (error instanceof ProviderError) {
-    // Handle provider issues
-    console.error('Provider error:', error);
-  } else if (error instanceof SearchError) {
-    // Handle search issues
-    console.error('Search error:', error);
-  } else {
-    // Handle unexpected errors
-    console.error('Unexpected error:', error);
-  }
-}
-```
+All core classes use `logInfo`/`logError` from `src/core/infrastructure/config/Logger.ts`. Each log entry includes a `component` field (e.g., `MemoriAI`, `SearchManager`) and contextual metadata like `sessionId`, `namespace`, or operation identifiers.
 
-### 2. Configuration Management
+## Error Handling
 
-```typescript
-// Use environment variables for configuration
-const ai = new MemoriAI({
-  databaseUrl: process.env.DATABASE_URL || 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY || 'your-api-key',
-  provider: 'openai',
-  mode: 'automatic'
-});
+- Configuration errors throw `ValidationError` or `SanitizationError`.
+- Provider initialisation errors bubble up from the underlying SDKs.
+- Search operations throw when options fail validation or when fallbacks also fail.
+- Consolidation and duplicate operations return structured results containing `errors`/`warnings`.
 
-// MemoriAI validates configuration automatically
-```
+Always wrap calls in `try/catch` when building production systems to handle these outcomes gracefully.
 
-### 3. Performance Monitoring
-
-```typescript
-// Monitor performance
-const startTime = Date.now();
-const results = await ai.searchMemories('query', { limit: 10 });
-const duration = Date.now() - startTime;
-
-console.log(`Search took ${duration}ms and returned ${results.length} results`);
-```
-
-This core API provides a solid foundation for building sophisticated memory-enabled applications with comprehensive search and filtering capabilities.
+This reference should give you a working mental model of the public API. For deeper dives, consult the module-specific docs (`advanced-features/`, `core-concepts/`) or inspect the source files referenced above.

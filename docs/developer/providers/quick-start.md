@@ -1,241 +1,110 @@
-# 🚀 Provider Quick Start Guide
+# Provider Quick Start
 
-Get started with multiple LLM providers in minutes using Memorits' unified provider system.
+Memorits unifies multiple LLM providers behind a consistent interface. This short guide shows how to get up and running with the drop-in client and the provider factory.
 
-## Quick Setup (2 minutes)
-
-### 1. Install Dependencies
-
-```bash
-npm install memorits
-```
-
-### 2. Choose Your Integration Pattern
-
-#### Option A: Drop-in Replacement (OpenAI Compatible)
+## OpenAI-Compatible Drop-in
 
 ```typescript
-import { MemoriOpenAI } from 'memorits';
+import { MemoriOpenAI } from 'memorits/integrations/openai-dropin/client';
 
-const client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-  enableChatMemory: true,
-  autoInitialize: true
-});
-
-// Use exactly like OpenAI SDK
-const response = await client.chat.completions.create({
+const client = new MemoriOpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
   model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: 'Hello!' }]
-});
-
-// Access memory features
-const memories = await client.memory.searchMemories('hello');
-```
-
-#### Option B: Provider Factory (Multi-Provider Support)
-
-```typescript
-import { LLMProviderFactory, ProviderType } from '@memori/providers';
-
-// Create OpenAI provider
-const openaiProvider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4o-mini',
-  enableMemory: true,
-  memoryConfig: {
-    databaseUrl: 'sqlite:./memories.db',
-    namespace: 'my-app'
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'quick-start'
   }
 });
 
-// Create Anthropic provider (shared memory)
-const anthropicProvider = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-3-5-sonnet-20241022',
-  enableMemory: true,
-  memoryConfig: {
-    databaseUrl: 'sqlite:./memories.db', // Same database for shared memory
-    namespace: 'my-app'
-  }
-});
-
-// Use different providers
-const openaiResponse = await openaiProvider.chat.completions.create({
+const completion = await client.chat.completions.create({
   model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: 'Hello from OpenAI!' }]
+  messages: [{ role: 'user', content: 'Remember that I prefer dark mode.' }]
 });
 
-const anthropicResponse = await anthropicProvider.chat.completions.create({
-  model: 'claude-3-5-sonnet-20241022',
-  messages: [{ role: 'user', content: 'Hello from Anthropic!' }]
-});
-
-// Search across all conversations
-const memories = await openaiProvider.memory.searchMemories('hello');
+const memories = await client.memory.searchMemories('dark mode');
+console.log(memories.length);
 ```
 
-#### Option C: Ollama (Local LLM)
+- Works with OpenAI API-compatible hosts (including Azure OpenAI and local Ollama servers running in compatibility mode).
+- Memory configuration mirrors the provider features used internally by `MemoriAI`.
+
+## Provider Factory
 
 ```typescript
-const ollamaProvider = await LLMProviderFactory.createProvider(ProviderType.OLLAMA, {
-  baseUrl: 'http://localhost:11434',
-  model: 'llama2:7b',
-  enableMemory: true,
-  memoryConfig: {
-    databaseUrl: 'sqlite:./memories.db',
-    namespace: 'my-app'
+import { LLMProviderFactory, ProviderType } from 'memorits';
+
+const provider = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'factory-demo'
   }
 });
 
-const response = await ollamaProvider.chat.completions.create({
-  model: 'llama2:7b',
-  messages: [{ role: 'user', content: 'Hello locally!' }]
+const response = await provider.createChatCompletion({
+  messages: [{ role: 'user', content: 'Store this in memory.' }]
 });
 ```
+
+Swap `ProviderType.OPENAI` for `ProviderType.ANTHROPIC` or `ProviderType.OLLAMA` with the appropriate API key and base URL.
 
 ## Environment Variables
 
-```bash
-# OpenAI Configuration
-OPENAI_API_KEY=sk-proj-your-openai-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-
-# Anthropic Configuration
-ANTHROPIC_API_KEY=sk-ant-api03-your-anthropic-key
-ANTHROPIC_BASE_URL=https://api.anthropic.com/v1
-
-# Ollama Configuration (local)
-OLLAMA_BASE_URL=http://localhost:11434
-
-# Memory Configuration
-MEMORI_DATABASE_URL=sqlite:./memories.db
-MEMORI_NAMESPACE=my-app
+```
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_BASE_URL=http://localhost:11434/v1   # for Ollama compatibility mode
+DATABASE_URL=file:./memori.db
+MEMORI_NAMESPACE=default
 MEMORI_AUTO_INGEST=true
 ```
 
-## Basic Usage Patterns
+`ConfigManager` reads `DATABASE_URL`, `MEMORI_*`, and provider-specific variables automatically; override them per instance when needed.
 
-### Pattern 1: Single Provider with Memory
+## Shared Memory Across Providers
 
-```typescript
-import { MemoriOpenAI } from 'memorits';
-
-class MemoryEnabledApp {
-  private client: MemoriOpenAI;
-
-  constructor() {
-    this.client = new MemoriOpenAI(process.env.OPENAI_API_KEY!, {
-      enableChatMemory: true,
-      autoInitialize: true,
-      databaseConfig: {
-        type: 'sqlite',
-        url: 'sqlite:./memories.db'
-      }
-    });
-  }
-
-  async chat(message: string) {
-    // AI response with automatic memory recording
-    const response = await this.client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: message }]
-    });
-
-    return response.choices[0].message.content;
-  }
-
-  async searchHistory(query: string) {
-    // Search conversation history
-    return this.client.memory.searchMemories(query, {
-      limit: 10,
-      minImportance: 'medium'
-    });
-  }
-}
-```
-
-### Pattern 2: Multiple Providers with Shared Memory
+Point each provider at the same SQLite database to share memories:
 
 ```typescript
-import { LLMProviderFactory, ProviderType } from 'memorits/core/infrastructure/providers';
+const memoryConfig = {
+  databaseUrl: 'file:./memori.db',
+  namespace: 'team-bot'
+};
 
-class MultiProviderApp {
-  private providers: Map<ProviderType, any> = new Map();
-  private sharedMemory: any;
+const openai = await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',
+  memory: { ...memoryConfig, enableChatMemory: true, memoryProcessingMode: 'auto' }
+});
 
-  async initialize() {
-    // Create providers with shared memory configuration
-    const memoryConfig = {
-      databaseUrl: 'sqlite:./memories.db',
-      namespace: 'multi-provider-app'
-    };
-
-    this.providers.set(ProviderType.OPENAI,
-      await LLMProviderFactory.createProvider(ProviderType.OPENAI, {
-        apiKey: process.env.OPENAI_API_KEY,
-        model: 'gpt-4o-mini',
-        enableMemory: true,
-        memoryConfig
-      })
-    );
-
-    this.providers.set(ProviderType.ANTHROPIC,
-      await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        model: 'claude-3-5-sonnet-20241022',
-        enableMemory: true,
-        memoryConfig
-      })
-    );
-
-    // Use first provider's memory for shared access
-    this.sharedMemory = this.providers.get(ProviderType.OPENAI)!.memory;
-  }
-
-  async askProvider(providerType: ProviderType, message: string) {
-    const provider = this.providers.get(providerType);
-    if (!provider) {
-      throw new Error(`Provider ${providerType} not available`);
-    }
-
-    const response = await provider.chat.completions.create({
-      model: providerType === ProviderType.OPENAI ? 'gpt-4o-mini' : 'claude-3-5-sonnet-20241022',
-      messages: [{ role: 'user', content: message }]
-    });
-
-    return response.choices[0].message.content;
-  }
-
-  async searchAllMemories(query: string) {
-    return this.sharedMemory.searchMemories(query, { limit: 20 });
-  }
-}
+const anthropic = await LLMProviderFactory.createProvider(ProviderType.ANTHROPIC, {
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  model: 'claude-3-5-sonnet-20241022',
+  memory: { ...memoryConfig, enableChatMemory: true, memoryProcessingMode: 'auto' }
+});
 ```
 
-## Provider Selection Guide
+All interactions persist to the same namespace, so `MemoriAI` (or any provider) can retrieve them.
 
-| Requirement | Recommended Provider | Reason |
-|-------------|-------------------|--------|
-| **Best Quality** | Anthropic | Claude 3.5 Sonnet offers excellent response quality |
-| **Lowest Cost** | Anthropic | Competitive pricing, especially for input tokens |
-| **Privacy/Local** | Ollama | Complete data privacy, local execution |
-| **Lowest Latency** | Ollama | Local execution, no network overhead |
-| **Reliability** | OpenAI | Mature infrastructure, high uptime |
-| **Development** | Ollama | Free, fast iteration, no API costs |
+## Ollama Notes
 
-## Next Steps
+- Run `ollama serve` with the OpenAI-compatible endpoint (`/v1`).
+- Set `apiKey` to `ollama-local` and `baseUrl` to `http://localhost:11434/v1`.
 
-1. **Read Provider Guides**: Choose the appropriate provider guide for detailed setup
-2. **Configure Memory**: Set up database and namespace configuration
-3. **Test Integration**: Use the testing tools to verify your setup
-4. **Performance Tuning**: Optimize configuration for your use case
-5. **Production Setup**: Configure monitoring and error handling
+```typescript
+const ollama = await LLMProviderFactory.createProvider(ProviderType.OLLAMA, {
+  apiKey: 'ollama-local',
+  baseUrl: 'http://localhost:11434/v1',
+  model: 'llama3',
+  memory: {
+    enableChatMemory: true,
+    memoryProcessingMode: 'auto',
+    sessionId: 'ollama-session'
+  }
+});
+```
 
-## Getting Help
-
-- **Provider Guides**: See specific guides for each provider
-- **API Reference**: Check the core API documentation
-- **Examples**: Look at `/examples` directory for complete examples
-- **Testing Tools**: Use `ProviderTestSuite` and `ProviderBenchmark` for validation
-
-This quick start guide gets you up and running with multiple LLM providers in minutes while providing a solid foundation for building sophisticated memory-enabled applications.
+With these building blocks you can mix providers freely while keeping memory persistent and searchable.

@@ -1,483 +1,225 @@
 # Basic Usage Guide
 
-This guide covers the essential usage patterns for Memorits, from simple memory operations to advanced search capabilities.
+This guide walks through the day-to-day operations you will perform with Memorits. It is grounded in the exact APIs exported from `src/index.ts`, so every snippet below compiles against the library in this repository.
 
-## Core Operations
-
-### 1. Initialize MemoriAI
+## 1. Core workflow with `MemoriAI`
 
 ```typescript
 import { MemoriAI } from 'memorits';
 
-// Create MemoriAI instance with simple configuration
 const ai = new MemoriAI({
   databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key',
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'
+  apiKey: process.env.OPENAI_API_KEY ?? 'sk-your-api-key',
+  provider: 'openai',          // optional – detected from key when omitted
+  model: 'gpt-4o-mini',
+  mode: 'automatic',
+  namespace: 'customer-support'
 });
-```
 
-### 2. Use MemoriAI Directly
-
-```typescript
-// Chat normally - memory is recorded automatically
-const response = await ai.chat({
+const reply = await ai.chat({
   messages: [
-    { role: 'user', content: 'I need help with TypeScript interfaces' }
-  ]
+    { role: 'user', content: 'Remember that the deployment window is Friday afternoon.' }
+  ],
+  temperature: 0.2
 });
 
-console.log('Conversation recorded with ID:', response.chatId);
+console.log(reply.message.content);
 ```
 
-### 3. Search Memories
+- In **automatic mode**, `MemoriAI.chat` records each exchange by calling `Memori.recordConversation`.
+- Use `namespace` to partition memories per team, tenant, or environment.
+
+### Searching stored memories
 
 ```typescript
-// Basic text search
-const results = await ai.searchMemories('TypeScript interfaces', {
-  limit: 5
+const matches = await ai.searchMemories('deployment window', {
+  limit: 5,
+  minImportance: 'medium',
+  includeMetadata: true
 });
 
-// Advanced search with filtering
-const filteredResults = await ai.searchMemories('programming help', {
+matches.forEach(memory => {
+  console.log(`${memory.summary} -> ${memory.importance}`);
+});
+```
+
+The `MemoriAI` search options mirror the `SearchOptions` interface in `src/core/MemoriAIConfig.ts`:
+
+```typescript
+type MemoriAISearchOptions = {
+  namespace?: string;
+  limit?: number;
+  includeMetadata?: boolean;
+  minImportance?: 'low' | 'medium' | 'high' | 'critical';
+  categories?: string[];
+  sortBy?: { field: string; direction: 'asc' | 'desc' };
+  offset?: number;
+};
+```
+
+### Manual mode
+
+```typescript
+const manual = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY ?? 'sk-your-api-key',
+  mode: 'manual'
+});
+
+const chatId = await manual.recordConversation(
+  'The API key rotates monthly.',
+  'Stored: API key rotates monthly.',
+  { metadata: { topic: 'security' } }
+);
+
+console.log(`Manual record saved as ${chatId}`);
+```
+
+Manual mode avoids auto-recording so you decide which exchanges persist.
+
+### Clean shutdown
+
+```typescript
+await ai.close();
+```
+
+Always dispose providers and database connections when you are done.
+
+## 2. Switching to advanced control with `Memori`
+
+The `Memori` class exposes the complete set of capabilities implemented under `src/core/Memori.ts`: advanced search filters, index health, conscious ingestion utilities, and maintenance helpers.
+
+```typescript
+import { Memori, SearchStrategy } from 'memorits';
+
+const memori = new Memori({
+  databaseUrl: 'file:./memori.db',
+  mode: 'conscious',
+  namespace: 'customer-support'
+});
+
+await memori.enable();
+```
+
+### Temporal and metadata filtering
+
+```typescript
+const temporal = await memori.searchMemories('deployment', {
   limit: 10,
-  minImportance: 'high',
-  categories: ['essential', 'contextual']
-});
-```
-
-## Search Options
-
-### SearchOptions Interface
-
-All search operations use the comprehensive `SearchOptions` interface defined in `src/core/types/models.ts`. This interface provides:
-
-```typescript
-interface SearchOptions {
-  // Basic options
-  namespace?: string;                    // Memory namespace (default: 'default')
-  limit?: number;                       // Number of results (default: 5)
-  includeMetadata?: boolean;            // Include additional metadata
-
-  // Filtering options
-  minImportance?: MemoryImportanceLevel; // Filter by importance level
-  categories?: MemoryClassification[];   // Filter by memory categories
-  temporalFilters?: TemporalFilterOptions; // Time-based filtering
-  metadataFilters?: MetadataFilterOptions; // Metadata-based filtering
-
-  // Sorting and pagination
-  sortBy?: SortOption;                   // Sort results
-  offset?: number;                       // Pagination offset
-
-  // Advanced options
-  strategy?: SearchStrategy;             // Force specific strategy
-  timeout?: number;                      // Search timeout (ms)
-  enableCache?: boolean;                 // Enable result caching
-
-  // Advanced Features
-  filterExpression?: string;             // Advanced filter expression with boolean logic
-  includeRelatedMemories?: boolean;      // Include related memories in results
-  maxRelationshipDepth?: number;         // Maximum depth for relationship traversal
-}
-```
-
-**Note**: The canonical `SearchOptions` interface is imported from `src/core/types/models.ts`. Use this interface for all search operations to ensure consistency across the system.
-
-## Memory Classification System
-
-### Importance Levels
-
-```typescript
-enum MemoryImportanceLevel {
-  CRITICAL = 'critical',    // Must remember (score: 0.9)
-  HIGH = 'high',           // Important information (score: 0.7)
-  MEDIUM = 'medium',       // Useful information (score: 0.5)
-  LOW = 'low'              // Background information (score: 0.3)
-}
-```
-
-### Memory Categories
-
-```typescript
-enum MemoryClassification {
-  ESSENTIAL = 'essential',        // Critical information
-  CONTEXTUAL = 'contextual',      // Supporting context
-  CONVERSATIONAL = 'conversational', // General conversation
-  REFERENCE = 'reference',        // Reference material
-  PERSONAL = 'personal',          // Personal information
-  CONSCIOUS_INFO = 'conscious-info' // Conscious context
-}
-```
-
-## Search Examples
-
-### 1. Simple Text Search
-
-```typescript
-const results = await ai.searchMemories('TypeScript interfaces');
-console.log(`Found ${results.length} memories`);
-
-// Each result includes:
-// - id: Unique memory identifier
-// - content: The searchable content
-// - metadata: Additional information (summary, category, importance, etc.)
-// - score: Relevance score (0.0 to 1.0)
-```
-
-### 2. Importance-Based Filtering
-
-```typescript
-const importantMemories = await ai.searchMemories('programming', {
-  minImportance: 'high',  // Only show high+ importance memories
-  limit: 20
-});
-```
-
-### 3. Category-Based Filtering
-
-```typescript
-const technicalMemories = await ai.searchMemories('code', {
-  categories: ['essential', 'reference'],  // Only technical memories
-  limit: 10
-});
-```
-
-### 4. Combined Filtering
-
-```typescript
-const specificMemories = await ai.searchMemories('project planning', {
-  minImportance: 'medium',
-  categories: ['essential', 'contextual'],
-  includeMetadata: true,
-  limit: 15
-});
-```
-
-### 5. Recent Memories Search
-
-```typescript
-// Get recent memories for context
-const recentContext = await ai.searchRecentMemories(5, true);
-
-// Get recent memories from today only
-const todaysMemories = await ai.searchRecentMemories(10, false, {
-  relativeExpressions: ['today']
-});
-
-// Get recent high-importance memories
-const recentImportant = await ai.searchMemories('', {
-  limit: 20,
-  minImportance: 'high',
   temporalFilters: {
-    relativeExpressions: ['last 3 days']
-  }
-});
-```
-
-## Memory Information
-
-### Understanding Search Results
-
-Each search result contains:
-
-```typescript
-interface MemorySearchResult {
-  id: string;                    // Unique memory identifier
-  content: string;              // Searchable content
-  metadata: {
-    summary: string;            // Concise summary
-    category: string;           // Memory classification
-    importanceScore: number;    // Importance score (0.0-1.0)
-    memoryType: string;         // 'short_term' or 'long_term'
-    createdAt: Date;           // When memory was created
-    entities: string[];         // Extracted entities
-    keywords: string[];         // Key terms
-    confidenceScore: number;    // Processing confidence
-  };
-  score: number;                // Relevance score for this search
-  strategy: string;             // Search strategy used
-  timestamp: Date;              // Memory timestamp
-}
-```
-
-### Working with Memory Data
-
-```typescript
-// Process search results
-const results = await ai.searchMemories('important information');
-
-for (const result of results) {
-  console.log('Memory:', result.metadata.summary);
-  console.log('Importance:', result.metadata.importanceScore);
-  console.log('Category:', result.metadata.category);
-  console.log('Created:', result.metadata.createdAt);
-
-  // Access full content if needed
-  if (result.metadata.importanceScore > 0.8) {
-    console.log('High importance memory found!');
-    console.log('Full content:', result.content);
-  }
-}
-```
-
-## Error Handling
-
-### Basic Error Handling
-
-```typescript
-try {
-  const memories = await ai.searchMemories('query');
-  console.log(`Found ${memories.length} memories`);
-} catch (error) {
-  console.error('Search failed:', error);
-
-  // Common errors:
-  // - Database connection issues
-  // - Invalid search parameters
-  // - Memory processing failures
-}
-```
-
-### Graceful Degradation
-
-```typescript
-// MemoriAI errors shouldn't break your application
-try {
-  const memories = await ai.searchMemories('context');
-  // Use memories to enhance response
-  enhancedContext = memories.slice(0, 3);
-} catch (error) {
-  console.warn('Memory search failed, continuing without context:', error);
-  // Continue with basic functionality
-  enhancedContext = [];
-}
-```
-
-## Consolidation Best Practices
-
-### 1. Use Unified Consolidation Service
-
-```typescript
-// Recommended: Use DatabaseManager for unified consolidation
-const dbManager = new DatabaseManager('file:./memori.db');
-const consolidationService = dbManager.getConsolidationService();
-
-// Automatic DuplicateManager integration for sophisticated similarity analysis
-const duplicates = await consolidationService.detectDuplicateMemories(content, 0.7);
-```
-
-### 2. Enable Automated Consolidation
-
-```typescript
-// Start automated consolidation scheduling
-dbManager.startConsolidationScheduling({
-  intervalMinutes: 60,        // Run every hour
-  maxConsolidationsPerRun: 50, // Process max 50 per run
-  similarityThreshold: 0.7,    // 70% similarity threshold
-  dryRun: false               // Perform actual consolidation
-});
-
-// Monitor consolidation performance
-const metrics = await dbManager.getConsolidationPerformanceMetrics();
-console.log(`Success rate: ${metrics.consolidationSuccessRate}%`);
-```
-
-## Performance Tips
-
-### 1. Use Appropriate Limits
-
-```typescript
-// For real-time applications
-const quickResults = await ai.searchMemories('urgent', { limit: 3 });
-
-// For analysis and reporting
-const comprehensiveResults = await ai.searchMemories('analysis', { limit: 50 });
-```
-
-### 2. Filter Before Searching
-
-```typescript
-// Use importance and category filters to reduce search space
-const filteredSearch = await ai.searchMemories('specific topic', {
-  minImportance: 'medium',
-  categories: ['essential', 'reference'],
-  limit: 10
-});
-```
-
-### 3. Cache Search Results
-
-```typescript
-// Cache frequently used searches
-const cache = new Map();
-
-function getCachedSearch(key: string, searchFn: () => Promise<any[]>) {
-  if (cache.has(key)) {
-    return Promise.resolve(cache.get(key));
-  }
-
-  return searchFn().then(results => {
-    cache.set(key, results);
-    return results;
-  });
-}
-```
-
-### 4. Monitor Consolidation Performance
-
-```typescript
-// Check consolidation health regularly
-const consolidationMetrics = await dbManager.getConsolidationPerformanceMetrics();
-if (consolidationMetrics.consolidationSuccessRate < 90) {
-  console.warn('Consolidation success rate below threshold');
-  // Adjust similarity thresholds or review consolidation strategy
-}
-
-// Get optimization recommendations
-const recommendations = await consolidationService.getOptimizationRecommendations();
-if (recommendations.overallHealth === 'poor') {
-  console.warn('Consolidation system health is poor');
-  recommendations.recommendations.forEach(rec => {
-    console.log(`${rec.priority}: ${rec.description}`);
-  });
-}
-```
-
-## Integration Patterns
-
-### With Chat Applications
-
-```typescript
-class MemoryEnabledChat {
-  private ai: MemoriAI;
-
-  async processMessage(userMessage: string, sessionId: string) {
-    // Search for relevant context
-    const context = await this.ai.searchMemories(userMessage, {
-      limit: 5,
-      minImportance: 'medium'
-    });
-
-    // Include context in AI prompt
-    const messages = [
-      ...context.map(c => ({ role: 'system' as const, content: c.content })),
-      { role: 'user' as const, content: userMessage }
-    ];
-
-    // Get AI response using MemoriAI directly
-    const response = await this.ai.chat({
-      messages
-    });
-
-    return response;
-  }
-}
-```
-
-### With Knowledge Bases
-
-```typescript
-class KnowledgeBaseAssistant {
-  async answerQuestion(question: string) {
-    // Search for relevant knowledge
-    const knowledge = await this.ai.searchMemories(question, {
-      categories: ['reference', 'essential'],
-      minImportance: 'high',
-      limit: 10
-    });
-
-    // Use knowledge to answer question
-    const context = knowledge.map(k => k.content).join('\n');
-    const prompt = `Context: ${context}\n\nQuestion: ${question}`;
-
-    // Use MemoriAI directly for the response
-    return this.ai.chat({
-      messages: [{ role: 'user', content: prompt }]
-    });
-  }
-}
-```
-
-## Best Practices
-
-### 1. Start Simple
-
-```typescript
-// Begin with basic search and filtering
-const results = await ai.searchMemories('your topic', {
-  limit: 5
-});
-
-// Gradually add complexity as needed
-const advancedResults = await ai.searchMemories('your topic', {
-  minImportance: 'high',
-  categories: ['essential'],
+    relativeExpressions: ['last 14 days']
+  },
+  metadataFilters: {
+    fields: [
+      { key: 'metadata.topic', operator: 'eq', value: 'operations' }
+    ]
+  },
   includeMetadata: true
 });
 ```
 
-### 2. Handle Empty Results
+The advanced `SearchOptions` in `src/core/types/models.ts` add fields such as `temporalFilters`, `metadataFilters`, `filterExpression`, `includeRelatedMemories`, and `maxRelationshipDepth`. Use `Memori` when you need those controls.
+
+### Strategy-specific search
 
 ```typescript
-const results = await ai.searchMemories('specific topic');
+const recents = await memori.searchMemoriesWithStrategy(
+  '',
+  SearchStrategy.RECENT,
+  { limit: 15, includeMetadata: true }
+);
+```
 
-if (results.length === 0) {
-  console.log('No memories found for this topic');
-  // Provide fallback behavior
-} else {
-  console.log(`Found ${results.length} relevant memories`);
+`SearchStrategy` enumerates `fts5`, `like`, `recent`, `semantic`, `category_filter`, `temporal_filter`, `metadata_filter`, and `relationship`. These values map directly to the strategy implementations under `src/core/domain/search`.
+
+### Recent memory helper
+
+```typescript
+const today = await memori.searchRecentMemories(
+  10,
+  true,
+  {
+    relativeExpressions: ['today']
+  }
+);
+```
+
+`searchRecentMemories(limit?, includeMetadata?, temporalFilters?, strategy?)` is available on `Memori` only. Internally it falls back to the temporal strategy when a filter is supplied.
+
+### Conscious processing utilities
+
+```typescript
+await memori.initializeConsciousContext();
+await memori.checkForConsciousContextUpdates();
+```
+
+These methods wrap `ConsciousAgent` (see `src/core/domain/memory/ConsciousAgent.ts`) and are useful when `mode: 'conscious'` or the environment flag `MEMORI_CONSCIOUS_INGEST=true` enables background promotion of important memories.
+
+## 3. Understanding search results
+
+Both `MemoriAI` and `Memori` return the `MemorySearchResult` structure defined in `src/core/types/models.ts`:
+
+```typescript
+interface MemorySearchResult {
+  id: string;
+  content: string;
+  summary: string;
+  classification: MemoryClassification;
+  importance: MemoryImportanceLevel;
+  topic?: string;
+  entities: string[];
+  keywords: string[];
+  confidenceScore: number;
+  classificationReason: string;
+  metadata?: Record<string, unknown>;
 }
 ```
 
-### 3. Monitor Performance
+- `metadata` is only populated when you request it (`includeMetadata: true`). Expect keys such as `searchScore`, `searchStrategy`, `memoryType`, and importance scores.
+- There is no standalone `score` property; use `metadata.searchScore` when a strategy calculates one, or rely on `confidenceScore`.
+
+## 4. Maintenance routines
+
+The `Memori` instance gives you access to database maintenance helpers implemented in `src/core/Memori.ts`:
 
 ```typescript
-const startTime = Date.now();
-const results = await ai.searchMemories('performance test', { limit: 10 });
-const duration = Date.now() - startTime;
-
-console.log(`Search took ${duration}ms and returned ${results.length} results`);
+const stats = await memori.getMemoryStatistics();
+const strategies = await memori.getAvailableSearchStrategies();
+const health = await memori.getIndexHealthReport();
+const optimized = await memori.optimizeIndex();       // defaults to full optimization
+const backup = await memori.createIndexBackup();
 ```
 
-## Troubleshooting
+Use these in background jobs or admin dashboards to keep the search index healthy.
 
-### Common Issues
-
-**"No memories found"**
-- Wait for background processing (may take a few seconds)
-- Check if auto-ingestion is enabled
-- Verify database connection
-
-**"Search is slow"**
-- Add importance/category filters to reduce search space
-- Use appropriate limits
-- Check database indexes
-
-**"Memory not being recorded"**
-- Ensure MemoriAI is properly initialized with correct configuration
-- Check database permissions and path
-- Verify API key and provider settings are valid
-
-### Debug Information
+## 5. Putting it together
 
 ```typescript
-// Enable debug logging
-process.env.DEBUG = 'memori:*';
+import { MemoriAI, Memori } from 'memorits';
 
-// Check system status (MemoriAI doesn't need explicit enable)
-const config = ai.getConfig();
-console.log('MemoriAI configuration:', config);
+const ai = new MemoriAI({
+  databaseUrl: 'file:./memori.db',
+  apiKey: process.env.OPENAI_API_KEY ?? 'sk-your-api-key',
+  namespace: 'support'
+});
+
+await ai.chat({
+  messages: [{ role: 'user', content: 'Remember that renewals close on the 25th.' }]
+});
+
+const quickLookup = await ai.searchMemories('renewals', { limit: 3 });
+
+const memori = new Memori({ databaseUrl: 'file:./memori.db' });
+await memori.enable();
+
+const deepLookup = await memori.searchMemories('renewals', {
+  limit: 10,
+  temporalFilters: { relativeExpressions: ['next 30 days'] },
+  includeMetadata: true
+});
+
+await ai.close();
+await memori.close();
 ```
 
-## Next Steps
-
-Now that you understand basic usage:
-
-1. **🔍 [Search Strategies](core-concepts/search-strategies.md)** - Learn advanced search techniques
-2. **🏗️ [Architecture](architecture/system-overview.md)** - Understand system design and data flow
-3. **🔧 [Advanced Features](advanced-features/temporal-filtering.md)** - Explore sophisticated filtering
-4. **💡 [Examples](examples/basic-usage.md)** - See practical implementations
-
-Happy coding with Memorits! 🎯
+Reach for `MemoriAI` when you want a concise, batteries-included interface; drop down to `Memori` when you need surgical control over ingestion, search, or index management. Both layers share the same database and provider infrastructure, so you can mix them freely within a project.

@@ -43,3 +43,18 @@ export type {
   EmbeddingCreateParams,
   CreateEmbeddingResponse,
 } from './integrations/openai-dropin/types';
+
+// Provider utilities for advanced usage
+export {
+  LLMProviderFactory,
+  ProviderType,
+  IProviderConfig,
+  MemoryCapableProvider,
+  OpenAIProvider,
+  AnthropicProvider,
+  OllamaProvider,
+} from './core/infrastructure/providers';
+
+// Performance monitoring services
+export { PerformanceDashboardService } from './core/performance/PerformanceDashboard';
+export { PerformanceAnalyticsService } from './core/performance/PerformanceAnalyticsService';

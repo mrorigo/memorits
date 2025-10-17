@@ -1,400 +1,153 @@
-# 🚀 Memori API Guide
+# Memori API Patterns
 
-## Overview
+`Memori` is the full-featured core class that powers Memorits. This guide complements the core API reference by showing canonical workflows built on top of its methods.
 
-The **Memori API** provides a clean, intuitive interface for building applications with AI-powered memory. Simple configuration, direct provider integration, and automatic memory recording make it easy to add intelligent memory to your AI applications.
-
-## 🚀 Quick Start
-
-### Basic Setup
+## Enabling and Shutting Down
 
 ```typescript
-import { MemoriAI } from 'memorits';
+import { Memori } from 'memorits';
 
-const ai = new MemoriAI({
+const memori = new Memori({
   databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY || 'sk-your-openai-key',
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'
-});
-
-const response = await ai.chat({
-  messages: [{ role: 'user', content: 'Hello!' }]
-});
-
-console.log('Response:', response.message.content);
-console.log('Chat ID:', response.chatId);
-```
-
-### Multiple Providers
-
-```typescript
-import { MemoriAI } from 'memorits';
-
-// OpenAI provider
-const openaiAI = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'
-});
-
-// Anthropic provider (same database for shared memory)
-const anthropicAI = new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-3-5-sonnet-20241022',
-  provider: 'anthropic',
-  mode: 'automatic'
-});
-
-// Both record to the same memory pool
-await openaiAI.chat({ messages: [{ role: 'user', content: 'From OpenAI' }] });
-await anthropicAI.chat({ messages: [{ role: 'user', content: 'From Claude' }] });
-
-// Search across all conversations
-const memories = await openaiAI.searchMemories('AI');
-```
-
-### Local Development
-
-```typescript
-import { MemoriAI } from 'memorits';
-
-const ai = new MemoriAI({
-  databaseUrl: 'file:./local.db',
-  apiKey: 'ollama-local',
-  baseUrl: 'http://localhost:11434',
-  model: 'llama2',
-  provider: 'ollama',
-  mode: 'automatic'
-});
-
-const response = await ai.chat({
-  messages: [{ role: 'user', content: 'Local AI!' }]
-});
-```
-
-## 📚 API Reference
-
-### MemoriAI Constructor
-
-```typescript
-new MemoriAI(config: {
-  databaseUrl: string;      // Database connection string
-  apiKey: string;           // Provider API key
-  model?: string;           // Model name (default: provider-specific)
-  provider: 'openai' | 'anthropic' | 'ollama'; // Required provider
-  baseUrl?: string;         // Custom API endpoint (optional)
-  mode?: 'automatic' | 'manual' | 'conscious'; // Memory processing mode
-  namespace?: string;       // Application namespace (optional)
-  sessionId?: string;       // Session identifier (optional)
-  memory?: {               // Memory configuration (optional)
-    enableChatMemory?: boolean;
-    memoryProcessingMode?: 'auto' | 'manual' | 'conscious';
-  };
-})
-```
-
-### Core Methods
-
-#### chat()
-
-```typescript
-const response = await ai.chat({
-  messages: ChatMessage[];
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  timeout?: number;
-}): Promise<ChatResponse>;
-```
-
-#### searchMemories()
-
-```typescript
-const memories = await ai.searchMemories(
-  query: string,
-  options?: {
-    limit?: number;
-    minImportance?: 'low' | 'medium' | 'high' | 'critical';
-    categories?: string[];
-    temporalFilters?: any;
-    includeMetadata?: boolean;
-  }
-): Promise<MemorySearchResult[]>;
-```
-
-#### searchRecentMemories()
-
-```typescript
-const recentMemories = await ai.searchRecentMemories(
-  limit?: number,
-  includeCurrentSession?: boolean,
-  temporalFilters?: any
-): Promise<MemorySearchResult[]>;
-```
-
-## 🔧 Configuration Options
-
-### Memory Modes
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `mode` | `'automatic'` | Memory processing mode |
-| `automatic` | Auto-record conversations and process memories |
-| `manual` | Manual control over memory recording and processing |
-| `conscious` | Advanced background processing with human-like reflection |
-
-### Provider-Specific Options
-
-#### OpenAI
-- `model`: `'gpt-4'` (default)
-- `temperature`: `0.7`
-- `maxTokens`: `1000`
-- `baseUrl`: OpenAI API endpoint
-
-#### Anthropic
-- `model`: `'claude-3-5-sonnet-20241022'` (default)
-- `temperature`: `0.7`
-- `maxTokens`: `1000`
-- `baseUrl`: Anthropic API endpoint
-
-#### Ollama
-- `model`: `'llama2'` (default)
-- `baseUrl`: `'http://localhost:11434'` (default)
-- `timeout`: Connection timeout in milliseconds
-
-## 🛠️ Advanced Usage
-
-### Custom Configuration
-
-```typescript
-const ai = new MemoriAI({
-  databaseUrl: 'file:./enterprise.db',
-  apiKey: process.env.OPENAI_API_KEY!,
-  model: 'gpt-4',
-  provider: 'openai',
   mode: 'automatic',
-  namespace: 'enterprise-app'
+  namespace: 'assistant'
 });
+
+await memori.enable();
+// ... perform operations ...
+await memori.close();
 ```
 
-### Validation and Error Handling
+Always call `enable()` before interacting with the instance and `close()` when shutting down your application.
+
+## Manual Conversation Recording
 
 ```typescript
-import { MemoriAIConfig } from 'memorits';
-
-const config: MemoriAIConfig = {
-  databaseUrl: 'file:./memori.db',
-  apiKey: process.env.OPENAI_API_KEY!,
-  model: 'gpt-4',
-  provider: 'openai',
-  mode: 'automatic'
-};
-
-// MemoriAI validates configuration automatically on creation
-try {
-  const ai = new MemoriAI(config);
-} catch (error) {
-  console.error('Configuration error:', error);
-  // Handle validation errors
-}
+const chatId = await memori.recordConversation(
+  'Remember that invoices go out on the 5th.',
+  'Acknowledged. I will remind you before the 5th.',
+  {
+    metadata: {
+      topic: 'billing',
+      importanceScore: 0.8
+    }
+  }
+);
 ```
 
-### Memory Management
+This method stores the exchange, runs it through `MemoryAgent`, and persists the resulting memories.
+
+## Advanced Search
 
 ```typescript
-// Search memories
-const memories = await ai.searchMemories('cats');
+import { SearchStrategy } from 'memorits/core/domain/search/types';
 
-// Advanced search with options
-const recentMemories = await ai.searchMemories('AI', {
+const results = await memori.searchMemories('billing reminder', {
   limit: 10,
-  includeMetadata: true
+  includeMetadata: true,
+  minImportance: 'medium',
+  temporalFilters: { relativeExpressions: ['last 30 days'] },
+  metadataFilters: {
+    fields: [
+      { key: 'metadata.topic', operator: 'eq', value: 'billing' }
+    ]
+  },
+  filterExpression: 'importanceScore >= 0.7'
 });
 
-// Search recent memories
-const recent = await ai.searchRecentMemories(5);
-
-// No need for manual statistics - search results provide all needed info
-console.log(`Found ${memories.length} memories`);
+const relationshipResults = await memori.searchMemoriesWithStrategy(
+  'billing reminder',
+  SearchStrategy.RELATIONSHIP,
+  { includeMetadata: true }
+);
 ```
 
-## 🎯 Design Principles
+The advanced `SearchOptions` type enables temporal filters, metadata filters, filter expressions, strategy overrides, and relationship traversal.
 
-### 1. **Unified API**
+## Recent Memory Helper
+
 ```typescript
-// ✅ One class handles everything
-new MemoriAI({
-  databaseUrl: 'file:./memori.db',
-  apiKey: 'sk-...',
-  provider: 'openai',
-  mode: 'automatic'
-});
-
-// ❌ No wrapper classes needed
+const today = await memori.searchRecentMemories(
+  5,
+  true,
+  { relativeExpressions: ['today'] }
+);
 ```
 
-### 2. **Direct Provider Integration**
+Returns the most recent memories, optionally combining temporal filters and metadata.
+
+## Conscious Processing
+
 ```typescript
-// ✅ MemoriAI handles provider communication directly
-const ai = new MemoriAI({
-  provider: 'openai',
-  model: 'gpt-4'
-});
-
-// ❌ No separate provider wrapper instances
+await memori.initializeConsciousContext();
+await memori.checkForConsciousContextUpdates();
 ```
 
-### 3. **Mode-Based Operation**
+Call these helpers when running in conscious mode to promote important memories into short-term context.
+
+## Duplicate Handling
+
 ```typescript
-// ✅ Choose your memory processing strategy
-{
-  mode: 'automatic',    // Auto-record everything
-  mode: 'manual',       // Manual control
-  mode: 'conscious'     // Advanced reflection
-}
+const potentialDupes = await memori.findDuplicateMemories(
+  'Invoices must be sent before the 5th of each month.',
+  { similarityThreshold: 0.8, limit: 5 }
+);
 
-// ❌ No complex configuration objects
+const consolidationService = memori.getConsolidationService();
+const recommendations = await consolidationService.getOptimizationRecommendations();
 ```
 
-### 4. **Simple Configuration**
+Use `findDuplicateMemories` for quick checks and the consolidation service for full duplicate workflows (analytics, scheduling, consolidation).
+
+## Index Maintenance
+
 ```typescript
-// ✅ Everything in one place
-{
-  databaseUrl: 'file:./memori.db',
-  apiKey: 'sk-...',
-  provider: 'openai',
-  mode: 'automatic'
-}
+const health = await memori.getIndexHealthReport();
+console.log(health.recommendations);
 
-// ❌ No nested provider configurations
+await memori.optimizeIndex(); // defaults to merge
+
+const backup = await memori.createIndexBackup();
+await memori.restoreIndexFromBackup(backup.id);
 ```
 
-## 🚨 Error Handling
+These methods proxy `SearchIndexManager`, making it simple to maintain the FTS index.
 
-### Common Errors and Solutions
+## Statistics
+
+```typescript
+const stats = await memori.getMemoryStatistics();
+console.log(stats.totalMemories, stats.longTermMemories);
+
+const detailed = await memori.getDetailedMemoryStatistics();
+console.log(detailed.importanceBreakdown);
+```
+
+Statistics help monitor ingestion health and memory distribution.
+
+## Provider Access
+
+For advanced scenarios where you need direct control of providers, fetch the underlying instances after `enable()`:
+
+```typescript
+const consolidationService = memori.getConsolidationService();
+const providers = memori['userProvider']; // internal access; wrap in your own service for stability
+```
+
+Direct property access is considered advanced usage and may change; prefer higher-level methods when possible.
+
+## Error Handling
+
+Wrap calls in `try/catch`. Many operations throw domain-specific errors when prerequisites are not met (e.g., calling before `enable()`, invalid search options, consolidation validation failures).
 
 ```typescript
 try {
-  const ai = new MemoriAI({
-    databaseUrl: 'file:./memori.db',
-    apiKey: process.env.OPENAI_API_KEY,
-    provider: 'openai',
-    mode: 'automatic'
-  });
+  await memori.searchMemories('query');
 } catch (error) {
-  if (error.message.includes('databaseUrl')) {
-    console.error('Check your database connection string format');
-  }
-
-  if (error.message.includes('apiKey')) {
-    console.error('Verify your API key format');
-  }
-
-  if (error.message.includes('provider')) {
-    console.error('Choose a valid provider: openai, anthropic, or ollama');
-  }
+  console.error('Search failed', error);
 }
 ```
 
-### Configuration Validation
+Use the structured logging emitted by `Memori` and related services to correlate failures with specific components (`DuplicateManager`, `SearchManager`, etc.).
 
-```typescript
-// MemoriAI validates configuration automatically
-try {
-  const ai = new MemoriAI({
-    databaseUrl: 'file:./memori.db',
-    apiKey: 'sk-...',
-    provider: 'openai'
-  });
-} catch (error) {
-  console.error('Configuration error:', error.message);
-  // Handle missing required fields, invalid formats, etc.
-}
-```
-
-## 📊 Performance Tips
-
-### 1. **Instance Reuse**
-```typescript
-// ✅ Reuse MemoriAI instances
-const ai = new MemoriAI(config);
-
-// ❌ Don't create new instances for each operation
-```
-
-### 2. **Efficient Searching**
-```typescript
-// ✅ Use specific search terms and filters
-const memories = await ai.searchMemories('specific topic', {
-  limit: 10,
-  minImportance: 'medium'
-});
-
-// ✅ Use recent memories for current context
-const recent = await ai.searchRecentMemories(5);
-```
-
-### 3. **Mode Selection**
-```typescript
-// ✅ Choose appropriate mode for your use case
-const ai = new MemoriAI({
-  // ... config,
-  mode: 'automatic'  // For most applications
-  // mode: 'manual'     // For fine-grained control
-  // mode: 'conscious'  // For advanced reflection
-});
-```
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**"Database connection failed"**
-- Check your `databaseUrl` format (use `file:./memori.db` for SQLite)
-- Ensure database file path is writable
-- Verify PostgreSQL server is running (if using PostgreSQL)
-
-**"Invalid API key"**
-- Verify API key format for your provider
-- Check if key has required permissions
-- Ensure key hasn't expired
-
-**"Memory recording failed"**
-- Verify database connection and permissions
-- Check provider configuration (model, baseUrl)
-- Ensure sufficient disk space for database
-
-### Debug Information
-
-```typescript
-// Enable debug logging in your environment
-process.env.DEBUG = 'memori:*';
-
-// Check MemoriAI configuration
-const config = ai.getConfig?.();
-console.log('Current configuration:', config);
-```
-
-## 📝 Next Steps
-
-1. **Read the Examples**: Check `examples/basic-usage.ts` for copy-paste code
-2. **Run the Tests**: Execute `npm test` to see the API in action
-3. **Explore Advanced Features**: Check `src/core/MemoriAI.ts` for additional methods
-4. **Customize Configuration**: Adjust memory modes and provider settings as needed
-
-## 💡 Key Benefits
-
-- **🎯 Simplicity**: One unified class for everything
-- **🔗 Direct Integration**: No wrapper classes needed
-- **🚀 Performance**: Optimized for speed and reliability
-- **🛡️ Reliability**: Comprehensive error handling and validation
-- **📚 Clarity**: Self-documenting API design
-
----
-
-**Ready to build amazing AI applications with memory? Start with the basic example above and explore the possibilities!**
+This guide should help you compose `Memori` operations into robust workflows. For lower-level details, read through the source files referenced above or explore the `advanced-features/` documents.
