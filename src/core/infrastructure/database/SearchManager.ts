@@ -4,8 +4,9 @@ import { logInfo, logError } from '../config/Logger';
 import { FTSManager } from './FTSManager';
 import { SearchService } from '../../domain/search/SearchService';
 import { SearchQuery, SearchResult } from '../../domain/search/types';
-import { ValidationError } from '../config/SanitizationUtils';
-import { PrismaClient } from '@prisma/client';
+import { ValidationError, sanitizeSearchQuery } from '../config/SanitizationUtils';
+import { BaseDatabaseService } from './BaseDatabaseService';
+import { DatabaseContext } from './DatabaseContext';
 
 /**
  * Search statistics interface for tracking search performance
@@ -22,10 +23,9 @@ export interface SearchStatistics {
  * SearchManager class for high-level search operations
  * Coordinates between FTS5 and basic search strategies using FTSManager
  */
-export class SearchManager {
+export class SearchManager extends BaseDatabaseService {
   private ftsManager: FTSManager;
   private searchService?: SearchService;
-  private prisma: PrismaClient;
   private searchStatistics: SearchStatistics = {
     totalSearches: 0,
     averageLatency: 0,
@@ -33,11 +33,14 @@ export class SearchManager {
     errorCount: 0,
   };
 
-  constructor(ftsManager: FTSManager, searchService?: SearchService, prismaClient?: PrismaClient) {
+  constructor(
+    databaseContext: DatabaseContext,
+    ftsManager: FTSManager,
+    searchService?: SearchService,
+  ) {
+    super(databaseContext);
     this.ftsManager = ftsManager;
     this.searchService = searchService;
-    // If no PrismaClient provided, we'll need to get it from FTSManager or require it
-    this.prisma = prismaClient || (ftsManager as any).prisma;
   }
 
   /**
@@ -47,38 +50,47 @@ export class SearchManager {
     const startTime = Date.now();
     const operationType = query.trim() ? 'search_with_query' : 'search_empty';
 
+    let normalizedOptions: SearchOptions = options;
+
     try {
+      normalizedOptions = this.normalizeSearchOptions(options);
+
       logInfo('Starting memory search operation', {
         component: 'SearchManager',
         operation: operationType,
         queryLength: query.length,
         options: {
-          namespace: options.namespace,
-          limit: options.limit,
-          includeMetadata: options.includeMetadata,
-          minImportance: options.minImportance,
-          categoriesCount: options.categories?.length || 0,
+          namespace: normalizedOptions.namespace,
+          limit: normalizedOptions.limit,
+          includeMetadata: normalizedOptions.includeMetadata,
+          minImportance: normalizedOptions.minImportance,
+          categoriesCount: normalizedOptions.categories?.length || 0,
         },
       });
 
       // Validate search options
-      const validation = this.validateSearchOptions(options);
+      const validation = this.validateSearchOptions(normalizedOptions);
       if (!validation.isValid) {
         throw new ValidationError(
           `Invalid search options: ${validation.errors.join(', ')}`,
           'searchOptions',
-          JSON.stringify(options),
+          JSON.stringify(normalizedOptions),
           'search_validation',
         );
       }
 
+      let results: MemorySearchResult[];
+
       // Use SearchService if available for enhanced search capabilities
       if (this.searchService) {
-        return await this.searchWithSearchService(query, options, startTime);
+        results = await this.searchWithSearchService(query, normalizedOptions, startTime);
+      } else {
+        // Fallback to direct FTSManager coordination
+        results = await this.searchWithFTSCoordination(query, normalizedOptions, startTime);
       }
 
-      // Fallback to direct FTSManager coordination
-      return await this.searchWithFTSCoordination(query, options, startTime);
+      this.recordOperationSuccess('search_memories', startTime, results.length);
+      return results;
 
     } catch (error) {
       const latency = Date.now() - startTime;
@@ -94,13 +106,15 @@ export class SearchManager {
         latency,
         queryLength: query.length,
         options: {
-          namespace: options.namespace,
-          limit: options.limit,
+          namespace: normalizedOptions.namespace,
+          limit: normalizedOptions.limit,
         },
       });
 
       // Update average latency even for failed searches
       this.updateAverageLatency(latency);
+
+      this.recordOperationFailure('search_memories', startTime, error);
 
       throw error;
     }
@@ -245,10 +259,24 @@ export class SearchManager {
   private async searchWithBasic(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
     // Implement basic search using Prisma queries when FTS is not available
     try {
+      const sanitizedQuery = query ? this.sanitizeSearchQueryInput(query) : '';
+      const sanitizedNamespace = options.namespace
+        ? this.sanitizeNamespace(options.namespace, { fieldName: 'namespace' })
+        : undefined;
+      const sanitizedCategories = options.categories
+        ? options.categories.map((category, index) =>
+          this.sanitizeString(category, {
+            fieldName: `category_${index}`,
+            maxLength: 50,
+            allowNewlines: false,
+          }) as MemoryClassification,
+        )
+        : undefined;
+
       logInfo('Executing basic search strategy', {
         component: 'SearchManager',
-        queryLength: query.length,
-        namespace: options.namespace,
+        queryLength: sanitizedQuery.length,
+        namespace: sanitizedNamespace,
       });
 
       const limit = Math.min(options.limit || 10, 1000);
@@ -258,16 +286,16 @@ export class SearchManager {
       const params: any[] = [];
 
       // Add text search in searchableContent and summary
-      if (query && query.trim()) {
-        const searchTerm = `%${query.trim()}%`;
-        whereClause += ' AND (searchableContent LIKE ? OR summary LIKE ?)';
+      if (sanitizedQuery) {
+        const searchTerm = `%${sanitizedQuery}%`;
+        whereClause += ' AND (searchableContent LIKE ? ESCAPE \'\\\' OR summary LIKE ? ESCAPE \'\\\')';
         params.push(searchTerm, searchTerm);
       }
 
       // Add namespace filter
-      if (options.namespace) {
+      if (sanitizedNamespace) {
         whereClause += ' AND namespace = ?';
-        params.push(options.namespace);
+        params.push(sanitizedNamespace);
       }
 
       // Add importance filter
@@ -278,10 +306,10 @@ export class SearchManager {
       }
 
       // Add category filter
-      if (options.categories && options.categories.length > 0) {
-        const placeholders = options.categories.map(() => '?').join(',');
+      if (sanitizedCategories && sanitizedCategories.length > 0) {
+        const placeholders = sanitizedCategories.map(() => '?').join(',');
         whereClause += ` AND categoryPrimary IN (${placeholders})`;
-        params.push(...options.categories);
+        params.push(...sanitizedCategories);
       }
 
       // Execute search using raw SQL for better compatibility
@@ -622,5 +650,47 @@ export class SearchManager {
    */
   async initializeFTSSupport(): Promise<void> {
     await this.ftsManager.initializeFTSSupport();
+  }
+
+  /**
+   * Create a sanitized copy of search options for downstream operations.
+   */
+  private normalizeSearchOptions(options: SearchOptions): SearchOptions {
+    const normalized: SearchOptions = { ...options };
+
+    if (options.namespace) {
+      normalized.namespace = this.sanitizeNamespace(options.namespace, { fieldName: 'namespace' });
+    }
+
+    if (options.categories) {
+      normalized.categories = options.categories.map((category, index) =>
+        this.sanitizeString(category, {
+          fieldName: `category_${index}`,
+          maxLength: 50,
+          allowNewlines: false,
+        }) as MemoryClassification,
+      );
+    }
+
+    if (options.filterExpression) {
+      normalized.filterExpression = this.sanitizeString(options.filterExpression, {
+        fieldName: 'filterExpression',
+        maxLength: 500,
+        allowNewlines: false,
+      });
+    }
+
+    return normalized;
+  }
+
+  /**
+   * Sanitize free-form search queries for safe raw SQL usage.
+   */
+  private sanitizeSearchQueryInput(query: string): string {
+    return sanitizeSearchQuery(query, {
+      fieldName: 'searchQuery',
+      allowWildcards: true,
+      allowBoolean: true,
+    });
   }
 }

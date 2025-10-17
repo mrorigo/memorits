@@ -4,6 +4,8 @@ import { EmbeddingParams } from '../types/EmbeddingParams';
 import { EmbeddingResponse } from '../types/EmbeddingResponse';
 import { logInfo, logError } from '../../config/Logger';
 
+type CacheResponseType = 'chat' | 'embedding';
+
 /**
  * Configuration for request caching
  */
@@ -58,46 +60,7 @@ export class RequestCache {
    */
   getChatCompletion(params: ChatCompletionParams): ChatCompletionResponse | null {
     const key = this.generateChatKey(params);
-
-    try {
-      const entry = this.cache.get(key);
-      if (!entry) {
-        logInfo('Chat completion cache miss', {
-          component: 'RequestCache',
-          key: key.substring(0, 50) + '...',
-        });
-        return null;
-      }
-
-      if (this.isExpired(entry)) {
-        this.cache.delete(key);
-        this.currentSize -= entry.size;
-        logInfo('Chat completion cache entry expired', {
-          component: 'RequestCache',
-          key: key.substring(0, 50) + '...',
-        });
-        return null;
-      }
-
-      // Update access statistics
-      entry.accessCount++;
-      entry.lastAccessed = new Date();
-
-      logInfo('Chat completion cache hit', {
-        component: 'RequestCache',
-        key: key.substring(0, 50) + '...',
-        accessCount: entry.accessCount,
-        age: Date.now() - entry.timestamp.getTime(),
-      });
-
-      return entry.data;
-    } catch (error) {
-      logError('Error retrieving from chat completion cache', {
-        component: 'RequestCache',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
+    return this.getCachedResponse<ChatCompletionResponse>(key, 'chat');
   }
 
   /**
@@ -109,32 +72,7 @@ export class RequestCache {
     ttl?: number
   ): void {
     const key = this.generateChatKey(params);
-    const size = this.estimateSize(response);
-    const entryTTL = Math.min(ttl || this.config.defaultTTL, this.config.maxTTL);
-
-    // Check if adding this entry would exceed size limit
-    if (this.currentSize + size > this.config.maxSizeMB * 1024 * 1024) {
-      this.evictEntries(size);
-    }
-
-    const entry: CacheEntry<ChatCompletionResponse> = {
-      data: response,
-      timestamp: new Date(),
-      ttl: entryTTL,
-      size,
-      accessCount: 0,
-      lastAccessed: new Date(),
-    };
-
-    this.cache.set(key, entry);
-    this.currentSize += size;
-
-    logInfo('Chat completion cached', {
-      component: 'RequestCache',
-      key: key.substring(0, 50) + '...',
-      size,
-      ttl: entryTTL,
-    });
+    this.setCachedResponse(key, response, ttl, 'chat');
   }
 
   /**
@@ -142,46 +80,7 @@ export class RequestCache {
    */
   getEmbedding(params: EmbeddingParams): EmbeddingResponse | null {
     const key = this.generateEmbeddingKey(params);
-
-    try {
-      const entry = this.cache.get(key);
-      if (!entry) {
-        logInfo('Embedding cache miss', {
-          component: 'RequestCache',
-          key: key.substring(0, 50) + '...',
-        });
-        return null;
-      }
-
-      if (this.isExpired(entry)) {
-        this.cache.delete(key);
-        this.currentSize -= entry.size;
-        logInfo('Embedding cache entry expired', {
-          component: 'RequestCache',
-          key: key.substring(0, 50) + '...',
-        });
-        return null;
-      }
-
-      // Update access statistics
-      entry.accessCount++;
-      entry.lastAccessed = new Date();
-
-      logInfo('Embedding cache hit', {
-        component: 'RequestCache',
-        key: key.substring(0, 50) + '...',
-        accessCount: entry.accessCount,
-        age: Date.now() - entry.timestamp.getTime(),
-      });
-
-      return entry.data;
-    } catch (error) {
-      logError('Error retrieving from embedding cache', {
-        component: 'RequestCache',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
+    return this.getCachedResponse<EmbeddingResponse>(key, 'embedding');
   }
 
   /**
@@ -193,32 +92,7 @@ export class RequestCache {
     ttl?: number
   ): void {
     const key = this.generateEmbeddingKey(params);
-    const size = this.estimateSize(response);
-    const entryTTL = Math.min(ttl || this.config.defaultTTL, this.config.maxTTL);
-
-    // Check if adding this entry would exceed size limit
-    if (this.currentSize + size > this.config.maxSizeMB * 1024 * 1024) {
-      this.evictEntries(size);
-    }
-
-    const entry: CacheEntry<EmbeddingResponse> = {
-      data: response,
-      timestamp: new Date(),
-      ttl: entryTTL,
-      size,
-      accessCount: 0,
-      lastAccessed: new Date(),
-    };
-
-    this.cache.set(key, entry);
-    this.currentSize += size;
-
-    logInfo('Embedding cached', {
-      component: 'RequestCache',
-      key: key.substring(0, 50) + '...',
-      size,
-      ttl: entryTTL,
-    });
+    this.setCachedResponse(key, response, ttl, 'embedding');
   }
 
   /**
@@ -286,7 +160,7 @@ export class RequestCache {
       }
     }
 
-    this.currentSize -= freedSize;
+    this.currentSize = Math.max(0, this.currentSize - freedSize);
 
     if (removedCount > 0) {
       logInfo('Cache cleanup completed', {
@@ -295,6 +169,119 @@ export class RequestCache {
         freedSizeMB: freedSize / (1024 * 1024),
       });
     }
+  }
+
+  private getCachedResponse<T>(key: string, responseType: CacheResponseType): T | null {
+    try {
+      const entry = this.cache.get(key);
+      if (!entry) {
+        this.logCacheMiss(key, responseType);
+        return null;
+      }
+
+      if (this.isExpired(entry)) {
+        this.cache.delete(key);
+        this.currentSize = Math.max(0, this.currentSize - entry.size);
+        this.logCacheExpired(key, responseType);
+        return null;
+      }
+
+      entry.accessCount += 1;
+      entry.lastAccessed = new Date();
+
+      this.logCacheHit(key, responseType, entry);
+      return entry.data;
+    } catch (error) {
+      this.logCacheError(
+        `Error retrieving ${this.getResponseLabel(responseType).toLowerCase()} from cache`,
+        error
+      );
+      return null;
+    }
+  }
+
+  private setCachedResponse<T>(
+    key: string,
+    response: T,
+    ttl: number | undefined,
+    responseType: CacheResponseType
+  ): void {
+    const size = this.estimateSize(response);
+    const entryTTL = Math.min(ttl ?? this.config.defaultTTL, this.config.maxTTL);
+
+    if (this.currentSize + size > this.config.maxSizeMB * 1024 * 1024) {
+      this.evictEntries(size);
+    }
+
+    const entry: CacheEntry<T> = {
+      data: response,
+      timestamp: new Date(),
+      ttl: entryTTL,
+      size,
+      accessCount: 0,
+      lastAccessed: new Date(),
+    };
+
+    this.cache.set(key, entry);
+    this.currentSize += size;
+
+    this.logCacheSet(key, responseType, size, entryTTL);
+  }
+
+  private logCacheMiss(key: string, responseType: CacheResponseType): void {
+    logInfo(`${this.getResponseLabel(responseType)} cache miss`, {
+      component: 'RequestCache',
+      key: this.abbreviateKey(key),
+    });
+  }
+
+  private logCacheExpired(key: string, responseType: CacheResponseType): void {
+    logInfo(`${this.getResponseLabel(responseType)} cache entry expired`, {
+      component: 'RequestCache',
+      key: this.abbreviateKey(key),
+    });
+  }
+
+  private logCacheHit(
+    key: string,
+    responseType: CacheResponseType,
+    entry: CacheEntry<any>
+  ): void {
+    logInfo(`${this.getResponseLabel(responseType)} cache hit`, {
+      component: 'RequestCache',
+      key: this.abbreviateKey(key),
+      accessCount: entry.accessCount,
+      age: Date.now() - entry.timestamp.getTime(),
+    });
+  }
+
+  private logCacheSet(
+    key: string,
+    responseType: CacheResponseType,
+    size: number,
+    ttl: number
+  ): void {
+    logInfo(`${this.getResponseLabel(responseType)} cached`, {
+      component: 'RequestCache',
+      key: this.abbreviateKey(key),
+      size,
+      ttl,
+    });
+  }
+
+  private logCacheError(message: string, error: unknown): void {
+    logError(message, {
+      component: 'RequestCache',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  private getResponseLabel(responseType: CacheResponseType): string {
+    return responseType === 'chat' ? 'Chat completion' : 'Embedding';
+  }
+
+  private abbreviateKey(key: string): string {
+    return key.length > 50 ? `${key.substring(0, 50)}...` : key;
   }
 
   private generateChatKey(params: ChatCompletionParams): string {
@@ -366,7 +353,7 @@ export class RequestCache {
       freedSpace += entry.size;
     }
 
-    this.currentSize -= freedSpace;
+    this.currentSize = Math.max(0, this.currentSize - freedSpace);
 
     logInfo('Cache eviction completed', {
       component: 'RequestCache',

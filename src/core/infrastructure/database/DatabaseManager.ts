@@ -221,7 +221,7 @@ export class DatabaseManager {
     // Initialize FTSManager - schema will be initialized lazily when needed
     this.ftsManager = new FTSManager(this.prisma);
 
-    this.searchManager = new SearchManager(this.ftsManager);
+    this.searchManager = new SearchManager(this.databaseContext, this.ftsManager);
 
     // Initialize managers with complex dependencies
     const transactionCoordinator = new TransactionCoordinator(this.databaseContext);
