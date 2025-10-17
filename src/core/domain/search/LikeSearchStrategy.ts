@@ -1,18 +1,51 @@
-import { SearchCapability, SearchStrategyMetadata, SearchStrategyError } from './SearchStrategy';
-import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy, DatabaseQueryResult } from './types';
 import { DatabaseManager } from '../../infrastructure/database/DatabaseManager';
-import { logError, logWarn, logInfo } from '../../infrastructure/config/Logger';
+import { logError, logInfo, logWarn } from '../../infrastructure/config/Logger';
+import { sanitizeString, SANITIZATION_LIMITS } from '../../infrastructure/config/SanitizationUtils';
+import { BaseSearchStrategy } from './strategies/BaseSearchStrategy';
+import {
+  SearchCapability,
+  SearchDatabaseError,
+  SearchErrorCategory,
+  SearchStrategyConfig,
+  SearchStrategyMetadata,
+} from './SearchStrategy';
+import { DatabaseQueryResult, SearchQuery, SearchResult, SearchStrategy } from './types';
+
+type WildcardSensitivity = 'low' | 'medium' | 'high';
+
+interface LikeStrategyOptions {
+  wildcardSensitivity: WildcardSensitivity;
+  maxWildcardTerms: number;
+  enablePhraseSearch: boolean;
+  caseSensitive: boolean;
+  relevanceBoost: {
+    exactMatch: number;
+    prefixMatch: number;
+    suffixMatch: number;
+    partialMatch: number;
+  };
+}
+
+const DEFAULT_OPTIONS: LikeStrategyOptions = {
+  wildcardSensitivity: 'medium',
+  maxWildcardTerms: 10,
+  enablePhraseSearch: true,
+  caseSensitive: false,
+  relevanceBoost: {
+    exactMatch: 1.5,
+    prefixMatch: 1.2,
+    suffixMatch: 1.1,
+    partialMatch: 1.0,
+  },
+};
 
 /**
- * Comprehensive LIKE-based search strategy implementation
- * Provides fallback search functionality when FTS5 is unavailable
- * Supports partial matching with configurable wildcards and metadata filtering
+ * LIKE-based search strategy that provides resilient fallback behaviour when FTS is unavailable.
  */
-export class LikeSearchStrategy implements ISearchStrategy {
+export class LikeSearchStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.LIKE;
   readonly priority = 5;
   readonly supportedMemoryTypes = ['short_term', 'long_term'] as const;
-
   readonly description = 'LIKE-based search for partial matching and fallback';
   readonly capabilities = [
     SearchCapability.KEYWORD_SEARCH,
@@ -20,274 +53,313 @@ export class LikeSearchStrategy implements ISearchStrategy {
     SearchCapability.RELEVANCE_SCORING,
   ] as const;
 
-  // Configuration for LIKE search optimization
-  private readonly likeConfig = {
-    wildcardSensitivity: 'medium', // low, medium, high
-    maxWildcardTerms: 10,
-    enablePhraseSearch: true,
-    caseSensitive: false,
-    relevanceBoost: {
-      exactMatch: 1.5,
-      prefixMatch: 1.2,
-      suffixMatch: 1.1,
-      partialMatch: 1.0,
-    },
-  };
+  private readonly options: LikeStrategyOptions;
 
-  private readonly databaseManager: DatabaseManager;
-
-  constructor(databaseManager: DatabaseManager) {
-    this.databaseManager = databaseManager;
+  constructor(config: SearchStrategyConfig, databaseManager: DatabaseManager) {
+    super(config, databaseManager);
+    this.options = this.mergeOptions(config.strategySpecific);
   }
 
-  /**
-   * Determines if this strategy can handle the given query
-   */
   canHandle(query: SearchQuery): boolean {
-    // Can handle any text-based query as fallback when FTS5 is unavailable
-    return query.text.length > 0;
+    return typeof query.text === 'string' && query.text.trim().length > 0;
   }
 
-  /**
-   * Main search method implementing LIKE-based search (required by ISearchStrategy)
-   */
-  async search(query: SearchQuery): Promise<SearchResult[]> {
+  protected getCapabilities(): readonly SearchCapability[] {
+    return this.capabilities;
+  }
+
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
     const startTime = Date.now();
 
     try {
-      // Build LIKE query with proper escaping and wildcards
-      const likeQuery = this.buildLikeQuery(query.text);
+      const sanitizedText = this.prepareSearchText(query.text);
+      const likeQuery = this.buildLikeQuery(sanitizedText);
       const sql = this.buildLikeSQL(query, likeQuery);
+      const rows = await this.executeLikeQuery(sql);
+      const processedResults = this.processLikeResults(rows, likeQuery, query);
 
-      // Execute the query
-      const results = await this.executeLikeQuery(sql);
-      const processedResults = this.processLikeResults(results, query);
-
-      // Log performance metrics
       const duration = Date.now() - startTime;
-      logInfo(`LIKE search completed in ${duration}ms, found ${processedResults.length} results`, {
+      logInfo('LIKE search completed', {
         component: 'LikeSearchStrategy',
-        operation: 'execute',
+        operation: 'search',
         strategy: this.name,
-        duration: `${duration}ms`,
-        resultCount: processedResults.length
+        queryLength: sanitizedText.length,
+        resultCount: processedResults.length,
+        executionTime: duration,
+        hasFilters: Boolean(query.filters),
+        hasFilterExpression: Boolean(query.filterExpression),
       });
 
       return processedResults;
-
     } catch (error) {
       const duration = Date.now() - startTime;
 
-      // Enhanced error context with detailed information
-      const errorContext = {
-        strategy: this.name,
-        operation: 'like_search',
-        query: query.text,
-        parameters: {
-          limit: query.limit,
-          offset: query.offset,
-          filters: query.filters,
-          hasFilterExpression: !!query.filterExpression,
-          executionTime: duration,
-        },
-        executionTime: duration,
-        timestamp: new Date(),
-        severity: this.categorizeLikeError(error) as 'low' | 'medium' | 'high' | 'critical',
-      };
-
-      // Log detailed error information
-      logError(`LIKE search failed after ${duration}ms`, {
+      logError('LIKE search failed', {
         component: 'LikeSearchStrategy',
         operation: 'search',
         strategy: this.name,
         query: query.text,
         executionTime: duration,
-        errorCategory: this.categorizeLikeError(error),
-        databaseState: this.getDatabaseState(),
-        error: error instanceof Error ? error.message : String(error)
+        limit: query.limit,
+        offset: query.offset,
+        hasFilters: Boolean(query.filters),
+        hasFilterExpression: Boolean(query.filterExpression),
+        error: error instanceof Error ? error.message : String(error),
       });
 
-      throw new SearchStrategyError(
-        this.name,
-        `LIKE strategy failed: ${error instanceof Error ? error.message : String(error)}`,
+      const category = this.categorizeLikeError(error);
+
+      throw this.handleSearchError(
+        error,
         'like_search',
-        errorContext,
-        error instanceof Error ? error : undefined
+        {
+          query: query.text,
+          startTime,
+          duration,
+          limit: query.limit ?? this.config.maxResults,
+          offset: query.offset ?? 0,
+          hasFilters: Boolean(query.filters),
+          hasFilterExpression: Boolean(query.filterExpression),
+        },
+        category,
       );
     }
   }
 
+  protected getConfigurationSchema(): Record<string, unknown> {
+    const baseSchema = super.getConfigurationSchema();
 
-  /**
-   * Build optimized LIKE query with proper escaping and wildcards
-   */
-  private buildLikeQuery(searchText: string): string {
-    let query = searchText.trim();
+    return {
+      ...baseSchema,
+      properties: {
+        ...(baseSchema.properties as Record<string, unknown>),
+        strategySpecific: {
+          type: 'object',
+          properties: {
+            wildcardSensitivity: {
+              type: 'string',
+              enum: ['low', 'medium', 'high'],
+              default: DEFAULT_OPTIONS.wildcardSensitivity,
+            },
+            maxWildcardTerms: {
+              type: 'number',
+              minimum: 1,
+              maximum: 50,
+              default: DEFAULT_OPTIONS.maxWildcardTerms,
+            },
+            enablePhraseSearch: { type: 'boolean', default: DEFAULT_OPTIONS.enablePhraseSearch },
+            caseSensitive: { type: 'boolean', default: DEFAULT_OPTIONS.caseSensitive },
+            relevanceBoost: {
+              type: 'object',
+              properties: {
+                exactMatch: { type: 'number', minimum: 0.1, maximum: 5, default: DEFAULT_OPTIONS.relevanceBoost.exactMatch },
+                prefixMatch: { type: 'number', minimum: 0.1, maximum: 5, default: DEFAULT_OPTIONS.relevanceBoost.prefixMatch },
+                suffixMatch: { type: 'number', minimum: 0.1, maximum: 5, default: DEFAULT_OPTIONS.relevanceBoost.suffixMatch },
+                partialMatch: { type: 'number', minimum: 0.1, maximum: 5, default: DEFAULT_OPTIONS.relevanceBoost.partialMatch },
+              },
+            },
+          },
+        },
+      },
+    };
+  }
 
-    if (!query) {
-      throw new Error('Search text cannot be empty');
+  protected getPerformanceMetrics(): SearchStrategyMetadata['performanceMetrics'] {
+    return {
+      averageResponseTime: 100,
+      throughput: 500,
+      memoryUsage: 5,
+    };
+  }
+
+  protected validateStrategyConfiguration(): boolean {
+    const validSensitivities: WildcardSensitivity[] = ['low', 'medium', 'high'];
+
+    if (!validSensitivities.includes(this.options.wildcardSensitivity)) {
+      return false;
     }
 
-    // Handle quoted phrases for exact matching
-    if (this.likeConfig.enablePhraseSearch) {
+    if (this.options.maxWildcardTerms < 1 || this.options.maxWildcardTerms > 50) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private mergeOptions(strategySpecific?: Record<string, unknown>): LikeStrategyOptions {
+    if (!strategySpecific) {
+      return DEFAULT_OPTIONS;
+    }
+
+    const merged: LikeStrategyOptions = { ...DEFAULT_OPTIONS };
+
+    if (typeof strategySpecific.wildcardSensitivity === 'string') {
+      const sensitivity = strategySpecific.wildcardSensitivity.toLowerCase();
+      if (sensitivity === 'low' || sensitivity === 'medium' || sensitivity === 'high') {
+        merged.wildcardSensitivity = sensitivity;
+      }
+    }
+
+    if (typeof strategySpecific.maxWildcardTerms === 'number' && Number.isFinite(strategySpecific.maxWildcardTerms)) {
+      merged.maxWildcardTerms = Math.min(Math.max(Math.floor(strategySpecific.maxWildcardTerms), 1), 50);
+    }
+
+    if (typeof strategySpecific.enablePhraseSearch === 'boolean') {
+      merged.enablePhraseSearch = strategySpecific.enablePhraseSearch;
+    }
+
+    if (typeof strategySpecific.caseSensitive === 'boolean') {
+      merged.caseSensitive = strategySpecific.caseSensitive;
+    }
+
+    if (typeof strategySpecific.relevanceBoost === 'object' && strategySpecific.relevanceBoost !== null) {
+      const boost = strategySpecific.relevanceBoost as Record<string, unknown>;
+      merged.relevanceBoost = {
+        exactMatch: this.normalizeBoostValue(boost.exactMatch, DEFAULT_OPTIONS.relevanceBoost.exactMatch),
+        prefixMatch: this.normalizeBoostValue(boost.prefixMatch, DEFAULT_OPTIONS.relevanceBoost.prefixMatch),
+        suffixMatch: this.normalizeBoostValue(boost.suffixMatch, DEFAULT_OPTIONS.relevanceBoost.suffixMatch),
+        partialMatch: this.normalizeBoostValue(boost.partialMatch, DEFAULT_OPTIONS.relevanceBoost.partialMatch),
+      };
+    }
+
+    return merged;
+  }
+
+  private normalizeBoostValue(value: unknown, fallback: number): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return fallback;
+    }
+
+    return Math.min(Math.max(value, 0.1), 5);
+  }
+
+  private prepareSearchText(text: string): string {
+    try {
+      const sanitized = sanitizeString(text, {
+        fieldName: 'searchQuery',
+        maxLength: SANITIZATION_LIMITS.SEARCH_QUERY_MAX_LENGTH,
+        allowNewlines: false,
+      }).trim();
+
+      if (!sanitized) {
+        throw this.handleValidationError('Search text cannot be empty', 'searchQuery', text);
+      }
+
+      return sanitized;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw this.handleValidationError(error.message, 'searchQuery', text);
+      }
+      throw error;
+    }
+  }
+
+  private buildLikeQuery(searchText: string): string {
+    let query = searchText;
+
+    if (this.options.enablePhraseSearch) {
       query = this.handleQuotedPhrases(query);
     }
 
-    // Apply case sensitivity option
-    if (!this.likeConfig.caseSensitive) {
-      query = query.toLowerCase();
-    }
-
-    return query;
+    return this.options.caseSensitive ? query : query.toLowerCase();
   }
 
-  /**
-   * Handle quoted phrases by preserving exact matches
-   */
   private handleQuotedPhrases(query: string): string {
-    const phraseRegex = /"([^"]+)"/g;
-    return query.replace(phraseRegex, (match, phrase) => {
-      // Replace spaces in phrases with wildcards for LIKE matching
-      return phrase.replace(/\s+/g, '%');
-    });
+    return query.replace(/"([^"]+)"/g, (_match, phrase: string) => phrase.replace(/\s+/g, '%'));
   }
 
-  /**
-   * Build optimized LIKE SQL with JOINs and metadata filtering
-   */
   private buildLikeSQL(query: SearchQuery, likeQuery: string): string {
-    const limit = query.limit || 100;
-    const offset = query.offset || 0;
-
-    // Build WHERE clause with metadata filtering
+    const limit = Math.min(query.limit ?? this.config.maxResults, this.config.maxResults);
+    const offset = Math.max(0, query.offset ?? 0);
+    const patterns = this.buildSearchPatterns(likeQuery);
+    const patternConditions = this.buildPatternConditions(patterns);
     const whereClause = this.buildWhereClause(query);
-
-    // Build ORDER BY clause for relevance scoring
     const orderByClause = this.buildOrderByClause(query);
 
-    // Build search patterns for embedded queries
+    return `
+      SELECT
+        id as memory_id,
+        searchableContent as searchable_content,
+        summary,
+        processedData as metadata,
+        retentionType as memory_type,
+        categoryPrimary as category_primary,
+        importanceScore as importance_score,
+        createdAt as created_at,
+        '${this.name}' as search_strategy
+      FROM (
+        SELECT
+          id,
+          searchableContent,
+          summary,
+          processedData,
+          retentionType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
+        FROM short_term_memory
+        WHERE ${patternConditions}
+          ${whereClause}
+
+        UNION ALL
+
+        SELECT
+          id,
+          searchableContent,
+          summary,
+          processedData,
+          retentionType,
+          categoryPrimary,
+          importanceScore,
+          createdAt
+        FROM long_term_memory
+        WHERE ${patternConditions}
+          ${whereClause}
+      ) AS combined_memories
+      ${orderByClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  }
+
+  private buildSearchPatterns(likeQuery: string): string[] {
     const patterns: string[] = [];
-    const cleanQuery = likeQuery.trim();
+    const trimmed = likeQuery.trim();
 
-    if (cleanQuery) {
-      // Exact match pattern
-      patterns.push(cleanQuery);
+    if (!trimmed) {
+      return patterns;
+    }
 
-      // Word-based patterns for individual terms
-      const words = cleanQuery.split(/\s+/);
-      for (const word of words) {
-        if (word.length > 2) {
-          patterns.push(word);
-        }
-      }
+    patterns.push(trimmed);
 
-      // Prefix and suffix patterns for better matching
-      if (cleanQuery.length > 3) {
-        patterns.push(cleanQuery); // Already included above
+    const terms = trimmed.split(/\s+/);
+    for (const term of terms) {
+      if (term.length > 2 && patterns.length < this.options.maxWildcardTerms) {
+        patterns.push(term);
       }
     }
 
-    const patternConditions = this.buildPatternConditions(patterns);
-
-    // Construct the main LIKE query with embedded patterns for simplicity
-    const sql = `
-            SELECT
-                id as memory_id,
-                searchableContent as searchable_content,
-                summary,
-                processedData as metadata,
-                retentionType as memory_type,
-                categoryPrimary as category_primary,
-                importanceScore as importance_score,
-                createdAt as created_at,
-                '${this.name}' as search_strategy
-            FROM (
-                SELECT
-                    id,
-                    searchableContent,
-                    summary,
-                    processedData,
-                    retentionType,
-                    categoryPrimary,
-                    importanceScore,
-                    createdAt
-                FROM short_term_memory
-                WHERE ${patternConditions}
-                   ${whereClause}
-
-                UNION ALL
-
-                SELECT
-                    id,
-                    searchableContent,
-                    summary,
-                    processedData,
-                    retentionType,
-                    categoryPrimary,
-                    importanceScore,
-                    createdAt
-                FROM long_term_memory
-                WHERE ${patternConditions}
-                   ${whereClause}
-            ) AS combined_memories
-            ${orderByClause}
-            LIMIT ${limit} OFFSET ${offset}
-        `;
-
-    return sql;
+    return patterns;
   }
 
-  /**
-   * Build content matching condition with proper LIKE syntax
-   */
-  private buildContentCondition(fieldName: string, searchValue: string): string {
-    const conditions: string[] = [];
-
-    // Exact phrase match (highest priority)
-    if (searchValue.includes('%')) {
-      conditions.push(`${fieldName} LIKE '%${this.escapeSqlString(searchValue)}%'`);
-    } else {
-      // Word-based matching with different strategies
-      const words = searchValue.split(/\s+/);
-
-      for (let i = 0; i < words.length && i < this.likeConfig.maxWildcardTerms; i++) {
-        const word = words[i];
-        if (word.length > 0) {
-          conditions.push(`${fieldName} LIKE '%${this.escapeSqlString(word)}%'`);
-        }
-      }
-    }
-
-    return conditions.length > 1 ? `(${conditions.join(' OR ')})` : conditions[0];
-  }
-
-  /**
-   * Build pattern conditions with embedded patterns (simpler approach)
-   */
   private buildPatternConditions(patterns: string[]): string {
+    if (patterns.length === 0) {
+      return '1=1';
+    }
+
     const conditions: string[] = [];
 
     for (const pattern of patterns) {
-      conditions.push(`searchableContent LIKE '%${this.escapeSqlString(pattern)}%'`);
-      conditions.push(`summary LIKE '%${this.escapeSqlString(pattern)}%'`);
+      const escaped = this.escapeSqlString(pattern);
+      conditions.push(`searchableContent LIKE '%${escaped}%' ESCAPE '\\'`);
+      conditions.push(`summary LIKE '%${escaped}%' ESCAPE '\\'`);
     }
 
     return `(${conditions.join(' OR ')})`;
   }
 
-  /**
-   * Build WHERE clause for metadata filtering
-   */
   private buildWhereClause(query: SearchQuery): string {
     const conditions: string[] = [];
 
-    // Add namespace filtering - use the database manager's namespace if available
-    const dbManager = this.databaseManager as any;
-    if (dbManager && dbManager.namespace) {
-      conditions.push(`json_extract(metadata, '$.namespace') = '${dbManager.namespace}'`);
-    }
-
-    // Add filters from query if provided
     if (query.filters) {
       for (const [key, value] of Object.entries(query.filters)) {
         const condition = this.buildFilterCondition(key, value);
@@ -300,122 +372,141 @@ export class LikeSearchStrategy implements ISearchStrategy {
     return conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
   }
 
-  /**
-   * Build filter condition based on filter key-value pair
-   */
   private buildFilterCondition(key: string, value: unknown): string | null {
-    // Simple equality filter for basic implementation
-    return `json_extract(metadata, '$.${key}') = '${this.escapeSqlString(String(value))}'`;
-  }
-
-  /**
-   * Build ORDER BY clause for relevance scoring
-   */
-  private buildOrderByClause(query: SearchQuery): string {
-    let orderBy = 'ORDER BY importance_score DESC, created_at DESC';
-
-    // Add secondary sorting criteria
-    if (query.sortBy) {
-      const direction = query.sortBy.direction.toUpperCase();
-      orderBy += `, ${query.sortBy.field} ${direction}`;
+    if (value === undefined || value === null) {
+      return null;
     }
 
-    return orderBy;
+    if (!/^[A-Za-z0-9_.-]+$/.test(key)) {
+      return null;
+    }
+
+    const jsonPath = key.startsWith('$.') ? key : `$.${key}`;
+    const sanitizedValue = this.escapeSqlString(String(value));
+
+    return `json_extract(metadata, '${jsonPath}') = '${sanitizedValue}'`;
   }
 
+  private buildOrderByClause(query: SearchQuery): string {
+    const orderParts = ['importance_score DESC', 'created_at DESC'];
+    const allowedSortFields = new Set(['importance_score', 'created_at', 'search_score']);
 
+    if (query.sortBy && allowedSortFields.has(query.sortBy.field)) {
+      const direction = query.sortBy.direction === 'asc' ? 'ASC' : 'DESC';
+      orderParts.unshift(`${query.sortBy.field} ${direction}`);
+    }
 
-  /**
-   * Execute LIKE query with comprehensive error handling
-   */
-  private async executeLikeQuery(sql: string): Promise<unknown[]> {
-    const dbManager = this.databaseManager as any;
-    const db = dbManager?.prisma || this.databaseManager;
-
-    // Execute query with embedded patterns
-    return await db.$queryRawUnsafe(sql);
+    return `ORDER BY ${orderParts.join(', ')}`;
   }
 
-  /**
-   * Process LIKE results and transform to SearchResult format
-   */
-  private processLikeResults(results: unknown[], query: SearchQuery): SearchResult[] {
-    const searchResults: SearchResult[] = [];
-    const likeQuery = this.buildLikeQuery(query.text);
+  private async executeLikeQuery(sql: string): Promise<DatabaseQueryResult[]> {
+    try {
+      const prisma = this.databaseManager.getPrismaClient();
+      return await prisma.$queryRawUnsafe<DatabaseQueryResult[]>(sql);
+    } catch (error) {
+      throw this.handleDatabaseError(
+        error,
+        'execute_like_query',
+        sql.substring(0, 200),
+      );
+    }
+  }
 
-    for (const row of results as DatabaseQueryResult[]) {
+  private processLikeResults(
+    results: DatabaseQueryResult[],
+    likeQuery: string,
+    query: SearchQuery,
+  ): SearchResult[] {
+    const processed: SearchResult[] = [];
+
+    for (const row of results) {
       try {
-        const metadata = JSON.parse(row.metadata || '{}');
+        const baseMetadata = this.parseMetadata(row.metadata);
+        const rawScore = this.calculateRelevanceScore(row, likeQuery);
+        const score = Math.max(0, Math.min(1, rawScore));
 
-        // Calculate relevance score based on match quality
-        const rawScore = this.calculateRelevanceScore(row, likeQuery, query);
-        const normalizedScore = Math.max(0, Math.min(1, rawScore));
-
-        searchResults.push({
-          id: row.memory_id,
-          content: row.searchable_content,
-          metadata: {
-            summary: row.summary || '',
+        const metadata = query.includeMetadata
+          ? {
+            summary: row.summary ?? '',
             category: row.category_primary,
-            importanceScore: row.importance_score || 0.5,
+            importanceScore: row.importance_score ?? 0.5,
             memoryType: row.memory_type,
             createdAt: new Date(row.created_at),
-            ...metadata,
-          },
-          score: normalizedScore,
+            ...baseMetadata,
+          }
+          : {};
+
+        processed.push({
+          id: row.memory_id,
+          content: row.searchable_content ?? '',
+          metadata,
+          score,
           strategy: this.name,
           timestamp: new Date(row.created_at),
         });
-
       } catch (error) {
-        logWarn('Error processing LIKE result row', {
+        logWarn('Failed to process LIKE result row', {
           component: 'LikeSearchStrategy',
-          operation: 'processLikeResults',
+          operation: 'process_results',
+          strategy: this.name,
           rowId: row.memory_id,
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
-        continue;
       }
     }
 
-    return searchResults;
+    return processed;
   }
 
-  /**
-   * Calculate relevance score based on match quality and position
-   */
-  private calculateRelevanceScore(row: DatabaseQueryResult, searchQuery: string, _query: SearchQuery): number {
-    let score = 0.3; // Base score for LIKE matches
+  private parseMetadata(metadataJson: string | null | undefined): Record<string, unknown> {
+    if (!metadataJson) {
+      return {};
+    }
 
-    const content = (row.searchable_content || '').toLowerCase();
-    const summary = (row.summary || '').toLowerCase();
-    const searchTerms = searchQuery.toLowerCase().split(/\s+/);
+    try {
+      const parsed = JSON.parse(metadataJson);
+      return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    } catch (error) {
+      logWarn('Failed to parse LIKE strategy metadata', {
+        component: 'LikeSearchStrategy',
+        operation: 'parse_metadata',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
 
-    // Score based on content matching
-    for (const term of searchTerms) {
-      if (term.length < 2) continue;
+  private calculateRelevanceScore(row: DatabaseQueryResult, searchQuery: string): number {
+    let score = 0.3;
+    const content = (row.searchable_content ?? '').toLowerCase();
+    const summary = (row.summary ?? '').toLowerCase();
+    const terms = searchQuery.toLowerCase().split(/\s+/);
 
-      // Exact match boost
+    for (const term of terms) {
+      if (term.length < 2) {
+        continue;
+      }
+
       if (content.includes(term)) {
-        score += this.likeConfig.relevanceBoost.exactMatch * 0.1;
+        score += this.options.relevanceBoost.exactMatch * 0.1;
       }
 
-      // Prefix match boost
       if (content.startsWith(term)) {
-        score += this.likeConfig.relevanceBoost.prefixMatch * 0.1;
+        score += this.options.relevanceBoost.prefixMatch * 0.1;
       }
 
-      // Summary match (higher weight)
+      if (content.endsWith(term)) {
+        score += this.options.relevanceBoost.suffixMatch * 0.05;
+      }
+
       if (summary.includes(term)) {
-        score += this.likeConfig.relevanceBoost.exactMatch * 0.15;
+        score += this.options.relevanceBoost.exactMatch * 0.15;
       }
     }
 
-    // Boost based on importance score
-    const importance = row.importance_score || 0.5;
+    const importance = row.importance_score ?? 0.5;
     score *= (0.5 + importance);
 
-    // Boost based on memory type (short_term might be more relevant)
     if (row.memory_type === 'short_term') {
       score *= 1.1;
     }
@@ -423,149 +514,33 @@ export class LikeSearchStrategy implements ISearchStrategy {
     return score;
   }
 
-  /**
-   * Escape SQL strings to prevent injection
-   */
-  private escapeSqlString(str: string): string {
-    return str.replace(/'/g, '\'\'').replace(/\\/g, '\\\\');
+  private escapeSqlString(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/'/g, '\'\'');
   }
 
-  /**
-   * Get configuration schema for this strategy
-   */
-  protected getConfigurationSchema(): Record<string, unknown> {
-    return {
-      type: 'object',
-      properties: {
-        enabled: { type: 'boolean', default: true },
-        priority: { type: 'number', minimum: 0, maximum: 100, default: 5 },
-        timeout: { type: 'number', minimum: 1000, maximum: 30000, default: 5000 },
-        maxResults: { type: 'number', minimum: 1, maximum: 1000, default: 100 },
-        minScore: { type: 'number', minimum: 0, maximum: 1, default: 0.1 },
-        wildcardSensitivity: {
-          type: 'string',
-          enum: ['low', 'medium', 'high'],
-          default: 'medium',
-        },
-        enablePhraseSearch: { type: 'boolean', default: true },
-        caseSensitive: { type: 'boolean', default: false },
-      },
-      required: ['enabled', 'priority', 'timeout', 'maxResults'],
-    };
-  }
-
-  /**
-   * Get performance metrics for this strategy
-   */
-  protected getPerformanceMetrics(): SearchStrategyMetadata['performanceMetrics'] {
-    return {
-      averageResponseTime: 100,
-      throughput: 500,
-      memoryUsage: 5,
-    };
-  }
-
-  /**
-    * Validate strategy-specific configuration
-    */
-  protected validateStrategyConfiguration(): boolean {
-    // Validate wildcard sensitivity
-    const validSensitivities = ['low', 'medium', 'high'];
-    if (!validSensitivities.includes(this.likeConfig.wildcardSensitivity)) {
-      return false;
+  private categorizeLikeError(error: unknown): SearchErrorCategory {
+    if (error instanceof SearchDatabaseError) {
+      return SearchErrorCategory.DATABASE;
     }
 
-    // Validate max wildcard terms
-    if (this.likeConfig.maxWildcardTerms < 1 || this.likeConfig.maxWildcardTerms > 50) {
-      return false;
+    const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+
+    if (message.includes('syntax error') || message.includes('malformed')) {
+      return SearchErrorCategory.PARSE;
     }
 
-    return true;
-  }
-
-  /**
-   * Categorize LIKE-specific errors for better error handling
-   */
-  private categorizeLikeError(error: unknown): string {
-    const errorMessage = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-
-    if (errorMessage.includes('syntax error') || errorMessage.includes('malformed query')) {
-      return 'high'; // Query syntax issues
+    if (message.includes('database locked') || message.includes('busy')) {
+      return SearchErrorCategory.DATABASE;
     }
 
-    if (errorMessage.includes('database locked') || errorMessage.includes('busy')) {
-      return 'medium'; // Temporary database issues
+    if (message.includes('out of memory') || message.includes('too many terms')) {
+      return SearchErrorCategory.EXECUTION;
     }
 
-    if (errorMessage.includes('out of memory') || errorMessage.includes('too many terms')) {
-      return 'high'; // Resource issues
+    if (message.includes('empty query') || message.includes('no search text')) {
+      return SearchErrorCategory.VALIDATION;
     }
 
-    if (errorMessage.includes('empty query') || errorMessage.includes('no search text')) {
-      return 'low'; // User input issues
-    }
-
-    return 'medium'; // Default category
-  }
-
-  /**
-   * Get database state for error context
-   */
-  private getDatabaseState(): Record<string, unknown> {
-    try {
-      const dbManager = this.databaseManager as any;
-      return {
-        connectionStatus: dbManager?.isConnected ? 'connected' : 'disconnected',
-        lastError: dbManager?.lastError,
-        queryCount: dbManager?.queryCount,
-      };
-    } catch {
-      return {
-        connectionStatus: 'error',
-      };
-    }
-  }
-
-  /**
-   * Get metadata about this search strategy
-   */
-  getMetadata(): SearchStrategyMetadata {
-    return {
-      name: this.name,
-      version: '1.0.0',
-      description: this.description,
-      capabilities: [...this.capabilities],
-      supportedMemoryTypes: [...this.supportedMemoryTypes],
-      configurationSchema: {
-        type: 'object',
-        properties: {
-          priority: { type: 'number', minimum: 0, maximum: 100 },
-          timeout: { type: 'number', minimum: 1000, maximum: 30000 },
-        },
-      },
-      performanceMetrics: {
-        averageResponseTime: 100,
-        throughput: 500,
-        memoryUsage: 5,
-      },
-    };
-  }
-
-  /**
-   * Validate the current configuration
-   */
-  async validateConfiguration(): Promise<boolean> {
-    // Validate wildcard sensitivity
-    const validSensitivities = ['low', 'medium', 'high'];
-    if (!validSensitivities.includes(this.likeConfig.wildcardSensitivity)) {
-      return false;
-    }
-
-    // Validate max wildcard terms
-    if (this.likeConfig.maxWildcardTerms < 1 || this.likeConfig.maxWildcardTerms > 50) {
-      return false;
-    }
-
-    return true;
+    return SearchErrorCategory.EXECUTION;
   }
 }

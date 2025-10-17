@@ -193,48 +193,7 @@ export class SearchService implements ISearchService {
     const config = this.strategyConfigs.get(SearchStrategy.LIKE);
 
     if (config?.enabled) {
-      const likeStrategy = new LikeSearchStrategy(this.dbManager);
-
-      // Apply LIKE-specific configuration
-      if (config.strategySpecific) {
-        const likeConfig = config.strategySpecific as Record<string, unknown>;
-
-        // Update LIKE configuration with type safety
-        if (typeof likeConfig.wildcardSensitivity === 'string') {
-          (likeStrategy as unknown as { likeConfig?: { wildcardSensitivity?: string } }).likeConfig = {
-            ...((likeStrategy as unknown as { likeConfig?: Record<string, unknown> }).likeConfig),
-            wildcardSensitivity: likeConfig.wildcardSensitivity
-          };
-        }
-        if (typeof likeConfig.maxWildcardTerms === 'number') {
-          (likeStrategy as unknown as { likeConfig?: { maxWildcardTerms?: number } }).likeConfig = {
-            ...((likeStrategy as unknown as { likeConfig?: Record<string, unknown> }).likeConfig),
-            maxWildcardTerms: likeConfig.maxWildcardTerms
-          };
-        }
-        if (typeof likeConfig.enablePhraseSearch === 'boolean') {
-          (likeStrategy as unknown as { likeConfig?: { enablePhraseSearch?: boolean } }).likeConfig = {
-            ...((likeStrategy as unknown as { likeConfig?: Record<string, unknown> }).likeConfig),
-            enablePhraseSearch: likeConfig.enablePhraseSearch
-          };
-        }
-        if (typeof likeConfig.caseSensitive === 'boolean') {
-          (likeStrategy as unknown as { likeConfig?: { caseSensitive?: boolean } }).likeConfig = {
-            ...((likeStrategy as unknown as { likeConfig?: Record<string, unknown> }).likeConfig),
-            caseSensitive: likeConfig.caseSensitive
-          };
-        }
-        if (likeConfig.relevanceBoost && typeof likeConfig.relevanceBoost === 'object') {
-          (likeStrategy as unknown as { likeConfig?: { relevanceBoost?: Record<string, number> } }).likeConfig = {
-            ...((likeStrategy as unknown as { likeConfig?: Record<string, unknown> }).likeConfig),
-            relevanceBoost: {
-              ...((likeStrategy as unknown as { likeConfig?: { relevanceBoost?: Record<string, number> } }).likeConfig?.relevanceBoost),
-              ...(likeConfig.relevanceBoost as Record<string, number>)
-            }
-          };
-        }
-      }
-
+      const likeStrategy = new LikeSearchStrategy(config, this.dbManager);
       this.strategies.set(SearchStrategy.LIKE, likeStrategy);
     }
   }
@@ -443,7 +402,12 @@ export class SearchService implements ISearchService {
       SearchStrategy.FTS5,
       new SQLiteFTSStrategy(defaultFtsConfig, this.dbManager)
     );
-    this.strategies.set(SearchStrategy.LIKE, new LikeSearchStrategy(this.dbManager));
+    const defaultLikeConfig = this.strategyConfigs.get(SearchStrategy.LIKE) ||
+      this.configManager.getDefaultConfiguration(SearchStrategy.LIKE);
+    this.strategies.set(
+      SearchStrategy.LIKE,
+      new LikeSearchStrategy(defaultLikeConfig, this.dbManager)
+    );
     this.strategies.set(SearchStrategy.RECENT, new RecentMemoriesStrategy({
       strategyName: SearchStrategy.RECENT,
       enabled: true,
