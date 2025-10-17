@@ -157,35 +157,75 @@ class SearchService {
 **Sophisticated manager-based architecture for database operations.**
 
 ```typescript
-// DatabaseManager - Main facade coordinating all database operations
-class DatabaseManager {
-  private memoryManager: MemoryManager;
-  private searchManager: SearchManager;
-  private relationshipManager: RelationshipManager;
-  private stateManager: StateManager;
+// DatabaseContext - owns Prisma lifecycle, metrics, health checks, and shared state
+const context = new DatabaseContext({
+  databaseUrl: 'file:./memori.db',
+  enablePerformanceMonitoring: true,
+});
 
-  async storeLongTermMemory(memory: ProcessedLongTermMemory, chatId: string, namespace: string): Promise<string> {
+// DatabaseManager - main facade coordinating all specialized managers
+class DatabaseManager {
+  private readonly memoryManager = new MemoryManager(context);
+  private readonly searchManager = new SearchManager(context, this.ftsManager);
+  private readonly relationshipManager = new RelationshipManager(context);
+
+  async storeLongTermMemory(memory: ProcessedLongTermMemory, chatId: string, namespace: string) {
     return this.memoryManager.storeLongTermMemory(memory, chatId, namespace);
   }
 
-  async searchMemories(query: string, options: SearchOptions): Promise<MemorySearchResult[]> {
+  async searchMemories(query: string, options: SearchOptions) {
     return this.searchManager.searchMemories(query, options);
   }
 }
 
-// MemoryManager - Specialized memory operations with state tracking
-class MemoryManager {
+// BaseDatabaseService centralises sanitisation, metrics, and Prisma access
+abstract class BaseDatabaseService {
+  protected readonly prisma: PrismaClient;
+
+  protected constructor(protected readonly databaseContext: DatabaseContext) {
+    this.prisma = databaseContext.getPrismaClient();
+  }
+
+  protected sanitizeString(value: string, fieldName: string) {
+    return sanitizeString(value, { fieldName, allowNewlines: false, maxLength: 200 });
+  }
+
+  protected recordSuccess(operationType: string, startTime: number, recordCount?: number) {
+    this.databaseContext.recordOperationMetrics({ operationType, startTime, success: true, recordCount });
+  }
+}
+
+// MemoryManager - dedicated memory operations built on BaseDatabaseService
+class MemoryManager extends BaseDatabaseService {
+  constructor(context: DatabaseContext) {
+    super(context);
+  }
+
   async storeLongTermMemory(memoryData: ProcessedLongTermMemory, chatId: string, namespace: string): Promise<string> {
-    // Comprehensive validation and sanitization
-    const sanitizedData = await this.validateAndSanitizeMemoryInput(memoryData, chatId, namespace);
+    const start = Date.now();
 
-    // Store with state tracking integration
-    const result = await this.databaseContext.getPrismaClient().longTermMemory.create({...});
+    try {
+      const sanitizedNamespace = this.sanitizeString(namespace, 'namespace');
 
-    // Initialize state tracking for workflow management
-    await this.stateManager.initializeExistingMemoryState(result.id, MemoryProcessingState.PROCESSED);
+      const result = await this.prisma.longTermMemory.create({
+        data: {
+          ...memoryData,
+          namespace: sanitizedNamespace,
+          chatId: this.sanitizeString(chatId, 'chatId'),
+        },
+      });
 
-    return result.id;
+      this.recordSuccess('store_long_term_memory', start, 1);
+      return result.id;
+    } catch (error) {
+      this.databaseContext.recordOperationMetrics({
+        operationType: 'store_long_term_memory',
+        startTime: start,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 }
 ```

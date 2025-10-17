@@ -3,6 +3,7 @@ import { RecentMemoriesStrategy } from '../../../src/core/domain/search/RecentMe
 import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
 import { SearchQuery } from '../../../src/core/domain/search/types';
 import { SearchStrategy } from '../../../src/core/domain/search/types';
+import { SearchStrategyConfig } from '../../../src/core/domain/search/SearchStrategy';
 import { TemporalFilterOptions, TimeRange } from '../../../src/core/types/models';
 
 /**
@@ -14,19 +15,38 @@ describe('Temporal Strategy Integration Tests', () => {
     let recentStrategy: RecentMemoriesStrategy;
     let mockDbManager: jest.Mocked<DatabaseManager>;
 
-    const defaultTemporalConfig = {
-        naturalLanguage: {
-            enableParsing: true,
-            enablePatternMatching: true,
-            confidenceThreshold: 0.3,
-        },
+    const defaultTemporalConfig: SearchStrategyConfig = {
+        strategyName: SearchStrategy.TEMPORAL_FILTER,
+        enabled: true,
+        priority: 6,
+        timeout: 5000,
+        maxResults: 200,
         performance: {
-            enableQueryOptimization: true,
-            enableResultCaching: true,
-            maxExecutionTime: 10000,
-            batchSize: 100,
+            enableMetrics: true,
+            enableCaching: true,
+            cacheSize: 300,
+            enableParallelExecution: true,
         },
-    };
+        scoring: {
+            baseWeight: 0.6,
+            recencyWeight: 0.9,
+            importanceWeight: 0.3,
+            relationshipWeight: 0.1,
+        },
+        strategySpecific: {
+            naturalLanguage: {
+                enableParsing: true,
+                enablePatternMatching: true,
+                confidenceThreshold: 0.3,
+            },
+            performance: {
+                enableQueryOptimization: true,
+                enableResultCaching: true,
+                maxExecutionTime: 10000,
+                batchSize: 100,
+            },
+        },
+    } as const;
 
     const defaultRecentConfig = {
         enabled: true,

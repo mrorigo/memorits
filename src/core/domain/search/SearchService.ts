@@ -263,26 +263,10 @@ export class SearchService implements ISearchService {
     const config = this.strategyConfigs.get(SearchStrategy.CATEGORY_FILTER);
 
     if (config?.enabled) {
-      const hierarchyConfig = config.strategySpecific?.hierarchy || {};
-      const performanceConfig = config.strategySpecific?.performance || {};
-
-      const categoryConfig = {
-        hierarchy: {
-          maxDepth: 5,
-          enableCaching: true,
-          ...hierarchyConfig,
-        },
-        performance: {
-          enableQueryOptimization: true,
-          enableResultCaching: true,
-          maxExecutionTime: 10000,
-          batchSize: 100,
-          ...performanceConfig,
-        },
-      };
-
-      const categoryStrategy = new CategoryFilterStrategy(categoryConfig, this.dbManager);
-      this.strategies.set(SearchStrategy.CATEGORY_FILTER, categoryStrategy);
+      this.strategies.set(
+        SearchStrategy.CATEGORY_FILTER,
+        new CategoryFilterStrategy(config, this.dbManager),
+      );
     }
   }
 
@@ -293,27 +277,10 @@ export class SearchService implements ISearchService {
     const config = this.strategyConfigs.get(SearchStrategy.TEMPORAL_FILTER);
 
     if (config?.enabled) {
-      const naturalLanguageConfig = config.strategySpecific?.naturalLanguage || {};
-      const temporalPerformanceConfig = config.strategySpecific?.performance || {};
-
-      const temporalConfig = {
-        naturalLanguage: {
-          enableParsing: true,
-          enablePatternMatching: true,
-          confidenceThreshold: 0.3,
-          ...naturalLanguageConfig,
-        },
-        performance: {
-          enableQueryOptimization: true,
-          enableResultCaching: true,
-          maxExecutionTime: 10000,
-          batchSize: 100,
-          ...temporalPerformanceConfig,
-        },
-      };
-
-      const temporalStrategy = new TemporalFilterStrategy(temporalConfig, this.dbManager);
-      this.strategies.set(SearchStrategy.TEMPORAL_FILTER, temporalStrategy);
+      this.strategies.set(
+        SearchStrategy.TEMPORAL_FILTER,
+        new TemporalFilterStrategy(config, this.dbManager),
+      );
     }
   }
 
@@ -408,6 +375,12 @@ export class SearchService implements ISearchService {
       SearchStrategy.LIKE,
       new LikeSearchStrategy(defaultLikeConfig, this.dbManager)
     );
+    const defaultCategoryConfig = this.strategyConfigs.get(SearchStrategy.CATEGORY_FILTER) ||
+      this.configManager.getDefaultConfiguration(SearchStrategy.CATEGORY_FILTER);
+    this.strategies.set(
+      SearchStrategy.CATEGORY_FILTER,
+      new CategoryFilterStrategy(defaultCategoryConfig, this.dbManager),
+    );
     this.strategies.set(SearchStrategy.RECENT, new RecentMemoriesStrategy({
       strategyName: SearchStrategy.RECENT,
       enabled: true,
@@ -423,34 +396,13 @@ export class SearchService implements ISearchService {
       new SemanticSearchStrategy(defaultSemanticConfig, this.dbManager)
     );
 
-    // Add Category Filter Strategy
-    this.strategies.set(SearchStrategy.CATEGORY_FILTER, new CategoryFilterStrategy({
-      hierarchy: {
-        maxDepth: 5,
-        enableCaching: true,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-      },
-    }, this.dbManager));
-
     // Add Temporal Filter Strategy
-    this.strategies.set(SearchStrategy.TEMPORAL_FILTER, new TemporalFilterStrategy({
-      naturalLanguage: {
-        enableParsing: true,
-        enablePatternMatching: true,
-        confidenceThreshold: 0.3,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-      },
-    }, this.dbManager));
+    const defaultTemporalConfig = this.strategyConfigs.get(SearchStrategy.TEMPORAL_FILTER) ||
+      this.configManager.getDefaultConfiguration(SearchStrategy.TEMPORAL_FILTER);
+    this.strategies.set(
+      SearchStrategy.TEMPORAL_FILTER,
+      new TemporalFilterStrategy(defaultTemporalConfig, this.dbManager),
+    );
 
     // Add Metadata Filter Strategy
     this.strategies.set(SearchStrategy.METADATA_FILTER, new MetadataFilterStrategy({

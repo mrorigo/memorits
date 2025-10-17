@@ -1,11 +1,10 @@
-import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy } from '../types';
+import { BaseSearchStrategy } from '../strategies/BaseSearchStrategy';
+import { SearchStrategy, SearchQuery, SearchResult, DatabaseQueryResult } from '../types';
+import { SearchCapability, SearchStrategyConfig, SearchStrategyMetadata, SearchErrorCategory } from '../SearchStrategy';
 import { DatabaseManager } from '../../../infrastructure/database/DatabaseManager';
-import { SearchStrategyMetadata, SearchCapability, SearchStrategyError } from '../SearchStrategy';
-import { logInfo, logError, logWarn } from '../../../infrastructure/config/Logger';
+import { logWarn } from '../../../infrastructure/config/Logger';
+import { sanitizeString, SANITIZATION_LIMITS } from '../../../infrastructure/config/SanitizationUtils';
 
-/**
- * Extended query interface for category filtering
- */
 interface CategoryFilterQuery extends SearchQuery {
   categories?: string[];
   categoryHierarchy?: string[];
@@ -16,58 +15,10 @@ interface CategoryFilterQuery extends SearchQuery {
   maxCategories?: number;
 }
 
-/**
- * Database row interface for query results
- */
-export interface DatabaseRow {
-  memory_id: string;
-  searchable_content: string;
-  summary: string;
-  metadata: string;
-  memory_type: string;
-  category_primary: string;
-  importance_score: string;
-  created_at: string;
-}
-
-/**
- * Configuration for CategoryFilterStrategy
- */
-export interface CategoryFilterStrategyConfig {
+export interface CategoryFilterStrategyOptions {
   hierarchy: {
     maxDepth: number;
     enableCaching: boolean;
-  };
-  extraction?: {
-    enableMLExtraction?: boolean;
-    enablePatternExtraction?: boolean;
-    enableMetadataExtraction?: boolean;
-    confidenceThreshold?: number;
-    maxCategoriesPerMemory?: number;
-  };
-  relevance?: {
-    hierarchyWeight?: number;
-    exactMatchWeight?: number;
-    partialMatchWeight?: number;
-    depthWeight?: number;
-    inheritanceWeight?: number;
-    contextWeight?: number;
-    temporalWeight?: number;
-    frequencyWeight?: number;
-    enableCaching?: boolean;
-    maxCacheSize?: number;
-  };
-  aggregation?: {
-    maxCategories?: number;
-    minCategorySize?: number;
-    enableHierarchyGrouping?: boolean;
-    enableSorting?: boolean;
-    sortBy?: string;
-    sortDirection?: string;
-    enableSubcategoryAggregation?: boolean;
-    maxDepth?: number;
-    enableCaching?: boolean;
-    maxCacheSize?: number;
   };
   performance: {
     enableQueryOptimization: boolean;
@@ -77,133 +28,242 @@ export interface CategoryFilterStrategyConfig {
   };
 }
 
+type StrategySpecificConfig = Partial<CategoryFilterStrategyOptions>;
+
+interface NormalizedCategoryQuery extends CategoryFilterQuery {
+  text: string;
+  categories?: string[];
+  categoryHierarchy?: string[];
+}
+
+const DEFAULT_OPTIONS: CategoryFilterStrategyOptions = {
+  hierarchy: {
+    maxDepth: 5,
+    enableCaching: true,
+  },
+  performance: {
+    enableQueryOptimization: true,
+    enableResultCaching: true,
+    maxExecutionTime: 10000,
+    batchSize: 100,
+  },
+};
+
 /**
  * Specialized strategy for category-based search operations with hierarchy support,
- * relevance scoring, and result aggregation
+ * relevance scoring, and result aggregation.
  */
-export class CategoryFilterStrategy implements ISearchStrategy {
+export class CategoryFilterStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.CATEGORY_FILTER;
-  readonly priority = 10;
-  readonly supportedMemoryTypes = ['short_term', 'long_term'] as const;
-
   readonly description = 'Category-based filtering with hierarchy support';
   readonly capabilities = [
     SearchCapability.CATEGORIZATION,
     SearchCapability.FILTERING,
     SearchCapability.RELEVANCE_SCORING,
   ] as const;
+  readonly priority = 10;
+  readonly supportedMemoryTypes = ['short_term', 'long_term'] as const;
 
-  private readonly databaseManager: DatabaseManager;
-  private readonly logger: typeof console;
-  private readonly config: CategoryFilterStrategyConfig;
+  private readonly options: CategoryFilterStrategyOptions;
 
-  constructor(
-    config: CategoryFilterStrategyConfig,
-    databaseManager: DatabaseManager,
-    logger?: typeof console,
-  ) {
-    this.config = config;
-    this.databaseManager = databaseManager;
-    this.logger = logger || console;
+  constructor(config: SearchStrategyConfig, databaseManager: DatabaseManager) {
+    super(config, databaseManager);
+    this.options = this.mergeOptions(config.strategySpecific as StrategySpecificConfig | undefined);
   }
 
-  /**
-   * Determines if this strategy can handle the given query
-   */
   canHandle(query: SearchQuery): boolean {
-    // Can handle queries with category filters or when category relevance is beneficial
-    return this.hasCategoryFilters(query) || query.text.length > 0;
+    return this.hasCategoryFilters(query) || (typeof query.text === 'string' && query.text.trim().length > 0);
   }
 
-  /**
-   * Main search method implementing category-based search (required by ISearchStrategy)
-   */
-  async search(query: SearchQuery): Promise<SearchResult[]> {
-    const startTime = Date.now();
+  protected getCapabilities(): readonly SearchCapability[] {
+    return this.capabilities;
+  }
 
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
     try {
-      // Build category query and SQL
-      const categoryQuery = this.buildCategoryQuery(query as CategoryFilterQuery);
-      const sql = this.buildCategorySQL(query as CategoryFilterQuery, categoryQuery);
-
-      // Execute query and process results
-      const results = await this.executeCategoryQuery(sql, this.getQueryParameters(query as CategoryFilterQuery));
-      const processedResults = this.processCategoryResults(results, query);
-
-      // Log performance metrics
-      const duration = Date.now() - startTime;
-      logInfo('Category search completed', {
-        component: 'CategoryFilterStrategy',
-        operation: 'search',
-        duration: `${duration}ms`,
-        resultCount: processedResults.length
-      });
-
-      return processedResults;
-
+      const normalizedQuery = this.normalizeQuery(query);
+      const categoryQuery = this.buildCategoryQuery(normalizedQuery);
+      const sql = this.buildCategorySQL(normalizedQuery, categoryQuery);
+      const rows = await this.executeCategoryQuery(sql);
+      return this.processCategoryResults(rows, normalizedQuery);
     } catch (error) {
-      const duration = Date.now() - startTime;
-      logError('Category search failed', {
-        component: 'CategoryFilterStrategy',
-        operation: 'search',
-        duration: `${duration}ms`,
-        error: error instanceof Error ? error.message : String(error)
-      });
-
-      throw new SearchStrategyError(
-        this.name,
-        `Category strategy failed: ${error instanceof Error ? error.message : String(error)}`,
+      throw this.handleSearchError(
+        error,
         'category_search',
-        { query: query.text, duration: `${duration}ms` },
-        error instanceof Error ? error : undefined,
+        { query: query.text },
+        SearchErrorCategory.EXECUTION,
       );
     }
   }
 
+  getMetadata(): SearchStrategyMetadata {
+    return {
+      name: this.name,
+      version: '1.0.0',
+      description: this.description,
+      capabilities: [...this.capabilities],
+      supportedMemoryTypes: [...this.supportedMemoryTypes],
+      configurationSchema: {
+        type: 'object',
+        properties: {
+          priority: { type: 'number', minimum: 0, maximum: 100 },
+          timeout: { type: 'number', minimum: 1000, maximum: 30000 },
+          strategySpecific: {
+            type: 'object',
+            properties: {
+              hierarchy: {
+                type: 'object',
+                properties: {
+                  maxDepth: { type: 'number', minimum: 1, maximum: 20 },
+                  enableCaching: { type: 'boolean' },
+                },
+              },
+              performance: {
+                type: 'object',
+                properties: {
+                  enableQueryOptimization: { type: 'boolean' },
+                  enableResultCaching: { type: 'boolean' },
+                  maxExecutionTime: { type: 'number', minimum: 1000, maximum: 60000 },
+                  batchSize: { type: 'number', minimum: 10, maximum: 1000 },
+                },
+              },
+            },
+          },
+        },
+        required: ['priority', 'timeout'],
+      },
+      performanceMetrics: {
+        averageResponseTime: 120,
+        throughput: 400,
+        memoryUsage: 10,
+      },
+    };
+  }
+
+  protected validateStrategyConfiguration(): boolean {
+    if (this.options.hierarchy.maxDepth < 1 || this.options.hierarchy.maxDepth > 20) {
+      return false;
+    }
+
+    if (this.options.performance.batchSize < 10 || this.options.performance.batchSize > 5000) {
+      return false;
+    }
+
+    if (
+      this.options.performance.maxExecutionTime < 1000 ||
+      this.options.performance.maxExecutionTime > 60000
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private mergeOptions(strategySpecific?: StrategySpecificConfig): CategoryFilterStrategyOptions {
+    if (!strategySpecific) {
+      return DEFAULT_OPTIONS;
+    }
+
+    return {
+      hierarchy: {
+        ...DEFAULT_OPTIONS.hierarchy,
+        ...strategySpecific.hierarchy,
+      },
+      performance: {
+        ...DEFAULT_OPTIONS.performance,
+        ...strategySpecific.performance,
+      },
+    };
+  }
+
+  private normalizeQuery(query: SearchQuery): NormalizedCategoryQuery {
+    const categoryQuery = query as CategoryFilterQuery;
+    const normalized: NormalizedCategoryQuery = {
+      ...categoryQuery,
+      text: this.sanitizeSearchText(categoryQuery.text ?? ''),
+    };
+
+    if (Array.isArray(categoryQuery.categories)) {
+      normalized.categories = categoryQuery.categories
+        .map((category, index) => this.sanitizeCategory(category, `category_${index}`))
+        .filter((category): category is string => Boolean(category));
+    }
+
+    if (Array.isArray(categoryQuery.categoryHierarchy)) {
+      normalized.categoryHierarchy = categoryQuery.categoryHierarchy
+        .map((category, index) => this.sanitizeCategory(category, `category_hierarchy_${index}`))
+        .filter((category): category is string => Boolean(category));
+    }
+
+    return normalized;
+  }
+
+  private sanitizeSearchText(text: string): string {
+    try {
+      return sanitizeString(text, {
+        fieldName: 'searchText',
+        allowNewlines: false,
+        maxLength: SANITIZATION_LIMITS.SEARCH_QUERY_MAX_LENGTH,
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        throw this.handleValidationError(error.message, 'searchText', text);
+      }
+      throw error;
+    }
+  }
+
+  private sanitizeCategory(value: unknown, fieldName: string): string | undefined {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return undefined;
+    }
+
+    try {
+      return sanitizeString(value, {
+        fieldName,
+        allowNewlines: false,
+        maxLength: 100,
+      });
+    } catch (error) {
+      logWarn('Invalid category value filtered', {
+        component: 'CategoryFilterStrategy',
+        operation: 'sanitizeCategory',
+        fieldName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
 
   private hasCategoryFilters(query: SearchQuery): boolean {
     const categoryQuery = query as CategoryFilterQuery;
-    return !!(categoryQuery.categories && categoryQuery.categories.length > 0) ||
-      !!(categoryQuery.categoryHierarchy && categoryQuery.categoryHierarchy.length > 0);
+    return Boolean(
+      (categoryQuery.categories && categoryQuery.categories.length > 0) ||
+      (categoryQuery.categoryHierarchy && categoryQuery.categoryHierarchy.length > 0),
+    );
   }
 
-  private buildCategoryQuery(query: CategoryFilterQuery): string {
-    if (!query.categories || query.categories.length === 0) {
-      return query.text || '';
+  private buildCategoryQuery(query: NormalizedCategoryQuery): string {
+    const parts: string[] = [];
+
+    if (query.text) {
+      parts.push(query.text);
     }
 
-    // Combine text search with category filters
-    const textPart = query.text || '';
-    const categoryPart = query.categories.join(' ');
-
-    return `${textPart} ${categoryPart}`.trim();
-  }
-
-  private getQueryParameters(query: CategoryFilterQuery): unknown[] {
-    const parameters: unknown[] = [];
-
-    // Add category filters as parameters
-    if (query.categories) {
-      query.categories.forEach((category: string) => {
-        parameters.push(`%${category}%`);
-      });
+    if (query.categories && query.categories.length > 0) {
+      parts.push(query.categories.join(' '));
     }
 
-    return parameters;
+    return parts.join(' ').trim();
   }
 
-  private buildCategorySQL(query: CategoryFilterQuery, categoryQuery: string): string {
-    const limit = query.limit || 100;
-    const offset = query.offset || 0;
-
-    // Build WHERE clause with category filtering and FTS
+  private buildCategorySQL(query: NormalizedCategoryQuery, categoryQuery: string): string {
+    const limit = Math.min(query.limit ?? this.config.maxResults, this.config.maxResults);
+    const offset = Math.max(0, query.offset ?? 0);
     const whereClause = this.buildCategoryWhereClause(query, categoryQuery);
-
-    // Build ORDER BY clause with category relevance
     const orderByClause = this.buildCategoryOrderByClause(query);
 
-    // Construct the main category query with FTS support
-    const sql = `
+    return `
       SELECT
         id as memory_id,
         searchableContent as searchable_content,
@@ -244,120 +304,175 @@ export class CategoryFilterStrategy implements ISearchStrategy {
       ${orderByClause}
       LIMIT ${limit} OFFSET ${offset}
     `;
-
-    return sql;
   }
 
-  private buildCategoryWhereClause(query: CategoryFilterQuery, categoryQuery: string): string {
+  private buildCategoryWhereClause(query: NormalizedCategoryQuery, categoryQuery: string): string {
     const conditions: string[] = [];
 
-    // Add FTS search condition using the categoryQuery
-    if (categoryQuery && categoryQuery.trim()) {
+    if (categoryQuery) {
       const ftsQuery = this.buildFTSQuery(categoryQuery);
       conditions.push(`(searchableContent MATCH '${ftsQuery}' OR summary MATCH '${ftsQuery}')`);
     }
 
-    // Add category-specific conditions
     if (query.categories && query.categories.length > 0) {
-      const categoryList = query.categories.map((cat: string) => `'${cat.replace(/'/g, "''")}'`).join(', ');
-      conditions.push(`category_primary IN (${categoryList})`);
+      const categoryList = query.categories
+        .map(category => `'${this.escapeSqlString(category)}'`)
+        .join(', ');
+      conditions.push(`categoryPrimary IN (${categoryList})`);
     }
 
-    // Add hierarchy-based conditions
     if (query.categoryHierarchy && query.categoryHierarchy.length > 0) {
-      const hierarchyConditions = query.categoryHierarchy.map((hierarchyCat: string) => {
-        return `json_extract(processedData, '$.category_primary') LIKE '${hierarchyCat.replace(/'/g, "''")}%'`;
-      });
+      const hierarchyConditions = query.categoryHierarchy.map(category =>
+        `json_extract(processedData, '$.category_primary') LIKE '${this.escapeSqlString(category)}%'`,
+      );
       conditions.push(`(${hierarchyConditions.join(' OR ')})`);
     }
 
     return conditions.length > 0 ? conditions.join(' AND ') : '1=1';
   }
 
-  private buildCategoryOrderByClause(query: CategoryFilterQuery): string {
-    let orderBy = 'ORDER BY ';
+  private buildCategoryOrderByClause(query: NormalizedCategoryQuery): string {
+    const orderClauses: string[] = [];
 
-    // Add category-specific scoring
-    orderBy += `
-      CASE
-        WHEN category_primary IN (${query.categories ? query.categories.map((cat: string) => `'${cat.replace(/'/g, "''")}'`).join(', ') : "''"})
-        THEN 1.5
-        ELSE 1.0
-      END * importance_score DESC, `;
+    if (query.categories && query.categories.length > 0) {
+      const categoryList = query.categories
+        .map(category => `'${this.escapeSqlString(category)}'`)
+        .join(', ');
 
-    // Add recency boost for recent category matches
-    orderBy += 'created_at DESC';
+      orderClauses.push(`
+        CASE
+          WHEN categoryPrimary IN (${categoryList}) THEN 1.5
+          ELSE 1.0
+        END * importance_score DESC
+      `);
+    } else {
+      orderClauses.push('importance_score DESC');
+    }
 
-    return orderBy;
+    orderClauses.push('created_at DESC');
+
+    return `ORDER BY ${orderClauses.join(', ')}`;
   }
 
-  private async executeCategoryQuery(sql: string, parameters: unknown[]): Promise<unknown[]> {
-    const db = this.databaseManager.getPrismaClient();
-    return await db.$queryRawUnsafe(sql, ...parameters);
+  private buildFTSQuery(text: string): string {
+    if (!text || text.trim() === '') {
+      return '*';
+    }
+
+    const cleanQuery = this.escapeSqlString(text.replace(/\*/g, ''));
+    const terms = cleanQuery.split(/\s+/);
+
+    if (terms.length === 1) {
+      return `"${terms[0]}"`;
+    }
+
+    return terms.map(term => `"${term}"`).join(' OR ');
   }
 
-  private processCategoryResults(results: unknown[], query: SearchQuery): SearchResult[] {
-    const searchResults: SearchResult[] = [];
+  private async executeCategoryQuery(sql: string): Promise<unknown[]> {
+    try {
+      const prisma = this.databaseManager.getPrismaClient();
+      return await prisma.$queryRawUnsafe<unknown[]>(sql);
+    } catch (error) {
+      throw this.handleDatabaseError(error, 'execute_category_query', sql.substring(0, 200));
+    }
+  }
 
-    for (const row of results as DatabaseRow[]) {
+  private processCategoryResults(results: unknown[], query: NormalizedCategoryQuery): SearchResult[] {
+    const processed: SearchResult[] = [];
+
+    for (const rawRow of results) {
+      const row = rawRow as Partial<DatabaseQueryResult>;
+
       try {
-        const metadata = JSON.parse(row.metadata || '{}');
+        if (!row.memory_id) {
+          throw new Error('Missing memory_id in category filter result');
+        }
 
-        // Calculate category-based relevance score
-        const categoryRelevance = this.calculateCategoryRelevance(row, query as CategoryFilterQuery);
+        const id = row.memory_id;
+        const content = row.searchable_content ?? '';
+        const summary = row.summary ?? '';
+        const categoryPrimary = row.category_primary ?? '';
+        const importanceScore = row.importance_score ?? 0.5;
+        const memoryType = row.memory_type ?? 'long_term';
+        const createdAt = new Date(row.created_at ?? new Date().toISOString());
+        const rawMetadata = this.parseMetadata(row.metadata ?? '{}');
 
-        searchResults.push({
-          id: row.memory_id,
-          content: row.searchable_content,
-          metadata: {
-            summary: row.summary || '',
-            category: row.category_primary,
-            importanceScore: parseFloat(row.importance_score) || 0.5,
-            memoryType: row.memory_type,
-            createdAt: new Date(row.created_at),
-            ...metadata,
-          },
-          score: categoryRelevance,
+        const relevance = this.calculateCategoryRelevance({
+          searchable_content: content,
+          summary,
+          memory_type: memoryType,
+          category_primary: categoryPrimary,
+          importance_score: importanceScore,
+          created_at: createdAt,
+        }, query);
+
+        processed.push({
+          id,
+          content,
+          metadata: query.includeMetadata ? {
+            summary,
+            category: categoryPrimary,
+            importanceScore,
+            memoryType,
+            createdAt,
+            ...rawMetadata,
+          } : {},
+          score: relevance,
           strategy: this.name,
-          timestamp: new Date(row.created_at),
+          timestamp: createdAt,
         });
-
       } catch (error) {
-        logWarn('Error processing category result', {
+        logWarn('Failed to process category result row', {
           component: 'CategoryFilterStrategy',
-          operation: 'processCategoryResults',
-          rowId: row.memory_id,
-          error: error instanceof Error ? error.message : String(error)
+          operation: 'process_results',
+          error: error instanceof Error ? error.message : String(error),
+          rowId: row?.memory_id,
         });
-        continue;
       }
     }
 
-    return searchResults;
+    return processed;
   }
 
-  private calculateCategoryRelevance(row: DatabaseRow, query: CategoryFilterQuery): number {
-    let relevance = 0.3; // Base relevance
+  private parseMetadata(metadataJson: string): Record<string, unknown> {
+    try {
+      const parsed = JSON.parse(metadataJson);
+      return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    } catch (error) {
+      logWarn('Failed to parse category metadata', {
+        component: 'CategoryFilterStrategy',
+        operation: 'parse_metadata',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
 
-    // Category match boost
-    if (query.categories && query.categories.includes(row.category_primary)) {
+  private calculateCategoryRelevance(
+    row: {
+      searchable_content: string;
+      summary: string;
+      category_primary: string;
+      importance_score: number;
+      memory_type: string;
+      created_at: Date;
+    },
+    query: NormalizedCategoryQuery,
+  ): number {
+    let relevance = 0.3;
+
+    if (query.categories?.includes(row.category_primary)) {
       relevance += 0.4;
     }
 
-    // Hierarchy match boost
-    if (query.categoryHierarchy && query.categoryHierarchy.length > 0) {
-      const hierarchyMatch = query.categoryHierarchy.some((hierarchyCat: string) =>
-        row.category_primary && row.category_primary.startsWith(hierarchyCat),
-      );
-      if (hierarchyMatch) {
-        relevance += 0.3;
-      }
+    if (query.categoryHierarchy?.some(hierarchy => row.category_primary.startsWith(hierarchy))) {
+      relevance += 0.3;
     }
 
-    // Text match boost
     if (query.text) {
-      const content = (row.searchable_content || '').toLowerCase();
-      const summary = (row.summary || '').toLowerCase();
+      const content = row.searchable_content.toLowerCase();
+      const summary = row.summary.toLowerCase();
       const searchText = query.text.toLowerCase();
 
       if (content.includes(searchText) || summary.includes(searchText)) {
@@ -365,85 +480,17 @@ export class CategoryFilterStrategy implements ISearchStrategy {
       }
     }
 
-    // Importance score contribution
-    const importance = parseFloat(row.importance_score) || 0.5;
+    const importance = row.importance_score ?? 0.5;
     relevance *= (0.5 + importance);
+
+    if (row.memory_type === 'short_term') {
+      relevance *= 1.05;
+    }
 
     return Math.max(0, Math.min(1, relevance));
   }
 
-  /**
-   * Build FTS query from text for MATCH operations
-   */
-  private buildFTSQuery(text: string): string {
-    if (!text || text.trim() === '') {
-      return '*'; // Match everything if no query
-    }
-
-    const cleanQuery = text.replace(/"/g, '""').replace(/\*/g, '').trim();
-    const terms = cleanQuery.split(/\s+/);
-
-    if (terms.length === 1) {
-      return `"${cleanQuery}"`;
-    } else {
-      return terms.map(term => `"${term}"`).join(' OR ');
-    }
-  }
-
-  /**
-   * Get metadata about this search strategy
-   */
-  getMetadata(): SearchStrategyMetadata {
-    return {
-      name: this.name,
-      version: '1.0.0',
-      description: this.description,
-      capabilities: [...this.capabilities],
-      supportedMemoryTypes: [...this.supportedMemoryTypes],
-      configurationSchema: {
-        type: 'object',
-        properties: {
-          priority: { type: 'number', minimum: 0, maximum: 100 },
-          timeout: { type: 'number', minimum: 1000, maximum: 30000 },
-        },
-      },
-      performanceMetrics: {
-        averageResponseTime: 150,
-        throughput: 300,
-        memoryUsage: 8,
-      },
-    };
-  }
-
-  /**
-   * Validate the current configuration
-   */
-  async validateConfiguration(): Promise<boolean> {
-    try {
-      // Validate strategy configuration
-      if (!this.config) {
-        return false;
-      }
-
-      // Validate hierarchy configuration
-      if (this.config.hierarchy.maxDepth < 1 || this.config.hierarchy.maxDepth > 10) {
-        return false;
-      }
-
-      // Validate performance configuration
-      if (this.config.performance.maxExecutionTime < 1000 || this.config.performance.maxExecutionTime > 60000) {
-        return false;
-      }
-
-      return true;
-
-    } catch (error) {
-      logError('Configuration validation failed', {
-        component: 'CategoryFilterStrategy',
-        operation: 'validateConfiguration',
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return false;
-    }
+  private escapeSqlString(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/'/g, '\'\'');
   }
 }

@@ -1,61 +1,71 @@
-/**
- * TemporalFilterStrategy - Advanced temporal filtering with time range support
- *
- * Implements comprehensive temporal search capabilities including:
- * - Natural language time expressions ("last week", "yesterday", "2 hours ago")
- * - Complex time range queries and calculations
- * - Temporal pattern matching and processing
- * - Time-based result aggregation
- * - Performance optimization for temporal queries
- */
-
-import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy } from '../types';
-import { SearchStrategyMetadata, SearchCapability, SearchError } from '../SearchStrategy';
+import { BaseSearchStrategy } from '../strategies/BaseSearchStrategy';
+import {
+  SearchCapability,
+  SearchErrorCategory,
+  SearchStrategyConfig,
+  SearchStrategyMetadata,
+} from '../SearchStrategy';
+import {
+  SearchStrategy,
+  SearchQuery,
+  SearchResult,
+  DatabaseQueryResult,
+} from '../types';
 import { DatabaseManager } from '../../../infrastructure/database/DatabaseManager';
-import { logInfo, logError, logWarn } from '../../../infrastructure/config/Logger';
-
-// Import temporal processing classes
-import { DateTimeNormalizer } from './temporal/DateTimeNormalizer';
-import { TemporalPatternMatcher, PatternMatchResult } from './temporal/TemporalPatternMatcher';
+import { logWarn } from '../../../infrastructure/config/Logger';
+import {
+  sanitizeString,
+  SANITIZATION_LIMITS,
+} from '../../../infrastructure/config/SanitizationUtils';
 import {
   TemporalService,
   TimeRange,
   TimeRangeQuery,
   TemporalAggregationPeriod,
 } from '../temporal/TemporalService';
+import { DateTimeNormalizer } from './temporal/DateTimeNormalizer';
+import {
+  TemporalPatternMatcher,
+  PatternMatchResult,
+} from './temporal/TemporalPatternMatcher';
 
-/**
- * Extended query interface for temporal filtering
- */
-interface TemporalFilterQuery extends SearchQuery {
-  temporalFilters?: {
-    timeRanges?: TimeRange[];
-    relativeExpressions?: string[];
-    absoluteDates?: Date[];
-    patterns?: string[];
-  };
-  aggregation?: {
-    enabled: boolean;
-    period?: TemporalAggregationPeriod;
-    includeTrends?: boolean;
-  };
-  performance?: {
-    enableCaching?: boolean;
-    timeout?: number;
-    maxResults?: number;
-  };
+interface TemporalFiltersInput {
+  timeRanges?: TimeRange[];
+  relativeExpressions?: string[];
+  absoluteDates?: Date[];
+  patterns?: string[];
 }
 
-/**
- * Configuration for TemporalFilterStrategy
- */
-export interface TemporalFilterStrategyConfig {
+interface TemporalAggregationOptions {
+  enabled: boolean;
+  period?: TemporalAggregationPeriod;
+  includeTrends?: boolean;
+}
+
+interface TemporalPerformanceOptions {
+  enableCaching?: boolean;
+  timeout?: number;
+  maxResults?: number;
+}
+
+interface TemporalFilterQuery extends SearchQuery {
+  temporalFilters?: TemporalFiltersInput;
+  aggregation?: TemporalAggregationOptions;
+  performance?: TemporalPerformanceOptions;
+}
+
+interface NormalizedTemporalQuery extends TemporalFilterQuery {
+  text: string;
+  temporalFilters?: TemporalFiltersInput;
+}
+
+interface TemporalFilterStrategyOptions {
   naturalLanguage: {
     enableParsing: boolean;
     enablePatternMatching: boolean;
     confidenceThreshold: number;
   };
-  aggregation?: {
+  aggregation: {
     enableAggregation: boolean;
     defaultPeriod: TemporalAggregationPeriod;
     maxBuckets: number;
@@ -69,14 +79,39 @@ export interface TemporalFilterStrategyConfig {
   };
 }
 
+type StrategySpecificConfig = Partial<TemporalFilterStrategyOptions>;
+
+const DEFAULT_OPTIONS: TemporalFilterStrategyOptions = {
+  naturalLanguage: {
+    enableParsing: true,
+    enablePatternMatching: true,
+    confidenceThreshold: 0.3,
+  },
+  aggregation: {
+    enableAggregation: true,
+    defaultPeriod: {
+      type: 'day',
+      count: 1,
+    },
+    maxBuckets: 50,
+    enableTrends: true,
+  },
+  performance: {
+    enableQueryOptimization: true,
+    enableResultCaching: true,
+    maxExecutionTime: 10000,
+    batchSize: 100,
+  },
+};
+
 /**
- * Specialized strategy for advanced temporal filtering
+ * TemporalFilterStrategy - Advanced temporal filtering with time range support.
+ * Refactored to leverage BaseSearchStrategy for shared sanitisation and error handling.
  */
-export class TemporalFilterStrategy implements ISearchStrategy {
+export class TemporalFilterStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.TEMPORAL_FILTER;
   readonly priority = 8;
   readonly supportedMemoryTypes = ['short_term', 'long_term'] as const;
-
   readonly description = 'Advanced temporal filtering with time range support';
   readonly capabilities = [
     SearchCapability.TEMPORAL_FILTERING,
@@ -87,147 +122,276 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     SearchCapability.RELEVANCE_SCORING,
   ] as const;
 
-  private readonly databaseManager: DatabaseManager;
-  private readonly logger: typeof console;
-  private readonly config: TemporalFilterStrategyConfig;
+  private readonly options: TemporalFilterStrategyOptions;
   private readonly cache = new Map<string, { result: SearchResult[]; timestamp: number }>();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-  constructor(
-    config: TemporalFilterStrategyConfig,
-    databaseManager: DatabaseManager,
-    logger?: typeof console,
-  ) {
-    this.config = config;
-    this.databaseManager = databaseManager;
-    this.logger = logger || console;
+  constructor(config: SearchStrategyConfig, databaseManager: DatabaseManager) {
+    super(config, databaseManager);
+    this.options = this.mergeOptions(config.strategySpecific as StrategySpecificConfig | undefined);
   }
 
-  /**
-   * Determines if this strategy can handle the given query
-   */
   canHandle(query: SearchQuery): boolean {
-    // Can handle queries with temporal filters, patterns, or empty queries for recent memories
-    return this.hasTemporalFilters(query) ||
-           this.containsTemporalPatterns(query.text) ||
-           (!query.text && (query.limit || 0) > 0);
+    return (
+      this.hasTemporalFilters(query) ||
+      (typeof query.text === 'string' && this.containsTemporalPatterns(query.text)) ||
+      (!query.text && (query.limit ?? 0) > 0)
+    );
   }
 
-  /**
-   * Check if query has temporal filters
-   */
+  protected getCapabilities(): readonly SearchCapability[] {
+    return this.capabilities;
+  }
+
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
+    try {
+      const normalizedQuery = this.normalizeQuery(query);
+      const cacheKey = this.generateCacheKey(normalizedQuery);
+
+      if (this.options.performance.enableResultCaching) {
+        const cached = this.cache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp <= this.CACHE_TTL) {
+          return cached.result;
+        }
+      }
+
+      const patternAnalysis = this.analyzeTemporalPatterns(normalizedQuery);
+      const temporalQuery = this.buildTemporalQuery(normalizedQuery, patternAnalysis);
+      const sql = this.buildTemporalSQL(normalizedQuery, temporalQuery, patternAnalysis);
+      const rawRows = await this.executeTemporalQuery(sql);
+      let processedResults = this.processTemporalResults(rawRows, normalizedQuery, patternAnalysis);
+
+      if (this.shouldApplyAggregation(normalizedQuery)) {
+        processedResults = await this.applyTemporalAggregation(processedResults, normalizedQuery);
+      }
+
+      if (this.options.performance.enableResultCaching) {
+        this.cacheResult(cacheKey, processedResults);
+      }
+
+      return processedResults;
+    } catch (error) {
+      throw this.handleSearchError(
+        error,
+        'temporal_search',
+        { query: query.text },
+        SearchErrorCategory.EXECUTION,
+      );
+    }
+  }
+
+  getMetadata(): SearchStrategyMetadata {
+    return {
+      name: this.name,
+      version: '1.0.0',
+      description: this.description,
+      capabilities: [...this.capabilities],
+      supportedMemoryTypes: [...this.supportedMemoryTypes],
+      configurationSchema: {
+        type: 'object',
+        properties: {
+          priority: { type: 'number', minimum: 0, maximum: 100 },
+          timeout: { type: 'number', minimum: 1000, maximum: 30000 },
+          strategySpecific: {
+            type: 'object',
+            properties: {
+              naturalLanguage: {
+                type: 'object',
+                properties: {
+                  enableParsing: { type: 'boolean' },
+                  enablePatternMatching: { type: 'boolean' },
+                  confidenceThreshold: { type: 'number', minimum: 0, maximum: 1 },
+                },
+              },
+              aggregation: {
+                type: 'object',
+                properties: {
+                  enableAggregation: { type: 'boolean' },
+                  defaultPeriod: { type: 'string' },
+                  maxBuckets: { type: 'number', minimum: 1, maximum: 500 },
+                  enableTrends: { type: 'boolean' },
+                },
+              },
+              performance: {
+                type: 'object',
+                properties: {
+                  enableQueryOptimization: { type: 'boolean' },
+                  enableResultCaching: { type: 'boolean' },
+                  maxExecutionTime: { type: 'number', minimum: 1000, maximum: 60000 },
+                  batchSize: { type: 'number', minimum: 10, maximum: 1000 },
+                },
+              },
+            },
+          },
+        },
+        required: ['priority', 'timeout'],
+      },
+      performanceMetrics: {
+        averageResponseTime: 150,
+        throughput: 300,
+        memoryUsage: 12,
+      },
+    };
+  }
+
+  protected validateStrategyConfiguration(): boolean {
+    const { aggregation, performance, naturalLanguage } = this.options;
+
+    if (aggregation.maxBuckets < 1 || aggregation.maxBuckets > 500) {
+      return false;
+    }
+
+    if (
+      performance.maxExecutionTime < 1000 ||
+      performance.maxExecutionTime > 60000
+    ) {
+      return false;
+    }
+
+    if (performance.batchSize < 10 || performance.batchSize > 5000) {
+      return false;
+    }
+
+    if (
+      naturalLanguage.confidenceThreshold < 0 ||
+      naturalLanguage.confidenceThreshold > 1
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private mergeOptions(strategySpecific?: StrategySpecificConfig): TemporalFilterStrategyOptions {
+    if (!strategySpecific) {
+      return DEFAULT_OPTIONS;
+    }
+
+    return {
+      naturalLanguage: {
+        ...DEFAULT_OPTIONS.naturalLanguage,
+        ...strategySpecific.naturalLanguage,
+      },
+      aggregation: {
+        ...DEFAULT_OPTIONS.aggregation,
+        ...strategySpecific.aggregation,
+      },
+      performance: {
+        ...DEFAULT_OPTIONS.performance,
+        ...strategySpecific.performance,
+      },
+    };
+  }
+
+  private normalizeQuery(query: SearchQuery): NormalizedTemporalQuery {
+    const temporalQuery = query as TemporalFilterQuery;
+    const normalized: NormalizedTemporalQuery = {
+      ...temporalQuery,
+      text: this.sanitizeSearchText(query.text ?? ''),
+    };
+
+    if (temporalQuery.temporalFilters) {
+      normalized.temporalFilters = this.normalizeTemporalFilters(temporalQuery.temporalFilters);
+    }
+
+    return normalized;
+  }
+
+  private sanitizeSearchText(text: string): string {
+    try {
+      return sanitizeString(text, {
+        fieldName: 'searchText',
+        allowNewlines: false,
+        maxLength: SANITIZATION_LIMITS.SEARCH_QUERY_MAX_LENGTH,
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        throw this.handleValidationError(error.message, 'searchText', text);
+      }
+      throw error;
+    }
+  }
+
+  private normalizeTemporalFilters(filters: TemporalFiltersInput): TemporalFiltersInput {
+    const normalized: TemporalFiltersInput = {};
+
+    if (filters.timeRanges) {
+      normalized.timeRanges = filters.timeRanges
+        .filter(range => range.start instanceof Date && range.end instanceof Date)
+        .map(range => ({
+          start: new Date(range.start),
+          end: new Date(range.end),
+        }));
+    }
+
+    if (filters.absoluteDates) {
+      normalized.absoluteDates = filters.absoluteDates
+        .filter(date => date instanceof Date)
+        .map(date => new Date(date));
+    }
+
+    if (filters.relativeExpressions) {
+      normalized.relativeExpressions = filters.relativeExpressions
+        .filter(expr => typeof expr === 'string' && expr.trim().length > 0)
+        .map((expr, index) => this.sanitizeTemporalExpression(expr, `relativeExpression_${index}`))
+        .filter((expr): expr is string => Boolean(expr));
+    }
+
+    if (filters.patterns) {
+      normalized.patterns = filters.patterns
+        .filter(pattern => typeof pattern === 'string' && pattern.trim().length > 0)
+        .map((pattern, index) => this.sanitizeTemporalExpression(pattern, `temporalPattern_${index}`))
+        .filter((pattern): pattern is string => Boolean(pattern));
+    }
+
+    return normalized;
+  }
+
+  private sanitizeTemporalExpression(value: string, fieldName: string): string | undefined {
+    try {
+      return sanitizeString(value, {
+        fieldName,
+        allowNewlines: false,
+        maxLength: 200,
+      });
+    } catch (error) {
+      logWarn('Invalid temporal expression filtered', {
+        component: 'TemporalFilterStrategy',
+        operation: 'sanitizeTemporalExpression',
+        fieldName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
   private hasTemporalFilters(query: SearchQuery): boolean {
     const temporalQuery = query as TemporalFilterQuery;
+    const filters = temporalQuery.temporalFilters || (query.filters as TemporalFiltersInput | undefined);
 
-    // Check for temporalFilters at the top level (TemporalFilterQuery format)
-    if (temporalQuery.temporalFilters) {
-      return !!(
-        temporalQuery.temporalFilters.timeRanges?.length ||
-        temporalQuery.temporalFilters.relativeExpressions?.length ||
-        temporalQuery.temporalFilters.absoluteDates?.length ||
-        temporalQuery.temporalFilters.patterns?.length
-      );
+    if (!filters) {
+      return false;
     }
 
-    // Check for temporalFilters under filters property (SearchQuery format)
-    if (query.filters?.temporalFilters) {
-      const filters = query.filters as any;
-      return !!(
-        filters.temporalFilters.timeRanges?.length ||
-        filters.temporalFilters.relativeExpressions?.length ||
-        filters.temporalFilters.absoluteDates?.length ||
-        filters.temporalFilters.patterns?.length
-      );
-    }
-
-    return false;
+    return Boolean(
+      filters.timeRanges?.length ||
+      filters.relativeExpressions?.length ||
+      filters.absoluteDates?.length ||
+      filters.patterns?.length
+    );
   }
 
-  /**
-   * Check if query text contains temporal patterns
-   */
-  private containsTemporalPatterns(text: string): boolean {
-    if (!text || !this.config.naturalLanguage.enablePatternMatching) {
+  private containsTemporalPatterns(text: string | undefined): boolean {
+    if (!text || !this.options.naturalLanguage.enablePatternMatching) {
       return false;
     }
 
     const analysis = TemporalPatternMatcher.analyzeText(text);
-    return analysis.overallConfidence > 0.3; // Threshold for pattern detection
+    return analysis.overallConfidence >= this.options.naturalLanguage.confidenceThreshold;
   }
 
-
-  /**
-   * Execute method to match ISearchStrategy interface
-   */
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
-    return this.search(query);
-  }
-
-  /**
-   * Search method (for BaseSearchStrategy compatibility)
-   */
-  async search(query: SearchQuery): Promise<SearchResult[]> {
-    const startTime = Date.now();
-
-    try {
-      // Analyze query for temporal patterns
-      const patternAnalysis = this.analyzeTemporalPatterns(query);
-
-      // Build temporal query
-      const temporalQuery = this.buildTemporalQuery(query);
-
-      // Generate SQL with temporal filtering
-      const sql = this.buildTemporalSQL(query, temporalQuery, patternAnalysis);
-
-      // Execute query with performance optimization
-      const rawResults = await this.executeTemporalQuery(sql, this.getQueryParameters(query));
-
-      // Process and enhance results
-      let processedResults = this.processTemporalResults(rawResults, query, patternAnalysis);
-
-      // Apply aggregation if requested
-      if (this.shouldApplyAggregation(query)) {
-        processedResults = await this.applyTemporalAggregation(processedResults, query);
-      }
-
-      // Cache results if enabled
-      if (this.config.performance.enableResultCaching) {
-        this.cacheResult(query, processedResults);
-      }
-
-      // Log performance metrics
-      const duration = Date.now() - startTime;
-      logInfo('Temporal search completed', {
-        component: 'TemporalFilterStrategy',
-        operation: 'search',
-        duration: `${duration}ms`,
-        resultCount: processedResults.length
-      });
-
-      return processedResults;
-
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logError('Temporal search failed', {
-        component: 'TemporalFilterStrategy',
-        operation: 'search',
-        duration: `${duration}ms`,
-        error: error instanceof Error ? error.message : String(error)
-      });
-
-      throw new SearchError(
-        `Temporal filter strategy failed: ${error instanceof Error ? error.message : String(error)}`,
-        this.name,
-        { query: query.text, duration: `${duration}ms` }
-      );
-    }
-  }
-
-  /**
-   * Analyze query for temporal patterns
-   */
-  private analyzeTemporalPatterns(query: SearchQuery): PatternMatchResult {
-    if (!this.config.naturalLanguage.enablePatternMatching) {
+  private analyzeTemporalPatterns(query: NormalizedTemporalQuery): PatternMatchResult {
+    if (!this.options.naturalLanguage.enablePatternMatching || !query.text) {
       return {
         patterns: [],
         overallConfidence: 0,
@@ -238,67 +402,42 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     return TemporalPatternMatcher.analyzeText(query.text);
   }
 
-  /**
-   * Build temporal query from search query
-   */
-  private buildTemporalQuery(query: SearchQuery): TimeRangeQuery {
-    const temporalQuery = query as TemporalFilterQuery;
+  private buildTemporalQuery(
+    query: NormalizedTemporalQuery,
+    patternAnalysis: PatternMatchResult,
+  ): TimeRangeQuery {
+    const filters = query.temporalFilters || {};
     const ranges: TimeRange[] = [];
 
-    // Get temporal filters from either location
-    let temporalFilters: any = null;
-    if (temporalQuery.temporalFilters) {
-      temporalFilters = temporalQuery.temporalFilters;
-    } else if (query.filters?.temporalFilters) {
-      temporalFilters = query.filters.temporalFilters;
+    if (filters.timeRanges) {
+      ranges.push(...filters.timeRanges);
     }
 
-    // Process explicit temporal filters
-    if (temporalFilters) {
-      // Add explicit time ranges
-      if (temporalFilters.timeRanges) {
-        ranges.push(...temporalFilters.timeRanges);
-      }
-
-      // Process absolute dates
-      if (temporalFilters.absoluteDates) {
-        temporalFilters.absoluteDates.forEach((date: Date) => {
-          ranges.push({
-            start: new Date(date.getTime() - 24 * 60 * 60 * 1000), // 1 day before
-            end: new Date(date.getTime() + 24 * 60 * 60 * 1000)     // 1 day after
-          });
+    if (filters.absoluteDates) {
+      filters.absoluteDates.forEach(date => {
+        ranges.push({
+          start: new Date(date.getTime() - 12 * 60 * 60 * 1000),
+          end: new Date(date.getTime() + 12 * 60 * 60 * 1000),
         });
-      }
-
-      // Process relative expressions
-      if (temporalFilters.relativeExpressions) {
-        temporalFilters.relativeExpressions.forEach((expr: string) => {
-          try {
-            const normalized = DateTimeNormalizer.normalize(expr);
-            ranges.push({
-              start: new Date(normalized.date.getTime() - 60 * 60 * 1000), // 1 hour window
-              end: new Date(normalized.date.getTime() + 60 * 60 * 1000)
-            });
-          } catch (error) {
-            logWarn('Failed to parse relative expression', {
-              component: 'TemporalFilterStrategy',
-              operation: 'buildTemporalQuery',
-              expression: expr,
-              error: error instanceof Error ? error.message : String(error)
-            });
-          }
-        });
-      }
+      });
     }
 
-    // Process natural language patterns
-    const patternAnalysis = TemporalPatternMatcher.analyzeText(query.text);
+    if (filters.relativeExpressions) {
+      filters.relativeExpressions.forEach(expression => {
+        const parsed = this.parseRelativeExpression(expression);
+        if (parsed.start && parsed.end) {
+          ranges.push(parsed as TimeRange);
+        }
+      });
+    }
+
     if (patternAnalysis.patterns.length > 0) {
       patternAnalysis.patterns.forEach(pattern => {
         if (pattern.normalized.start) {
           ranges.push({
             start: pattern.normalized.start,
-            end: pattern.normalized.end || new Date(pattern.normalized.start.getTime() + 24 * 60 * 60 * 1000)
+            end: pattern.normalized.end ||
+              new Date(pattern.normalized.start.getTime() + 24 * 60 * 60 * 1000),
           });
         }
       });
@@ -307,25 +446,21 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     return {
       ranges,
       operation: 'UNION',
-      granularity: 'minute'
+      granularity: 'minute',
     };
   }
 
-  /**
-   * Build temporal SQL with advanced filtering
-   */
-  private buildTemporalSQL(query: SearchQuery, temporalQuery: TimeRangeQuery, patterns: PatternMatchResult): string {
-    const limit = query.limit || 100;
-    const offset = query.offset || 0;
-
-    // Build WHERE clause with temporal conditions
+  private buildTemporalSQL(
+    query: NormalizedTemporalQuery,
+    temporalQuery: TimeRangeQuery,
+    patterns: PatternMatchResult,
+  ): string {
+    const limit = Math.min(query.limit ?? this.config.maxResults, this.config.maxResults);
+    const offset = Math.max(0, query.offset ?? 0);
     const whereClause = this.buildTemporalWhereClause(query, temporalQuery, patterns);
-
-    // Build ORDER BY clause with temporal relevance
     const orderByClause = this.buildTemporalOrderByClause(query, temporalQuery);
 
-    // Build the main temporal query
-    const sql = `
+    return `
       SELECT
         id as memory_id,
         searchableContent as searchable_content,
@@ -336,10 +471,8 @@ export class TemporalFilterStrategy implements ISearchStrategy {
         importanceScore as importance_score,
         createdAt as created_at,
         '${this.name}' as search_strategy,
-        -- Calculate temporal relevance score
         ${this.buildTemporalRelevanceCalculation('created_at', temporalQuery)} as temporal_relevance_score
       FROM (
-        -- Query short_term_memory with temporal filtering
         SELECT
           id,
           searchableContent,
@@ -354,7 +487,6 @@ export class TemporalFilterStrategy implements ISearchStrategy {
 
         UNION ALL
 
-        -- Query long_term_memory with temporal filtering
         SELECT
           id,
           searchableContent,
@@ -370,344 +502,288 @@ export class TemporalFilterStrategy implements ISearchStrategy {
       ${orderByClause}
       LIMIT ${limit} OFFSET ${offset}
     `;
-
-    return sql;
   }
 
-  /**
-   * Build WHERE clause with temporal filtering
-   */
-  private buildTemporalWhereClause(query: SearchQuery, temporalQuery: TimeRangeQuery, patterns: PatternMatchResult): string {
+  private buildTemporalWhereClause(
+    query: NormalizedTemporalQuery,
+    temporalQuery: TimeRangeQuery,
+    patterns: PatternMatchResult,
+  ): string {
     const conditions: string[] = [];
 
-    // Add namespace filtering if available
-    if ((this.databaseManager as any).currentNamespace) {
-      conditions.push(`json_extract(metadata, '$.namespace') = '${(this.databaseManager as any).currentNamespace}'`);
+    if ((this.databaseManager as unknown as { currentNamespace?: string }).currentNamespace) {
+      const namespace = (this.databaseManager as unknown as { currentNamespace?: string }).currentNamespace ?? '';
+      conditions.push(`json_extract(metadata, '$.namespace') = '${this.escapeSqlString(namespace)}'`);
     }
 
-    // Add text search conditions
-    if (query.text && query.text.trim()) {
-      const searchCondition = this.buildTextSearchCondition(query.text);
-      conditions.push(searchCondition);
+    if (query.text) {
+      conditions.push(this.buildTextSearchCondition(query.text));
     }
 
-    // Add temporal range conditions
     if (temporalQuery.ranges.length > 0) {
-      const rangeConditions = temporalQuery.ranges.map(range => {
-        const startTime = range.start.toISOString();
-        const endTime = range.end.toISOString();
-        return `created_at BETWEEN '${startTime}' AND '${endTime}'`;
-      });
+      const rangeConditions = temporalQuery.ranges.map(range => (
+        `created_at BETWEEN '${range.start.toISOString()}' AND '${range.end.toISOString()}'`
+      ));
       conditions.push(`(${rangeConditions.join(' OR ')})`);
     }
 
-    // Add pattern-based conditions
     if (patterns.patterns.length > 0) {
-      const patternConditions = patterns.patterns.map(pattern => {
-        if (pattern.normalized.start) {
-          const startTime = pattern.normalized.start.toISOString();
-          const endTime = pattern.normalized.end?.toISOString() ||
-            new Date(pattern.normalized.start.getTime() + 24 * 60 * 60 * 1000).toISOString();
-          return `created_at BETWEEN '${startTime}' AND '${endTime}'`;
-        }
-        return '1=1'; // No additional filtering if no temporal data
-      });
-      conditions.push(`(${patternConditions.join(' OR ')})`);
+      const patternConditions = patterns.patterns
+        .filter(pattern => pattern.normalized.start)
+        .map(pattern => {
+          const start = pattern.normalized.start!;
+          const end = pattern.normalized.end ?? new Date(start.getTime() + 24 * 60 * 60 * 1000);
+          return `created_at BETWEEN '${start.toISOString()}' AND '${end.toISOString()}'`;
+        });
+
+      if (patternConditions.length > 0) {
+        conditions.push(`(${patternConditions.join(' OR ')})`);
+      }
     }
 
     return conditions.length > 0 ? conditions.join(' AND ') : '1=1';
   }
 
-  /**
-   * Build text search conditions
-   */
   private buildTextSearchCondition(searchText: string): string {
     const terms = searchText.split(/\s+/).filter(term => term.length > 0);
-    const conditions: string[] = [];
-
-    for (const term of terms) {
-      const escapedTerm = this.escapeSqlString(term);
-      conditions.push(
-        `(searchable_content LIKE '%${escapedTerm}%' OR summary LIKE '%${escapedTerm}%')`
-      );
+    if (terms.length === 0) {
+      return '1=1';
     }
 
-    return `(${conditions.join(' OR ')})`;
+    const clauses = terms.map(term => {
+      const escaped = this.escapeSqlString(term);
+      return `(searchableContent LIKE '%${escaped}%' ESCAPE '\\' OR summary LIKE '%${escaped}%' ESCAPE '\\')`;
+    });
+
+    return `(${clauses.join(' OR ')})`;
   }
 
-  /**
-   * Build temporal relevance calculation SQL
-   */
-  private buildTemporalRelevanceCalculation(createdAtField: string, temporalQuery: TimeRangeQuery): string {
+  private buildTemporalRelevanceCalculation(
+    createdAtField: string,
+    temporalQuery: TimeRangeQuery,
+  ): string {
     const now = new Date().toISOString();
-
-    // Base temporal relevance (recency)
     let calculation = `
-      -- Base temporal relevance based on recency
       CASE
         WHEN CAST(strftime('%s', '${now}') AS INTEGER) - CAST(strftime('%s', ${createdAtField}) AS INTEGER) < 0
-        THEN 1.0 -- Future dates
+          THEN 1.0
         ELSE EXP(-0.693147 * (
           CAST(strftime('%s', '${now}') AS INTEGER) - CAST(strftime('%s', ${createdAtField}) AS INTEGER)
-        ) * 1000 / 604800000) -- 7 days half-life
+        ) / 604800)
       END
     `;
 
-    // Add range-specific relevance boost
     if (temporalQuery.ranges.length > 0) {
-      const rangeBoosts = temporalQuery.ranges.map((range, index) => {
-        const rangeWeight = 1.2; // Boost factor for memories in specified ranges
-        return `
-          CASE WHEN ${createdAtField} BETWEEN '${range.start.toISOString()}' AND '${range.end.toISOString()}'
-          THEN ${rangeWeight}
-          ELSE 1.0 END
-        `;
-      });
+      const boosts = temporalQuery.ranges.map(range => `
+        CASE
+          WHEN ${createdAtField} BETWEEN '${range.start.toISOString()}' AND '${range.end.toISOString()}'
+            THEN 1.2
+          ELSE 1.0
+        END
+      `);
 
-      calculation = `(${calculation}) * (${rangeBoosts.join(' * ')})`;
+      calculation = `(${calculation}) * (${boosts.join(' * ')})`;
     }
 
     return calculation;
   }
 
-  /**
-   * Build ORDER BY clause with temporal relevance
-   */
-  private buildTemporalOrderByClause(query: SearchQuery, temporalQuery: TimeRangeQuery): string {
-    let orderBy = 'ORDER BY temporal_relevance_score DESC';
+  private buildTemporalOrderByClause(
+    query: NormalizedTemporalQuery,
+    _temporalQuery: TimeRangeQuery,
+  ): string {
+    const parts = ['temporal_relevance_score DESC'];
 
-    // Add secondary sorting criteria
     if (query.sortBy) {
-      const direction = query.sortBy.direction.toUpperCase();
-      orderBy += `, ${query.sortBy.field} ${direction}`;
+      const direction = query.sortBy.direction === 'asc' ? 'ASC' : 'DESC';
+      parts.push(`${query.sortBy.field} ${direction}`);
     } else {
-      // Default secondary sort by importance and recency
-      orderBy += ', importance_score DESC, created_at DESC';
+      parts.push('importance_score DESC', 'created_at DESC');
     }
 
-    return orderBy;
+    return `ORDER BY ${parts.join(', ')}`;
   }
 
-  /**
-   * Get query parameters for safe execution
-   */
-  private getQueryParameters(query: SearchQuery): unknown[] {
-    return [];
-  }
-
-  /**
-   * Execute temporal query with error handling
-   */
-  private async executeTemporalQuery(sql: string, parameters: unknown[]): Promise<unknown[]> {
-    const db = (this.databaseManager as any).prisma || this.databaseManager;
-
+  private async executeTemporalQuery(sql: string): Promise<unknown[]> {
     try {
-      const result = await db.$queryRawUnsafe(sql, ...parameters);
-      // Ensure we return an array, even if the result is not iterable
+      const prisma = this.databaseManager.getPrismaClient();
+      const result = await prisma.$queryRawUnsafe<unknown[]>(sql);
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      logError('Temporal query execution failed', {
-        component: 'TemporalFilterStrategy',
-        operation: 'executeTemporalQuery',
-        error: error instanceof Error ? error.message : String(error)
-      });
-      throw new Error(`Temporal query failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw this.handleDatabaseError(error, 'execute_temporal_query', sql.substring(0, 200));
     }
   }
 
-  /**
-   * Process temporal results with enhanced scoring
-   */
   private processTemporalResults(
     results: unknown[],
-    query: SearchQuery,
-    patterns: PatternMatchResult
+    query: NormalizedTemporalQuery,
+    patterns: PatternMatchResult,
   ): SearchResult[] {
-    const searchResults: SearchResult[] = [];
-    const queryTime = new Date();
+    const processed: SearchResult[] = [];
+    const now = new Date();
 
-    for (const row of results as any[]) {
+    for (const raw of results) {
+      const row = raw as Partial<DatabaseQueryResult & { temporal_relevance_score?: number }>;
+
       try {
-        const createdAt = new Date(row.created_at);
-        const metadata = JSON.parse(row.metadata || '{}');
+        if (!row.memory_id) {
+          throw new Error('Missing memory_id');
+        }
 
-        // Calculate temporal relevance score
-        const temporalRelevance = this.calculateTemporalRelevance(
-          createdAt,
-          queryTime,
-          query as TemporalFilterQuery,
-          patterns
-        );
+        const importanceScore = row.importance_score ?? 0.5;
+        const createdAt = row.created_at ? new Date(row.created_at) : new Date();
+        const baseMetadata = this.parseMetadata(row.metadata ?? '{}');
+        const temporalScore = this.calculateTemporalRelevance(row, patterns, now);
 
-        // Create enhanced search result
-        const searchResult: SearchResult = {
+        processed.push({
           id: row.memory_id,
-          content: row.searchable_content,
-          metadata: {
-            summary: row.summary || '',
-            category: row.category_primary,
-            importanceScore: parseFloat(row.importance_score) || 0.5,
-            memoryType: row.memory_type,
-            createdAt: createdAt,
-            temporalRelevanceScore: temporalRelevance,
-            searchStrategy: this.name,
-            ...metadata
-          },
-          score: temporalRelevance,
+          content: row.searchable_content ?? '',
+          metadata: query.includeMetadata ? {
+            summary: row.summary ?? '',
+            category: row.category_primary ?? '',
+            importanceScore,
+            memoryType: row.memory_type ?? 'long_term',
+            createdAt,
+            temporalRelevance: temporalScore,
+            ...baseMetadata,
+          } : {},
+          score: temporalScore,
           strategy: this.name,
-          timestamp: createdAt
-        };
-
-        searchResults.push(searchResult);
-
-      } catch (error) {
-        logWarn('Error processing temporal result row', {
-          component: 'TemporalFilterStrategy',
-          operation: 'processTemporalResults',
-          rowId: row.memory_id,
-          error: error instanceof Error ? error.message : String(error)
+          timestamp: createdAt,
         });
-        continue;
+      } catch (error) {
+        logWarn('Failed to process temporal result row', {
+          component: 'TemporalFilterStrategy',
+          operation: 'process_results',
+          error: error instanceof Error ? error.message : String(error),
+          rowId: row.memory_id,
+        });
       }
     }
 
-    return searchResults;
+    return processed;
   }
 
-  /**
-   * Calculate temporal relevance based on time proximity and patterns
-   */
+  private parseMetadata(metadataJson: string): Record<string, unknown> {
+    try {
+      const parsed = JSON.parse(metadataJson);
+      return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    } catch (error) {
+      logWarn('Failed to parse temporal metadata', {
+        component: 'TemporalFilterStrategy',
+        operation: 'parse_metadata',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
+
   private calculateTemporalRelevance(
-    memoryTime: Date,
-    queryTime: Date,
-    query: TemporalFilterQuery,
-    patterns: PatternMatchResult
+    row: Partial<DatabaseQueryResult & { temporal_relevance_score?: number }>,
+    patterns: PatternMatchResult,
+    now: Date,
   ): number {
-    const ageMs = queryTime.getTime() - memoryTime.getTime();
-    const ageDays = ageMs / (24 * 60 * 60 * 1000);
+    const createdAt = row.created_at ? new Date(row.created_at) : now;
+    const timeDelta = Math.max(0, now.getTime() - createdAt.getTime());
+    const recencyScore = Math.exp(-timeDelta / (7 * 24 * 60 * 60 * 1000)); // 7-day half-life
 
-    // Base relevance using exponential decay (7-day half-life)
-    let relevance = Math.exp(-Math.LN2 * ageDays / 7);
-
-    // Pattern-based relevance boost
+    let patternBoost = 1;
     if (patterns.patterns.length > 0) {
-      const patternBoost = patterns.patterns.reduce((boost, pattern) => {
-        // Boost relevance for memories that match temporal patterns
-        return boost + (pattern.confidence * 0.2);
-      }, 0);
-      relevance *= (1 + patternBoost);
-    }
+      const hasMatchingPattern = patterns.patterns.some(pattern => {
+        if (!pattern.normalized.start) {
+          return false;
+        }
+        const patternStart = pattern.normalized.start.getTime();
+        const patternEnd = (pattern.normalized.end ?? new Date(patternStart + 24 * 60 * 60 * 1000)).getTime();
+        return createdAt.getTime() >= patternStart && createdAt.getTime() <= patternEnd;
+      });
 
-    // Explicit range boost
-    const temporalFilters = query.temporalFilters || (query.filters as any)?.temporalFilters;
-    if (temporalFilters?.timeRanges) {
-      const inRange = temporalFilters.timeRanges.some((range: TimeRange) =>
-        memoryTime >= range.start && memoryTime <= range.end
-      );
-      if (inRange) {
-        relevance *= 1.3; // 30% boost for memories in specified ranges
+      if (hasMatchingPattern) {
+        patternBoost = 1.2;
       }
     }
 
-    return Math.max(0, Math.min(1, relevance));
+    const importanceScore = row.importance_score ?? 0.5;
+    const baseScore = row.temporal_relevance_score ?? recencyScore;
+
+    return Math.max(0, Math.min(1, baseScore * patternBoost * (0.5 + importanceScore)));
   }
 
-  /**
-   * Apply temporal aggregation if requested
-   */
+  private shouldApplyAggregation(query: NormalizedTemporalQuery): boolean {
+    const aggregationRequest = query.aggregation;
+
+    if (!this.options.aggregation.enableAggregation && !aggregationRequest?.enabled) {
+      return false;
+    }
+
+    return Boolean(aggregationRequest?.enabled);
+  }
+
   private async applyTemporalAggregation(
     results: SearchResult[],
-    query: SearchQuery
+    query: NormalizedTemporalQuery,
   ): Promise<SearchResult[]> {
-    if (!this.shouldApplyAggregation(query)) {
-      return results;
-    }
+    const period = query.aggregation?.period ?? this.options.aggregation.defaultPeriod;
+    const includeTrends = query.aggregation?.includeTrends ?? this.options.aggregation.enableTrends;
 
-    const temporalQuery = query as TemporalFilterQuery;
-    const period: TemporalAggregationPeriod = (temporalQuery.aggregation?.period || this.config.aggregation?.defaultPeriod || 'hour') as TemporalAggregationPeriod;
-
-    // Convert SearchResults to aggregation format
     const aggregationData = results.map(result => ({
       id: result.id,
       content: result.content,
       score: result.score,
       timestamp: result.timestamp,
-      metadata: result.metadata
+      metadata: result.metadata,
     }));
 
-    // Perform temporal aggregation
-    const aggregationResult = TemporalService.aggregate(
+    const aggregated = TemporalService.aggregate(
       aggregationData,
       period,
       {
-        includeTrends: temporalQuery.aggregation?.includeTrends ?? true,
-        maxBuckets: 50,
-        representativeStrategy: 'highest_score'
-      }
+        includeTrends,
+        maxBuckets: this.options.aggregation.maxBuckets,
+        representativeStrategy: 'highest_score',
+      },
     );
 
-    // Convert aggregation back to search results
-    return aggregationResult.buckets.map(bucket => ({
-      id: bucket.representative?.memoryId || `bucket_${bucket.period.start.getTime()}`,
-      content: bucket.representative?.content || `Aggregated results for ${bucket.period.label}`,
+    return aggregated.buckets.map(bucket => ({
+      id: `temporal_bucket_${bucket.period.start.getTime()}`,
+      content: `Memories from ${bucket.period.label}`,
       metadata: {
         aggregated: true,
-        period: bucket.period,
         statistics: bucket.statistics,
         trend: bucket.trend,
-        resultCount: bucket.statistics.count
+        period: bucket.period,
       },
-      score: bucket.statistics.averageScore,
+      score: bucket.statistics.averageScore ?? 0.5,
       strategy: this.name,
-      timestamp: bucket.period.start
+      timestamp: bucket.period.start,
     }));
   }
 
-  /**
-   * Check if aggregation should be applied
-   */
-  private shouldApplyAggregation(query: SearchQuery): boolean {
-    const temporalQuery = query as TemporalFilterQuery;
-    return !!(
-      this.config.aggregation?.enableAggregation &&
-      temporalQuery.aggregation?.enabled &&
-      temporalQuery.aggregation?.period
-    );
+  private parseRelativeExpression(expression: string): Partial<TimeRange> {
+    try {
+      const normalized = DateTimeNormalizer.normalize(expression);
+      const windowSize = 60 * 60 * 1000; // hour window
+      return {
+        start: new Date(normalized.date.getTime() - windowSize),
+        end: new Date(normalized.date.getTime() + windowSize),
+      };
+    } catch (error) {
+      logWarn('Failed to parse relative expression', {
+        component: 'TemporalFilterStrategy',
+        operation: 'parseRelativeExpression',
+        expression,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
   }
 
-  /**
-   * Cache search results for performance
-   */
-  private cacheResult(query: SearchQuery, results: SearchResult[]): void {
-    const cacheKey = this.generateCacheKey(query);
+  private cacheResult(cacheKey: string, results: SearchResult[]): void {
     this.cache.set(cacheKey, {
       result: results,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
-    // Clean up old cache entries
-    this.cleanupCache();
-  }
-
-  /**
-   * Generate cache key for query
-   */
-  private generateCacheKey(query: SearchQuery): string {
-    const temporalQuery = query as TemporalFilterQuery;
-    const keyData = {
-      text: query.text,
-      temporalFilters: temporalQuery.temporalFilters,
-      aggregation: temporalQuery.aggregation,
-      limit: query.limit,
-      offset: query.offset
-    };
-    return JSON.stringify(keyData);
-  }
-
-  /**
-   * Clean up expired cache entries
-   */
-  private cleanupCache(): void {
     const now = Date.now();
     for (const [key, value] of this.cache.entries()) {
       if (now - value.timestamp > this.CACHE_TTL) {
@@ -716,198 +792,17 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     }
   }
 
-  /**
-   * Parse time expression from natural language
-   */
-  private parseTimeExpression(expression: string): { start?: Date; end?: Date } {
-    try {
-      const normalized = DateTimeNormalizer.normalize(expression);
-
-      // Create a reasonable time window around the parsed time
-      const windowSize = 60 * 60 * 1000; // 1 hour window
-      return {
-        start: new Date(normalized.date.getTime() - windowSize),
-        end: new Date(normalized.date.getTime() + windowSize)
-      };
-    } catch (error) {
-      logWarn('Failed to parse time expression', {
-        component: 'TemporalFilterStrategy',
-        operation: 'parseTimeExpression',
-        expression,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return {};
-    }
+  private generateCacheKey(query: NormalizedTemporalQuery): string {
+    return JSON.stringify({
+      text: query.text,
+      temporalFilters: query.temporalFilters,
+      aggregation: query.aggregation,
+      limit: query.limit,
+      offset: query.offset,
+    });
   }
 
-  /**
-   * Build time range filter for database queries
-   */
-  private buildTimeRangeFilter(startTime: Date, endTime: Date): string {
-    const start = startTime.toISOString();
-    const end = endTime.toISOString();
-    return `created_at BETWEEN '${start}' AND '${end}'`;
-  }
-
-  /**
-   * Aggregate results by time period
-   */
-  private aggregateByTimePeriod(
-    results: SearchResult[],
-    period: TemporalAggregationPeriod
-  ): SearchResult[] {
-    const aggregationData = results.map(result => ({
-      id: result.id,
-      content: result.content,
-      score: result.score,
-      timestamp: result.timestamp,
-      metadata: result.metadata
-    }));
-
-    const aggregationResult = TemporalService.aggregate(
-      aggregationData,
-      period,
-      {
-        includeTrends: true,
-        maxBuckets: 50,
-        representativeStrategy: 'highest_score'
-      }
-    );
-
-    return aggregationResult.buckets.map(bucket => ({
-      id: `aggregated_${bucket.period.start.getTime()}`,
-      content: `Aggregated memories from ${bucket.period.label}`,
-      metadata: {
-        aggregated: true,
-        statistics: bucket.statistics,
-        trend: bucket.trend,
-        period: bucket.period
-      },
-      score: bucket.statistics.averageScore,
-      strategy: this.name,
-      timestamp: bucket.period.start
-    }));
-  }
-
-  /**
-   * Escape SQL strings to prevent injection
-   */
-  private escapeSqlString(str: string): string {
-    return str.replace(/'/g, "''").replace(/\\/g, '\\\\');
-  }
-
-  /**
-   * Validate strategy-specific configuration
-   */
-  protected validateStrategyConfiguration(): boolean {
-   const config = this.config;
-   if (!config.naturalLanguage.enableParsing && !config.naturalLanguage.enablePatternMatching) {
-     logWarn('TemporalFilterStrategy: Both natural language and pattern matching are disabled', {
-       component: 'TemporalFilterStrategy',
-       operation: 'validateStrategyConfiguration'
-     });
-   }
-
-   if (config.performance.maxExecutionTime <= 0) {
-     return false;
-   }
-
-   if (config.performance.batchSize < 0) {
-     return false;
-   }
-
-   return true;
- }
-
-  /**
-   * Get configuration schema for this strategy
-   */
-  protected getConfigurationSchema(): Record<string, unknown> {
-    return {
-      type: 'object',
-      properties: {
-        enableNaturalLanguage: { type: 'boolean', default: true },
-        enablePatternMatching: { type: 'boolean', default: true },
-        enableAggregation: { type: 'boolean', default: true },
-        enablePerformanceOptimization: { type: 'boolean', default: true },
-        maxTimeRange: { type: 'number', minimum: 1000, default: 31536000000 }, // 1 year
-        defaultAggregationPeriod: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: ['second', 'minute', 'hour', 'day', 'week', 'month', 'year'] },
-            count: { type: 'number', minimum: 1, default: 1 }
-          }
-        },
-        cacheSize: { type: 'number', minimum: 0, default: 100 }
-      }
-    };
-  }
-
-  /**
-   * Get performance metrics for this strategy
-   */
-  protected getPerformanceMetrics(): SearchStrategyMetadata['performanceMetrics'] {
-    return {
-      averageResponseTime: 120,
-      throughput: 400,
-      memoryUsage: 12
-    };
-  }
-
-  /**
-   * Get metadata about this search strategy
-   */
-  getMetadata(): SearchStrategyMetadata {
-    return {
-      name: this.name,
-      version: '1.0.0',
-      description: this.description,
-      capabilities: [...this.capabilities],
-      supportedMemoryTypes: [...this.supportedMemoryTypes],
-      configurationSchema: {
-        type: 'object',
-        properties: {
-          priority: { type: 'number', minimum: 0, maximum: 100 },
-          timeout: { type: 'number', minimum: 1000, maximum: 30000 },
-        },
-      },
-      performanceMetrics: {
-        averageResponseTime: 120,
-        throughput: 400,
-        memoryUsage: 12,
-      },
-    };
-  }
-
-  /**
-   * Validate the current configuration
-   */
-  async validateConfiguration(): Promise<boolean> {
-    try {
-      // Validate strategy configuration
-      if (!this.config) {
-        return false;
-      }
-
-      // Validate natural language configuration
-      if (this.config.naturalLanguage.confidenceThreshold < 0 || this.config.naturalLanguage.confidenceThreshold > 1) {
-        return false;
-      }
-
-      // Validate performance configuration
-      if (this.config.performance.maxExecutionTime < 1000 || this.config.performance.maxExecutionTime > 60000) {
-        return false;
-      }
-
-      return true;
-
-    } catch (error) {
-      logError('Configuration validation failed', {
-        component: 'TemporalFilterStrategy',
-        operation: 'validateConfiguration',
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return false;
-    }
+  private escapeSqlString(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/'/g, '\'\'');
   }
 }

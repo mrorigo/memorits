@@ -21,27 +21,67 @@ The search system is built around a modular architecture where different strateg
 
 ## Search Strategies
 
-### 1. FTS5 Strategy (Full-Text Search)
+### Base Strategy Foundations
 
-**Primary strategy for keyword-based search with BM25 ranking.**
+Every concrete search strategy extends `BaseSearchStrategy`. The base class provides:
+
+- shared configuration validation (priority, timeout, max results, score bounds)
+- structured logging for successful and failed operations
+- helper methods for producing `SearchError` variants with consistent metadata
+- access to the shared `DatabaseManager` (and therefore Prisma) without duplicating wiring
+- optional hooks for strategy-specific configuration validation
+
+Strategies override `executeSearch` to provide their domain logic while `BaseSearchStrategy` handles orchestration, metrics, and error translation.
+
+### 1. SQLite FTS Strategy (Full-Text Search)
+
+**Primary strategy for keyword search with BM25-style ranking.**
 
 ```typescript
-class FTS5SearchStrategy implements ISearchStrategy {
-  readonly name = SearchStrategy.FTS5;
-  readonly priority = 10;  // Highest priority
-  readonly capabilities = [SearchCapability.FULL_TEXT_SEARCH, SearchCapability.RANKING];
+import { sanitizeSearchQuery } from '../../infrastructure/config/SanitizationUtils';
 
-  async search(query: SearchQuery): Promise<SearchResult[]> {
-    // Use SQLite FTS5 for fast text search
+class SQLiteFTSStrategy extends BaseSearchStrategy {
+  readonly name = SearchStrategy.FTS5;
+  readonly capabilities = [
+    SearchCapability.KEYWORD_SEARCH,
+    SearchCapability.RELEVANCE_SCORING,
+    SearchCapability.FILTERING,
+    SearchCapability.SORTING,
+  ] as const;
+
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
+    const sanitizedText = sanitizeSearchQuery(query.text ?? '', {
+      fieldName: 'searchQuery',
+      allowWildcards: true,
+      allowBoolean: false,
+    });
+
     const sql = `
-      SELECT *, bm25(memory_fts) as rank
-      FROM memory_fts
+      SELECT
+        fts.rowid AS memory_id,
+        fts.content AS searchable_content,
+        fts.metadata,
+        bm25(memory_fts) AS search_score
+      FROM memory_fts fts
       WHERE memory_fts MATCH ?
-      ORDER BY rank
+      ORDER BY search_score ASC
       LIMIT ?
     `;
 
-    return this.executeFTSQuery(sql, [query.text, query.limit || 10]);
+    const prisma = this.databaseManager.getPrismaClient();
+    const rows = await prisma.$queryRawUnsafe(sql, sanitizedText, this.config.maxResults);
+
+    return rows.map(row => this.createSearchResult(
+      row.memory_id,
+      row.searchable_content,
+      { searchScore: row.search_score },
+      this.normalizeScore(row.search_score),
+    ));
+  }
+
+  private normalizeScore(rawScore: number): number {
+    // Clamp BM25 score to 0..1 range for downstream consumers
+    return Math.max(0, Math.min(1, 1 / (1 + rawScore)));
   }
 }
 ```
@@ -51,28 +91,48 @@ class FTS5SearchStrategy implements ISearchStrategy {
 **Optimized for temporal relevance and recent memory retrieval.**
 
 ```typescript
-class RecentSearchStrategy implements ISearchStrategy {
+class RecentMemoriesStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.RECENT;
-  readonly priority = 3;
-  readonly capabilities = [SearchCapability.TEMPORAL_SEARCH];
+  readonly capabilities = [
+    SearchCapability.RELEVANCE_SCORING,
+    SearchCapability.FILTERING,
+    SearchCapability.SORTING,
+  ] as const;
 
-  async search(query: SearchQuery): Promise<SearchResult[]> {
-    // Time-weighted scoring for recent memories
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
     const sql = `
-      SELECT *,
-        CASE
-          WHEN createdAt > datetime('now', '-1 hour') THEN 1.0
-          WHEN createdAt > datetime('now', '-1 day') THEN 0.8
-          WHEN createdAt > datetime('now', '-1 week') THEN 0.6
-          ELSE 0.4
-        END as recency_score
+      SELECT
+        id AS memory_id,
+        searchableContent AS searchable_content,
+        summary,
+        processedData AS metadata,
+        importanceScore,
+        createdAt,
+        retentionType
       FROM long_term_memory
       WHERE namespace = ?
-      ORDER BY recency_score DESC, importanceScore DESC
+      ORDER BY createdAt DESC
       LIMIT ?
     `;
 
-    return this.executeQuery(sql, [query.namespace, query.limit || 20]);
+    const prisma = this.databaseManager.getPrismaClient();
+    const rows = await prisma.$queryRawUnsafe(sql, query.namespace ?? 'default', this.config.maxResults);
+
+    return rows.map(row => this.createSearchResult(
+      row.memory_id,
+      row.searchable_content,
+      {
+        summary: row.summary,
+        createdAt: new Date(row.createdAt),
+      },
+      this.scoreRecentMemory(new Date(row.createdAt), row.importanceScore),
+    ));
+  }
+
+  private scoreRecentMemory(createdAt: Date, importance: number): number {
+    const hoursSinceCreation = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+    const recencyBoost = Math.exp(-hoursSinceCreation / 24); // 1 day half-life
+    return Math.max(0, Math.min(1, recencyBoost * (0.5 + importance)));
   }
 }
 ```
@@ -82,37 +142,54 @@ class RecentSearchStrategy implements ISearchStrategy {
 **Classification-based filtering for organizing memories by type and importance.**
 
 ```typescript
-class CategoryFilterStrategy implements ISearchStrategy {
+class CategoryFilterStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.CATEGORY_FILTER;
-  readonly priority = 8;
-  readonly capabilities = [SearchCapability.FILTERING, SearchCapability.CATEGORIZATION];
+  readonly capabilities = [
+    SearchCapability.CATEGORIZATION,
+    SearchCapability.FILTERING,
+    SearchCapability.RELEVANCE_SCORING,
+  ] as const;
 
-  async search(query: SearchQuery): Promise<SearchResult[]> {
-    const categoryQuery = query as CategoryFilterQuery;
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
+    const categoryQuery = this.normalizeQuery(query as CategoryFilterQuery);
+    const sql = this.buildCategorySQL(categoryQuery);
 
-    // Multi-dimensional category filtering
-    const sql = `
-      SELECT *,
-        CASE categoryPrimary
-          WHEN 'essential' THEN importanceScore * 1.2
-          WHEN 'contextual' THEN importanceScore * 1.1
-          WHEN 'reference' THEN importanceScore * 1.0
-          ELSE importanceScore * 0.8
-        END as category_boost
+    const prisma = this.databaseManager.getPrismaClient();
+    const rows = await prisma.$queryRawUnsafe(sql);
+
+    return rows.map(row => this.createSearchResult(
+      row.memory_id,
+      row.searchable_content,
+      {
+        summary: row.summary ?? '',
+        category: row.category_primary,
+      },
+      this.calculateCategoryRelevance(row, categoryQuery),
+    ));
+  }
+
+  private normalizeQuery(query: CategoryFilterQuery): CategoryFilterQuery {
+    // sanitize categories and text exactly as in production implementation
+    return { ...query };
+  }
+
+  private buildCategorySQL(query: CategoryFilterQuery): string {
+    const categoryList = query.categories?.map(cat => `'${cat.replace(/'/g, "''")}'`).join(', ') ?? '';
+    const limit = Math.min(query.limit ?? this.config.maxResults, this.config.maxResults);
+
+    return `
+      SELECT
+        id AS memory_id,
+        searchableContent AS searchable_content,
+        summary,
+        processedData AS metadata,
+        categoryPrimary AS category_primary,
+        importanceScore
       FROM long_term_memory
-      WHERE namespace = ?
-        AND categoryPrimary IN (${categoryQuery.categories.map(() => '?').join(',')})
-        AND importanceScore >= ?
-      ORDER BY category_boost DESC, createdAt DESC
-      LIMIT ?
+      WHERE categoryPrimary IN (${categoryList})
+      ORDER BY importanceScore DESC, createdAt DESC
+      LIMIT ${limit}
     `;
-
-    return this.executeQuery(sql, [
-      query.namespace,
-      ...categoryQuery.categories,
-      categoryQuery.minImportance || 0.3,
-      query.limit || 20
-    ]);
   }
 }
 ```
@@ -122,41 +199,25 @@ class CategoryFilterStrategy implements ISearchStrategy {
 **Advanced time-based filtering with natural language processing.**
 
 ```typescript
-class TemporalFilterStrategy implements ISearchStrategy {
+class TemporalFilterStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.TEMPORAL_FILTER;
-  readonly priority = 7;
-  readonly capabilities = [SearchCapability.TEMPORAL_SEARCH, SearchCapability.NATURAL_LANGUAGE];
+  readonly capabilities = [
+    SearchCapability.TEMPORAL_FILTERING,
+    SearchCapability.TIME_RANGE_PROCESSING,
+    SearchCapability.TEMPORAL_PATTERN_MATCHING,
+    SearchCapability.TEMPORAL_AGGREGATION,
+  ] as const;
 
-  async search(query: SearchQuery): Promise<SearchResult[]> {
-    const temporalQuery = query as TemporalFilterQuery;
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
+    const normalized = this.normalizeQuery(query as TemporalFilterQuery);
+    const patternAnalysis = this.analyzeTemporalPatterns(normalized);
+    const temporalQuery = this.buildTemporalQuery(normalized, patternAnalysis);
+    const sql = this.buildTemporalSQL(normalized, temporalQuery, patternAnalysis);
 
-    // Parse natural language time expressions
-    const timeRanges = this.parseTimeExpressions(temporalQuery.temporalFilters);
+    const prisma = this.databaseManager.getPrismaClient();
+    const rows = await prisma.$queryRawUnsafe(sql);
 
-    // Build temporal query with multiple ranges
-    const rangeConditions = timeRanges.map((range, index) =>
-      `createdAt BETWEEN ? AND ?`
-    ).join(' OR ');
-
-    const sql = `
-      SELECT *,
-        CASE
-          WHEN createdAt BETWEEN ? AND ? THEN 1.0  -- Primary range
-          WHEN createdAt BETWEEN ? AND ? THEN 0.8  -- Secondary range
-          ELSE 0.5
-        END as temporal_relevance
-      FROM long_term_memory
-      WHERE namespace = ?
-        AND (${rangeConditions})
-      ORDER BY temporal_relevance DESC, importanceScore DESC
-      LIMIT ?
-    `;
-
-    return this.executeQuery(sql, [
-      ...timeRanges.flat(),
-      query.namespace,
-      query.limit || 20
-    ]);
+    return this.processTemporalResults(rows, normalized, patternAnalysis);
   }
 }
 ```
