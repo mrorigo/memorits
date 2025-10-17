@@ -1,12 +1,8 @@
 import { ChatHistoryData } from '../../infrastructure/database/types';
 import { logInfo, logError } from '../../infrastructure/config/Logger';
 import { DatabaseContext } from '../../infrastructure/database/DatabaseContext';
-import {
-  sanitizeString,
-  sanitizeNamespace,
-  sanitizeJsonInput,
-  ValidationError,
-} from '../../infrastructure/config/SanitizationUtils';
+import { ValidationError, sanitizeJsonInput } from '../../infrastructure/config/SanitizationUtils';
+import { BaseDatabaseService } from '../../infrastructure/database/BaseDatabaseService';
 
 /**
  * ChatHistoryManager - Dedicated class for chat history operations
@@ -24,11 +20,9 @@ import {
  * - Comprehensive input sanitization and validation
  * - Performance monitoring integration
  */
-export class ChatHistoryManager {
-  private databaseContext: DatabaseContext;
-
+export class ChatHistoryManager extends BaseDatabaseService {
   constructor(databaseContext: DatabaseContext) {
-    this.databaseContext = databaseContext;
+    super(databaseContext);
   }
 
   /**
@@ -65,8 +59,7 @@ export class ChatHistoryManager {
       }
 
       // Store chat history using Prisma
-      const prisma = this.databaseContext.getPrismaClient();
-      const result = await prisma.chatHistory.create({
+            const result = await this.prisma.chatHistory.create({
         data: {
           id: sanitizedData.chatId,
           userInput: sanitizedData.userInput,
@@ -133,7 +126,7 @@ export class ChatHistoryManager {
 
     try {
       // Sanitize chat ID input
-      const sanitizedChatId = sanitizeString(chatId, {
+      const sanitizedChatId = this.sanitizeString(chatId, {
         fieldName: 'chatId',
         maxLength: 100,
         allowNewlines: false,
@@ -145,16 +138,14 @@ export class ChatHistoryManager {
         namespace,
       });
 
-      const prisma = this.databaseContext.getPrismaClient();
-
-      // Build where clause with namespace filtering
+            // Build where clause with namespace filtering
       const whereClause: any = { id: sanitizedChatId };
       if (namespace) {
-        const sanitizedNamespace = sanitizeNamespace(namespace, { fieldName: 'namespace' });
+        const sanitizedNamespace = this.sanitizeNamespace(namespace, { fieldName: 'namespace' });
         whereClause.namespace = sanitizedNamespace;
       }
 
-      const result = await prisma.chatHistory.findUnique({
+      const result = await this.prisma.chatHistory.findUnique({
         where: whereClause,
       });
 
@@ -247,7 +238,7 @@ export class ChatHistoryManager {
 
     try {
       // Sanitize session ID input
-      const sanitizedSessionId = sanitizeString(sessionId, {
+      const sanitizedSessionId = this.sanitizeString(sessionId, {
         fieldName: 'sessionId',
         maxLength: 100,
         allowNewlines: false,
@@ -261,12 +252,10 @@ export class ChatHistoryManager {
         offset: options?.offset,
       });
 
-      const prisma = this.databaseContext.getPrismaClient();
-
-      // Build where clause
+            // Build where clause
       const whereClause: any = { sessionId: sanitizedSessionId };
       if (namespace) {
-        const sanitizedNamespace = sanitizeNamespace(namespace, { fieldName: 'namespace' });
+        const sanitizedNamespace = this.sanitizeNamespace(namespace, { fieldName: 'namespace' });
         whereClause.namespace = sanitizedNamespace;
       }
 
@@ -275,7 +264,7 @@ export class ChatHistoryManager {
       const offset = options?.offset || 0;
       const orderBy = options?.orderBy || 'asc';
 
-      const results = await prisma.chatHistory.findMany({
+      const results = await this.prisma.chatHistory.findMany({
         where: whereClause,
         orderBy: { timestamp: orderBy },
         take: limit,
@@ -344,7 +333,7 @@ export class ChatHistoryManager {
 
     try {
       // Sanitize chat ID input
-      const sanitizedChatId = sanitizeString(chatId, {
+      const sanitizedChatId = this.sanitizeString(chatId, {
         fieldName: 'chatId',
         maxLength: 100,
         allowNewlines: false,
@@ -356,16 +345,14 @@ export class ChatHistoryManager {
         namespace,
       });
 
-      const prisma = this.databaseContext.getPrismaClient();
-
-      // Build where clause with namespace filtering
+            // Build where clause with namespace filtering
       const whereClause: any = { id: sanitizedChatId };
       if (namespace) {
-        const sanitizedNamespace = sanitizeNamespace(namespace, { fieldName: 'namespace' });
+        const sanitizedNamespace = this.sanitizeNamespace(namespace, { fieldName: 'namespace' });
         whereClause.namespace = sanitizedNamespace;
       }
 
-      const result = await prisma.chatHistory.deleteMany({
+      const result = await this.prisma.chatHistory.deleteMany({
         where: whereClause,
       });
 
@@ -450,9 +437,7 @@ export class ChatHistoryManager {
         batchSize,
       });
 
-      const prisma = this.databaseContext.getPrismaClient();
-
-      // Calculate cutoff date
+            // Calculate cutoff date
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
@@ -462,13 +447,13 @@ export class ChatHistoryManager {
       };
 
       if (namespace) {
-        const sanitizedNamespace = sanitizeNamespace(namespace, { fieldName: 'namespace' });
+        const sanitizedNamespace = this.sanitizeNamespace(namespace, { fieldName: 'namespace' });
         whereClause.namespace = sanitizedNamespace;
       }
 
       if (dryRun) {
         // Count records that would be deleted (dry run)
-        const countResult = await prisma.chatHistory.count({
+        const countResult = await this.prisma.chatHistory.count({
           where: whereClause,
         });
 
@@ -498,7 +483,7 @@ export class ChatHistoryManager {
         let hasMore = true;
 
         while (hasMore) {
-          const batchResult = await prisma.chatHistory.deleteMany({
+          const batchResult = await this.prisma.chatHistory.deleteMany({
             where: whereClause,
           });
 
@@ -596,12 +581,10 @@ export class ChatHistoryManager {
         namespace,
       });
 
-      const prisma = this.databaseContext.getPrismaClient();
-
-      // Build base where clause
+            // Build base where clause
       const whereClause: any = {};
       if (namespace) {
-        const sanitizedNamespace = sanitizeNamespace(namespace, { fieldName: 'namespace' });
+        const sanitizedNamespace = this.sanitizeNamespace(namespace, { fieldName: 'namespace' });
         whereClause.namespace = sanitizedNamespace;
       }
 
@@ -614,18 +597,18 @@ export class ChatHistoryManager {
         last7Days,
         last30Days,
       ] = await Promise.all([
-        prisma.chatHistory.count({ where: whereClause }),
-        prisma.chatHistory.findMany({
+        this.prisma.chatHistory.count({ where: whereClause }),
+        this.prisma.chatHistory.findMany({
           where: whereClause,
           select: { sessionId: true },
           distinct: ['sessionId'],
         }),
-        prisma.chatHistory.groupBy({
+        this.prisma.chatHistory.groupBy({
           by: ['model'],
           where: whereClause,
           _count: { id: true },
         }),
-        prisma.chatHistory.count({
+        this.prisma.chatHistory.count({
           where: {
             ...whereClause,
             timestamp: {
@@ -633,7 +616,7 @@ export class ChatHistoryManager {
             },
           },
         }),
-        prisma.chatHistory.count({
+        this.prisma.chatHistory.count({
           where: {
             ...whereClause,
             timestamp: {
@@ -641,7 +624,7 @@ export class ChatHistoryManager {
             },
           },
         }),
-        prisma.chatHistory.count({
+        this.prisma.chatHistory.count({
           where: {
             ...whereClause,
             timestamp: {
@@ -721,32 +704,32 @@ export class ChatHistoryManager {
    */
   private sanitizeChatHistoryInput(data: ChatHistoryData): ChatHistoryData {
     return {
-      chatId: sanitizeString(data.chatId, {
+      chatId: this.sanitizeString(data.chatId, {
         fieldName: 'chatId',
         maxLength: 100,
         allowNewlines: false,
       }),
-      userInput: sanitizeString(data.userInput, {
+      userInput: this.sanitizeString(data.userInput, {
         fieldName: 'userInput',
         maxLength: 10000,
         allowHtml: false,
       }),
-      aiOutput: sanitizeString(data.aiOutput, {
+      aiOutput: this.sanitizeString(data.aiOutput, {
         fieldName: 'aiOutput',
         maxLength: 10000,
         allowHtml: false,
       }),
-      model: sanitizeString(data.model, {
+      model: this.sanitizeString(data.model, {
         fieldName: 'model',
         maxLength: 100,
         allowNewlines: false,
       }),
-      sessionId: sanitizeString(data.sessionId, {
+      sessionId: this.sanitizeString(data.sessionId, {
         fieldName: 'sessionId',
         maxLength: 100,
         allowNewlines: false,
       }),
-      namespace: sanitizeNamespace(data.namespace, {
+      namespace: this.sanitizeNamespace(data.namespace, {
         fieldName: 'namespace',
       }),
       metadata: data.metadata ? sanitizeJsonInput(

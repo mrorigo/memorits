@@ -5,6 +5,25 @@ import { ChatCompletionResponse } from './types/ChatCompletionResponse';
 import { EmbeddingParams } from './types/EmbeddingParams';
 import { EmbeddingResponse } from './types/EmbeddingResponse';
 import { ProviderDiagnostics } from './types/ProviderDiagnostics';
+import type { DatabaseManager } from '../database/DatabaseManager';
+import type { MemoryAgent } from '../../domain/memory/MemoryAgent';
+
+/**
+ * Optional memory-related context that can be supplied when initializing a provider.
+ * Allows callers (e.g. Memori) to share infrastructure objects instead of letting
+ * the provider create its own instances.
+ */
+export interface ProviderMemoryContext {
+  databaseManager?: DatabaseManager;
+  memoryAgent?: MemoryAgent;
+  sessionId?: string;
+  namespace?: string;
+}
+
+export interface ProviderInitializationOptions {
+  memory?: ProviderMemoryContext;
+  disableMemoryProcessing?: boolean;
+}
 
 /**
  * Core interface for LLM providers
@@ -22,9 +41,9 @@ export interface ILLMProvider {
   getConfig(): IProviderConfig;
 
   /**
-   * Initialize the provider (synchronous)
+   * Initialize the provider.
    */
-  initialize(config: IProviderConfig): void;
+  initialize(config: IProviderConfig, options?: ProviderInitializationOptions): Promise<void>;
 
   /**
    * Dispose of the provider and clean up resources

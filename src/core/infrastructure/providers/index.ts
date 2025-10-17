@@ -3,15 +3,14 @@ export { ILLMProvider } from './ILLMProvider';
 export { IProviderConfig } from './IProviderConfig';
 export { ProviderType } from './ProviderType';
 export { ProviderDiagnostics } from './types/ProviderDiagnostics';
+export { BaseLLMProvider } from './BaseLLMProvider';
+export { MemoryCapableProvider } from './MemoryCapableProvider';
+export type { ProviderInitializationOptions, ProviderMemoryContext } from './ILLMProvider';
 
 // Provider implementations
 export { OpenAIProvider } from './OpenAIProvider';
 export { AnthropicProvider } from './AnthropicProvider';
 export { OllamaProvider } from './OllamaProvider';
-export { MemoryEnabledLLMProvider } from './MemoryEnabledLLMProvider';
-
-// Unified provider architecture
-export { UnifiedLLMProvider } from './UnifiedLLMProvider';
 
 // Factory and registration
 export { LLMProviderFactory } from './LLMProviderFactory';

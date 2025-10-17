@@ -88,6 +88,19 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
     super(config, databaseManager);
   }
 
+  protected validateQuery(query: SearchQuery): void {
+    // Allow empty text when retrieving recent memories
+    if (!query.text && !query.filters) {
+      return;
+    }
+
+    super.validateQuery(query);
+  }
+
+  protected getCapabilities(): readonly SearchCapability[] {
+    return this.capabilities;
+  }
+
   /**
    * Determines if this strategy can handle the given query
    */
@@ -111,7 +124,7 @@ export class RecentMemoriesStrategy extends BaseSearchStrategy {
   /**
    * Main search method implementing time-based relevance scoring
    */
-  async search(query: SearchQuery): Promise<SearchResult[]> {
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
     const startTime = Date.now();
 
     try {

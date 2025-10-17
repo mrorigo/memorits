@@ -1,19 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { UnifiedLLMProvider } from './UnifiedLLMProvider';
+import { MemoryCapableProvider } from './MemoryCapableProvider';
 import { IProviderConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
 import { ChatCompletionParams } from './types/ChatCompletionParams';
 import { ChatCompletionResponse } from './types/ChatCompletionResponse';
 import { EmbeddingParams } from './types/EmbeddingParams';
 import { EmbeddingResponse } from './types/EmbeddingResponse';
-import { ProviderDiagnostics } from './types/ProviderDiagnostics';
 
 /**
- * Anthropic provider implementation using unified architecture
- * Extends UnifiedLLMProvider to integrate performance optimizations and memory capabilities
+ * Anthropic provider implementation using memory-capable architecture.
  */
-export class AnthropicProvider extends UnifiedLLMProvider {
+export class AnthropicProvider extends MemoryCapableProvider {
   private model: string;
+  private client: Anthropic | null = null;
 
   constructor(config: IProviderConfig) {
     super(config);
@@ -38,7 +37,7 @@ export class AnthropicProvider extends UnifiedLLMProvider {
    */
   protected disposeClient(): Promise<void> {
     // Anthropic client doesn't require explicit disposal
-    this.client = null as any;
+    this.client = null;
     return Promise.resolve();
   }
 
@@ -46,6 +45,9 @@ export class AnthropicProvider extends UnifiedLLMProvider {
    * Check if the Anthropic client is healthy
    */
   protected checkClientHealth(): Promise<boolean> {
+    if (!this.client) {
+      return Promise.resolve(false);
+    }
     try {
       // Simple health check - try to list models
       return this.client.models.list().then(() => true).catch(() => false);
@@ -74,6 +76,9 @@ export class AnthropicProvider extends UnifiedLLMProvider {
   }
 
   getClient(): Anthropic {
+    if (!this.client) {
+      throw new Error('Anthropic client not initialized');
+    }
     return this.client;
   }
 

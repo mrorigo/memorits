@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
-import { MemoryEnabledLLMProvider, LLMProviderFactory, IProviderConfig } from '../../core/infrastructure/providers/';
+import { MemoryCapableProvider, LLMProviderFactory, IProviderConfig } from '../../core/infrastructure/providers/';
 import type {
   MemoriOpenAI,
   MemoryManager,
@@ -13,7 +13,7 @@ import type {
  * Provides OpenAI SDK compatibility with transparent memory functionality
  */
 export class MemoriOpenAIClient implements MemoriOpenAI {
-  private memoryEnabledProvider?: MemoryEnabledLLMProvider;
+  private provider?: MemoryCapableProvider;
   public config: IProviderConfig;
 
   constructor(config: IProviderConfig) {
@@ -31,11 +31,10 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
   }
 
   private async initializeProvider(): Promise<void> {
-    if (this.memoryEnabledProvider) return;
+    if (this.provider) return;
 
     const baseProvider = await LLMProviderFactory.createProviderFromConfig(this.config);
-    this.memoryEnabledProvider = new MemoryEnabledLLMProvider(baseProvider, this.config);
-    await this.memoryEnabledProvider.initialize(this.config);
+    this.provider = baseProvider as MemoryCapableProvider;
   }
 
   // Simple OpenAI SDK adapter methods
@@ -48,26 +47,26 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
   }
 
   get memory(): MemoryManager {
-    if (!this.memoryEnabledProvider) {
+    if (!this.provider) {
       throw new Error('MemoriOpenAIClient not initialized. Call enable() first.');
     }
-    return this.memoryEnabledProvider;
+    return this.provider;
   }
 
   private createChatInterface(): OpenAI.Chat {
     return {
       completions: {
         create: async (params: ChatCompletionCreateParams, options?: OpenAI.RequestOptions) => {
-          if (!this.memoryEnabledProvider) {
+          if (!this.provider) {
             await this.initializeProvider();
           }
 
-          if (!this.memoryEnabledProvider) {
+          if (!this.provider) {
             throw new Error('Failed to initialize MemoriOpenAIClient');
           }
 
-          const response = await this.memoryEnabledProvider.createChatCompletion({
-            model: params.model || this.memoryEnabledProvider.getModel(),
+          const response = await this.provider.createChatCompletion({
+            model: params.model || this.provider.getModel(),
             messages: params.messages as any,
             temperature: params.temperature ?? undefined,
             max_tokens: params.max_tokens ?? undefined,
@@ -85,7 +84,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
               id: response.id || 'memori-generated-id',
               object: 'chat.completion',
               created: response.created || Date.now(),
-              model: response.model || params.model || this.memoryEnabledProvider.getModel(),
+              model: response.model || params.model || this.provider.getModel(),
               choices: [{
                 index: 0,
                 message: {
@@ -106,7 +105,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
             id: response.id || 'memori-generated-id',
             object: 'chat.completion',
             created: response.created || Date.now(),
-            model: response.model || params.model || this.memoryEnabledProvider.getModel(),
+            model: response.model || params.model || this.provider.getModel(),
             choices: [{
               index: 0,
               message: {
@@ -129,11 +128,11 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
   private createEmbeddingsInterface(): OpenAI.Embeddings {
     return {
       create: async (params: EmbeddingCreateParams, options?: OpenAI.RequestOptions) => {
-        if (!this.memoryEnabledProvider) {
+        if (!this.provider) {
           await this.initializeProvider();
         }
 
-        if (!this.memoryEnabledProvider) {
+        if (!this.provider) {
           throw new Error('Failed to initialize MemoriOpenAIClient');
         }
 
@@ -141,7 +140,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
           ? params.input.map(item => String(item))
           : String(params.input);
 
-        const response = await this.memoryEnabledProvider.createEmbedding({
+        const response = await this.provider.createEmbedding({
           model: params.model || 'text-embedding-3-small',
           input: input,
           encoding_format: params.encoding_format,
@@ -168,14 +167,15 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
   }
 
   async enable(): Promise<void> {
-    if (!this.memoryEnabledProvider) {
+    if (!this.provider) {
       await this.initializeProvider();
     }
   }
 
   async disable(): Promise<void> {
-    if (this.memoryEnabledProvider) {
-      await this.memoryEnabledProvider.dispose();
+    if (this.provider) {
+      await this.provider.dispose();
+      this.provider = undefined;
     }
   }
 
@@ -184,7 +184,7 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
   }
 
   async getMetrics(): Promise<any> {
-    if (!this.memoryEnabledProvider) {
+    if (!this.provider) {
       return {
         totalRequests: 0,
         memoryRecordingSuccess: 0,
@@ -193,22 +193,22 @@ export class MemoriOpenAIClient implements MemoriOpenAI {
         averageMemoryProcessingTime: 0,
       };
     }
-    return this.memoryEnabledProvider.getMetrics();
+    return this.provider.getMemoryMetrics();
   }
 
   async resetMetrics(): Promise<void> {
-    // Metrics are handled by MemoryEnabledLLMProvider
+    // Metrics are managed internally by MemoryCapableProvider (currently read-only)
   }
 
   async updateConfig(config: any): Promise<void> {
     this.config = { ...this.config, ...config };
-    if (this.memoryEnabledProvider) {
-      this.memoryEnabledProvider.updateMemoryConfig(config.memory || {});
+    if (this.provider) {
+      this.provider.updateMemoryConfig(config.memory || {});
     }
   }
 
   get isEnabled(): boolean {
-    return this.memoryEnabledProvider !== undefined;
+    return this.provider !== undefined;
   }
 
   get sessionId(): string {

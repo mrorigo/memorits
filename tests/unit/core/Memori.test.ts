@@ -104,25 +104,40 @@ describe('Memori', () => {
 
       expect(mockLoadConfig).toHaveBeenCalled();
       expect(MockDatabaseManager).toHaveBeenCalledWith(mockConfig.databaseUrl);
-      expect(MockOpenAIProvider).toHaveBeenCalledWith({
+      expect(MockOpenAIProvider).toHaveBeenCalledTimes(2);
+      expect(MockOpenAIProvider).toHaveBeenNthCalledWith(1, expect.objectContaining({
         apiKey: mockConfig.apiKey,
         model: mockConfig.model,
         baseUrl: mockConfig.baseUrl,
-        features: {
-          memory: {
+        features: expect.objectContaining({
+          memory: expect.objectContaining({
+            enableChatMemory: true,
+            enableEmbeddingMemory: false,
+            memoryProcessingMode: 'auto',
+            minImportanceLevel: 'all',
+            sessionId: 'mock-uuid',
+          }),
+          performance: expect.objectContaining({
+            enableCaching: false,
+            enableConnectionPooling: false,
+            enableHealthMonitoring: false,
+          }),
+        }),
+      }));
+      expect(MockOpenAIProvider).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        features: expect.objectContaining({
+          memory: expect.objectContaining({
             enableChatMemory: false,
             enableEmbeddingMemory: false,
             memoryProcessingMode: 'auto',
             minImportanceLevel: 'all',
-          },
-          performance: {
-            enableCaching: false,
-            enableConnectionPooling: false,
-            enableHealthMonitoring: false,
-          },
-        }
-      });
-      expect(MockMemoryAgent).toHaveBeenCalledWith(expect.any(MockOpenAIProvider));
+            sessionId: 'mock-uuid',
+          }),
+        }),
+      }));
+      const memoryAgentArgs = MockMemoryAgent.mock.calls[0];
+      expect(memoryAgentArgs?.[0]).toMatchObject({ createChatCompletion: expect.any(Function) });
+      expect(memoryAgentArgs?.[1]).toBe(MockDatabaseManager.mock.instances[0]);
     });
 
     it('should merge provided config with default', async () => {
@@ -133,24 +148,17 @@ describe('Memori', () => {
       await memori.enable();
 
       // Verify that the provider was initialized with the merged config (gpt-4)
-      expect(MockOpenAIProvider).toHaveBeenCalledWith({
+      expect(MockOpenAIProvider).toHaveBeenNthCalledWith(1, expect.objectContaining({
         apiKey: mockConfig.apiKey,
         model: 'gpt-4', // Should use custom model, not default
         baseUrl: mockConfig.baseUrl,
-        features: {
-          memory: {
-            enableChatMemory: false,
-            enableEmbeddingMemory: false,
-            memoryProcessingMode: 'auto',
-            minImportanceLevel: 'all',
-          },
-          performance: {
-            enableCaching: false,
-            enableConnectionPooling: false,
-            enableHealthMonitoring: false,
-          },
-        }
-      });
+        features: expect.objectContaining({
+          memory: expect.objectContaining({
+            enableChatMemory: true,
+            sessionId: 'mock-uuid',
+          }),
+        }),
+      }));
     });
   });
 

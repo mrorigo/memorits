@@ -16,9 +16,13 @@ import { logInfo, logError, logWarn } from '../../../infrastructure/config/Logge
 
 // Import temporal processing classes
 import { DateTimeNormalizer } from './temporal/DateTimeNormalizer';
-import { TimeRangeProcessor, TimeRange, TimeRangeQuery } from './temporal/TimeRangeProcessor';
 import { TemporalPatternMatcher, PatternMatchResult } from './temporal/TemporalPatternMatcher';
-import { TemporalAggregation, TemporalAggregationPeriod } from './temporal/TemporalAggregation';
+import {
+  TemporalService,
+  TimeRange,
+  TimeRangeQuery,
+  TemporalAggregationPeriod,
+} from '../temporal/TemporalService';
 
 /**
  * Extended query interface for temporal filtering
@@ -632,7 +636,7 @@ export class TemporalFilterStrategy implements ISearchStrategy {
     }));
 
     // Perform temporal aggregation
-    const aggregationResult = TemporalAggregation.aggregateByPeriod(
+    const aggregationResult = TemporalService.aggregate(
       aggregationData,
       period,
       {
@@ -760,7 +764,7 @@ export class TemporalFilterStrategy implements ISearchStrategy {
       metadata: result.metadata
     }));
 
-    const aggregationResult = TemporalAggregation.aggregateByPeriod(
+    const aggregationResult = TemporalService.aggregate(
       aggregationData,
       period,
       {

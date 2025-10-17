@@ -14,7 +14,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ProviderType } from './infrastructure/providers/ProviderType';
 import { IProviderConfig } from './infrastructure/providers/IProviderConfig';
-import { ILLMProvider } from './infrastructure/providers/ILLMProvider';
+import { ILLMProvider, MemoryCapableProvider, ProviderInitializationOptions } from './infrastructure/providers/';
 import { Memori } from './Memori';
 import { logInfo, logError } from './infrastructure/config/Logger';
 import { MemoryImportanceLevel, MemoryClassification } from './types/schemas';
@@ -487,16 +487,25 @@ export class MemoriAI {
   private createUserProvider(config: MemoriAIConfig): ILLMProvider {
     const providerType = this.detectProvider(config);
     const ProviderClass = this.getProviderClass(providerType);
-    const baseProvider = new ProviderClass(this.simplifyConfiguration(config));
+    const providerConfig = this.simplifyConfiguration(config);
 
-    // Create MemoryEnabledLLMProvider for chat operations
-    const { MemoryEnabledLLMProvider } = require('./infrastructure/providers/MemoryEnabledLLMProvider');
-    const memoryEnabledProvider = new MemoryEnabledLLMProvider(baseProvider, this.simplifyConfiguration(config));
+    const provider = new ProviderClass(providerConfig) as MemoryCapableProvider;
+    const initializationOptions: ProviderInitializationOptions = {
+      memory: {
+        sessionId: this.sessionId,
+        namespace: config.namespace || 'default',
+      },
+    };
 
-    // Initialize the provider with the existing Memori instance to avoid recursion
-    memoryEnabledProvider.initialize(this.simplifyConfiguration(config), this.memori);
+    provider.initialize(providerConfig, initializationOptions).catch(error => {
+      logError('Failed to initialize user provider', {
+        component: 'MemoriAI',
+        providerType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 
-    return memoryEnabledProvider;
+    return provider;
   }
 
   /**
@@ -509,7 +518,7 @@ export class MemoriAI {
   /**
    * Get the provider class for the given provider type
    */
-  private getProviderClass(providerType: ProviderType): new (config: IProviderConfig) => ILLMProvider {
+  private getProviderClass(providerType: ProviderType): new (config: IProviderConfig) => MemoryCapableProvider {
     // Import provider classes dynamically to avoid circular imports
     const { OpenAIProvider } = require('./infrastructure/providers/OpenAIProvider');
     const { AnthropicProvider } = require('./infrastructure/providers/AnthropicProvider');

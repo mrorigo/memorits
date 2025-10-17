@@ -152,7 +152,10 @@ describe('RelationshipSearchStrategy', () => {
 
   beforeEach(() => {
     mockDbManager = new MockDatabaseManager();
-    strategy = new RelationshipSearchStrategy(mockDbManager as any);
+    strategy = new RelationshipSearchStrategy(
+      RelationshipSearchStrategy.createDefaultConfig(),
+      mockDbManager as any
+    );
     jest.clearAllMocks();
   });
 

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from './infrastructure/database/DatabaseManager';
 import { MemoryAgent } from './domain/memory/MemoryAgent';
 import { ConsciousAgent } from './domain/memory/ConsciousAgent';
-import { OpenAIProvider, OllamaProvider, AnthropicProvider, LLMProviderFactory, ProviderType, MemoryEnabledLLMProvider, UnifiedLLMProvider, ILLMProvider, IProviderConfig } from './infrastructure/providers/';
+import { OpenAIProvider, OllamaProvider, AnthropicProvider, LLMProviderFactory, ProviderType, MemoryCapableProvider, ILLMProvider, IProviderConfig, ProviderInitializationOptions } from './infrastructure/providers/';
 import { ConfigManager, MemoriConfig } from './infrastructure/config/ConfigManager';
 import { MemoriAIConfig } from './MemoriAIConfig';
 import { logInfo, logError } from './infrastructure/config/Logger';
@@ -24,7 +24,7 @@ export class Memori {
   private consciousAgent?: ConsciousAgent;
 
   // Dual-provider architecture to prevent circular dependencies
-  private userProvider?: MemoryEnabledLLMProvider;     // For user operations
+  private userProvider?: MemoryCapableProvider;     // For user operations
   private memoryProvider?: ILLMProvider;                // For internal memory processing
 
   private config: MemoriConfig & { mode?: 'automatic' | 'manual' | 'conscious' };
@@ -75,7 +75,16 @@ export class Memori {
     }
 
     try {
-      // Create provider configuration
+      // Shared memory configuration for providers
+      const baseMemoryConfig = {
+        enableChatMemory: true,
+        enableEmbeddingMemory: false,
+        memoryProcessingMode: 'auto' as const,
+        minImportanceLevel: 'all' as const,
+        sessionId: this.sessionId,
+      };
+
+      // Create provider configuration for user-facing operations
       const providerConfig: IProviderConfig = {
         apiKey: this.config.apiKey,
         model: this.config.model,
@@ -86,41 +95,49 @@ export class Memori {
             enableCaching: false,
             enableHealthMonitoring: false,
           },
-          memory: {
-            enableChatMemory: false, // Disable to prevent recursion
-            enableEmbeddingMemory: false,
-            memoryProcessingMode: 'auto',
-            minImportanceLevel: 'all',
-          }
-        }
+          memory: baseMemoryConfig,
+        },
       };
 
       // Detect provider type
       const providerType = this.detectProviderType(providerConfig);
 
-      // Get provider class and create base provider
+      // Get provider class and create memory-capable provider
       const ProviderClass = this.getProviderClass(providerType);
-      const baseProvider = new ProviderClass(providerConfig);
-      baseProvider.initialize(providerConfig);
-
-      // Create user provider (MemoryEnabledLLMProvider for any user operations)
-      this.userProvider = new MemoryEnabledLLMProvider(baseProvider, providerConfig);
-
-      // Create separate memory provider (basic provider for internal processing)
-      const memoryConfig = { ...providerConfig };
-      memoryConfig.features = {
-        ...memoryConfig.features,
+      const initializationOptions: ProviderInitializationOptions = {
         memory: {
-          ...memoryConfig.features?.memory,
-          enableChatMemory: false, // Disable to prevent recursion
-        }
+          databaseManager: this.dbManager,
+          sessionId: this.sessionId,
+          namespace: this.config.namespace || 'default',
+        },
       };
-      const memoryBaseProvider = new ProviderClass(memoryConfig);
-      memoryBaseProvider.initialize(memoryConfig);
-      this.memoryProvider = memoryBaseProvider;
 
-      // Initialize memory agent with memory provider (not user provider)
-      this.memoryAgent = new MemoryAgent(this.memoryProvider);
+      const userProvider = new ProviderClass(providerConfig) as MemoryCapableProvider;
+      await userProvider.initialize(providerConfig, initializationOptions);
+      this.userProvider = userProvider;
+
+      // Create separate provider for analysis/memory agent with memory features disabled
+      const analysisConfig: IProviderConfig = {
+        ...providerConfig,
+        features: {
+          ...providerConfig.features,
+          memory: {
+            ...baseMemoryConfig,
+            enableChatMemory: false,
+            enableEmbeddingMemory: false,
+          },
+        },
+      };
+
+      const analysisProvider = new ProviderClass(analysisConfig) as ILLMProvider;
+      await analysisProvider.initialize(analysisConfig, {
+        ...initializationOptions,
+        disableMemoryProcessing: true,
+      });
+      this.memoryProvider = analysisProvider;
+
+      // Initialize memory agent with analysis provider
+      this.memoryAgent = new MemoryAgent(this.memoryProvider, this.dbManager);
 
     } catch (error) {
       logError('Failed to initialize Memori providers', {
@@ -145,7 +162,7 @@ export class Memori {
   /**
    * Get the provider class for the given provider type
    */
-  private getProviderClass(providerType: ProviderType): new (config: IProviderConfig) => ILLMProvider {
+  private getProviderClass(providerType: ProviderType): new (config: IProviderConfig) => MemoryCapableProvider {
     const { OpenAIProvider } = require('./infrastructure/providers/OpenAIProvider');
     const { AnthropicProvider } = require('./infrastructure/providers/AnthropicProvider');
     const { OllamaProvider } = require('./infrastructure/providers/OllamaProvider');

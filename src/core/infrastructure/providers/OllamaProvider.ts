@@ -1,11 +1,10 @@
-import { UnifiedLLMProvider } from './UnifiedLLMProvider';
+import { MemoryCapableProvider } from './MemoryCapableProvider';
 import { IProviderConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
 import { ChatCompletionParams } from './types/ChatCompletionParams';
 import { ChatCompletionResponse } from './types/ChatCompletionResponse';
 import { EmbeddingParams } from './types/EmbeddingParams';
 import { EmbeddingResponse } from './types/EmbeddingResponse';
-import { ProviderDiagnostics } from './types/ProviderDiagnostics';
 
 /**
  * Ollama API types (based on Ollama REST API)
@@ -85,10 +84,9 @@ interface OllamaEmbeddingResponse {
 }
 
 /**
- * Ollama provider implementation using unified architecture
- * Extends UnifiedLLMProvider to integrate performance optimizations and memory capabilities
+ * Ollama provider implementation using memory-capable architecture.
  */
-export class OllamaProvider extends UnifiedLLMProvider {
+export class OllamaProvider extends MemoryCapableProvider {
   private model: string;
   private baseUrl: string;
 

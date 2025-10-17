@@ -101,7 +101,10 @@ export class RelationshipProcessor {
   ) {
     this.databaseManager = databaseManager;
     this.openaiProvider = openaiProvider;
-    this.relationshipSearchStrategy = new RelationshipSearchStrategy(databaseManager);
+    this.relationshipSearchStrategy = new RelationshipSearchStrategy(
+      RelationshipSearchStrategy.createDefaultConfig(),
+      databaseManager
+    );
 
     // Apply custom configuration if provided
     if (options) {

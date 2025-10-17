@@ -1,13 +1,14 @@
-import { SearchStrategy, SearchQuery, SearchResult, ISearchStrategy, SearchStrategyMetadata } from '../types';
-import { SearchCapability, SearchStrategyError, SearchTimeoutError } from '../SearchStrategy';
+import { SearchStrategy, SearchQuery, SearchResult, SearchStrategyMetadata } from '../types';
+import { SearchCapability, SearchTimeoutError, SearchStrategyConfig, SearchErrorCategory, SearchErrorContext } from '../SearchStrategy';
 import { DatabaseManager } from '../../../infrastructure/database/DatabaseManager';
 import { logError, logWarn, logInfo } from '../../../infrastructure/config/Logger';
+import { BaseSearchStrategy } from './BaseSearchStrategy';
 
 /**
  * Enhanced SQLite FTS5 search strategy implementation with BM25 ranking and metadata filtering
  * Extracted from SearchService to improve maintainability and separation of concerns
  */
-export class SQLiteFTSStrategy implements ISearchStrategy {
+export class SQLiteFTSStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.FTS5;
   readonly priority = 10;
   readonly supportedMemoryTypes = ['short_term', 'long_term'] as const;
@@ -29,10 +30,8 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
   private readonly maxResultsPerQuery = 1000;
   private readonly queryTimeout = 10000;
   private readonly resultBatchSize = 100;
-  private readonly databaseManager: DatabaseManager;
-
-  constructor(dbManager: DatabaseManager) {
-    this.databaseManager = dbManager;
+  constructor(config: SearchStrategyConfig, dbManager: DatabaseManager) {
+    super(config, dbManager);
   }
 
 
@@ -74,7 +73,11 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
     }
   }
 
-  async search(query: SearchQuery): Promise<SearchResult[]> {
+  protected getCapabilities(): readonly SearchCapability[] {
+    return this.capabilities;
+  }
+
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
     const startTime = Date.now();
 
     try {
@@ -133,22 +136,13 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
         error: error instanceof Error ? error.message : String(error)
       });
 
-      throw new SearchStrategyError(
-        this.name,
-        `FTS5 strategy failed: ${error instanceof Error ? error.message : String(error)}`,
+      throw this.handleSearchError(
+        error,
         'fts_search',
         errorContext,
-        error instanceof Error ? error : undefined,
+        SearchErrorCategory.EXECUTION,
       );
     }
-  }
-
-  async execute(query: SearchQuery, _dbManager: DatabaseManager): Promise<SearchResult[]> {
-    return this.search(query);
-  }
-
-  async validateConfiguration(): Promise<boolean> {
-    return true;
   }
 
   getMetadata(): SearchStrategyMetadata {
@@ -402,13 +396,13 @@ export class SQLiteFTSStrategy implements ISearchStrategy {
   /**
    * Get database state for error context
    */
-  private getDatabaseState(): Record<string, unknown> {
+  protected getDatabaseState(): SearchErrorContext['databaseState'] {
     try {
       const dbManager = this.databaseManager as any;
       return {
         connectionStatus: dbManager?.isConnected ? 'connected' : 'disconnected',
-        ftsEnabled: dbManager?.isFTSEnabled ? dbManager.isFTSEnabled() : false,
         lastError: dbManager?.lastError,
+        queryCount: dbManager?.queryCount,
       };
     } catch {
       return {

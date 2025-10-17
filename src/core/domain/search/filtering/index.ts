@@ -40,9 +40,18 @@ export { TemporalFilterStrategy } from './TemporalFilterStrategy';
 
 // Temporal processing exports
 export { DateTimeNormalizer } from './temporal/DateTimeNormalizer';
-export { TimeRangeProcessor } from './temporal/TimeRangeProcessor';
 export { TemporalPatternMatcher } from './temporal/TemporalPatternMatcher';
-export { TemporalAggregation } from './temporal/TemporalAggregation';
+export {
+  TemporalService,
+  TimeRange,
+  TimeRangeQuery,
+  ProcessedTimeRange,
+  TimeBucket,
+  TemporalAggregationPeriod,
+  TemporalAggregationResult,
+  AggregationBucket,
+  TemporalGranularity,
+} from '../temporal/TemporalService';
 
 // Convenience re-exports for common use cases
 export { FilterType as FilterNodeType } from './types';

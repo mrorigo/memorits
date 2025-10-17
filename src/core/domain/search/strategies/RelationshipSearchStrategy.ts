@@ -1,15 +1,22 @@
-import { SearchCapability, SearchStrategyMetadata, SearchError, SearchValidationError } from '../SearchStrategy';
-import { SearchQuery, SearchResult, ISearchStrategy, SearchStrategy, RelationshipSearchQuery, RelationshipPath, RelationshipSearchResult } from '../types';
+import {
+  SearchCapability,
+  SearchValidationError,
+  SearchStrategyConfig,
+  SearchErrorCategory,
+  SearchStrategyMetadata,
+} from '../SearchStrategy';
+import { SearchQuery, SearchResult, SearchStrategy, RelationshipSearchQuery, RelationshipPath, RelationshipSearchResult } from '../types';
 import { DatabaseManager } from '../../../infrastructure/database/DatabaseManager';
 import { MemoryRelationship, MemoryRelationshipType } from '../../../types/schemas';
 import { logError, logWarn, logInfo, logDebug } from '../../../infrastructure/config/Logger';
+import { BaseSearchStrategy } from './BaseSearchStrategy';
 
 /**
  * Advanced relationship-based search strategy implementation
  * Provides graph traversal and relationship-aware search capabilities
  * Supports multiple traversal strategies and relationship strength weighting
  */
-export class RelationshipSearchStrategy implements ISearchStrategy {
+export class RelationshipSearchStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.RELATIONSHIP;
   readonly priority = 9;
   readonly supportedMemoryTypes = ['short_term', 'long_term'] as const;
@@ -35,12 +42,11 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
     confidenceWeight: 0.4,
   };
 
-  private readonly databaseManager: DatabaseManager;
   private visitedMemoryCache: Set<string> = new Set();
   private relationshipPathCache: Map<string, RelationshipPath[]> = new Map();
 
-  constructor(databaseManager: DatabaseManager) {
-    this.databaseManager = databaseManager;
+  constructor(config: SearchStrategyConfig | undefined, databaseManager: DatabaseManager) {
+    super(RelationshipSearchStrategy.mergeConfig(config), databaseManager);
   }
 
   /**
@@ -54,10 +60,22 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
     return hasRelationshipParams || hasRelationshipKeywords;
   }
 
+  protected getCapabilities(): readonly SearchCapability[] {
+    return this.capabilities;
+  }
+
+  protected getPerformanceMetrics(): SearchStrategyMetadata['performanceMetrics'] {
+    return {
+      averageResponseTime: 150,
+      throughput: 200,
+      memoryUsage: 25,
+    };
+  }
+
   /**
    * Main search method implementing relationship-based search
    */
-  async search(query: SearchQuery): Promise<SearchResult[]> {
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
     const startTime = Date.now();
 
     try {
@@ -112,80 +130,14 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
         error: error instanceof Error ? error.message : String(error)
       });
 
-      throw new SearchError(
-        `Relationship strategy failed: ${error instanceof Error ? error.message : String(error)}`,
-        this.name,
+      throw this.handleSearchError(
+        error,
+        'relationship_search',
         errorContext,
-        error instanceof Error ? error : undefined,
+        SearchErrorCategory.EXECUTION,
       );
     }
   }
-
-
-  /**
-   * Get metadata about this search strategy
-   */
-  getMetadata(): SearchStrategyMetadata {
-    return {
-      name: this.name,
-      version: '1.0.0',
-      description: this.description,
-      capabilities: [...this.capabilities],
-      supportedMemoryTypes: [...this.supportedMemoryTypes],
-      configurationSchema: {
-        type: 'object',
-        properties: {
-          priority: { type: 'number', minimum: 0, maximum: 100 },
-          timeout: { type: 'number', minimum: 1000, maximum: 30000 },
-          maxResults: { type: 'number', minimum: 1, maximum: 1000 },
-          defaultMaxDepth: { type: 'number', minimum: 1, maximum: 10 },
-          maxTraversalDepth: { type: 'number', minimum: 1, maximum: 20 },
-          minRelationshipStrength: { type: 'number', minimum: 0, maximum: 1 },
-          minRelationshipConfidence: { type: 'number', minimum: 0, maximum: 1 },
-        },
-        required: ['priority', 'timeout', 'maxResults'],
-      },
-      performanceMetrics: {
-        averageResponseTime: 150,
-        throughput: 200,
-        memoryUsage: 25,
-      },
-    };
-  }
-
-  /**
-   * Validate the current configuration
-   */
-  async validateConfiguration(): Promise<boolean> {
-    try {
-      if (this.relationshipConfig.defaultMaxDepth < 1 || this.relationshipConfig.defaultMaxDepth > 10) {
-        return false;
-      }
-
-      if (this.relationshipConfig.maxTraversalDepth < this.relationshipConfig.defaultMaxDepth) {
-        return false;
-      }
-
-      if (this.relationshipConfig.minRelationshipStrength < 0 || this.relationshipConfig.minRelationshipStrength > 1) {
-        return false;
-      }
-
-      if (this.relationshipConfig.minRelationshipConfidence < 0 || this.relationshipConfig.minRelationshipConfidence > 1) {
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      logError(`Configuration validation failed for ${this.name}`, {
-        component: 'RelationshipSearchStrategy',
-        operation: 'validateConfiguration',
-        strategy: this.name,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return false;
-    }
-  }
-
   /**
    * Check if query has relationship-specific parameters
    */
@@ -657,30 +609,86 @@ export class RelationshipSearchStrategy implements ISearchStrategy {
   }
 
   /**
-   * Get performance metrics for this strategy
-   */
-  protected getPerformanceMetrics(): SearchStrategyMetadata['performanceMetrics'] {
-    return {
-      averageResponseTime: 150,
-      throughput: 200,
-      memoryUsage: 25,
-    };
-  }
-
-  /**
    * Validate strategy-specific configuration
    */
   protected validateStrategyConfiguration(): boolean {
-    // Validate depth limits
-    if (this.relationshipConfig.defaultMaxDepth > this.relationshipConfig.maxTraversalDepth) {
+    try {
+      if (this.relationshipConfig.defaultMaxDepth < 1 || this.relationshipConfig.defaultMaxDepth > 10) {
+        logError('RelationshipSearchStrategy configuration invalid: defaultMaxDepth out of range', {
+          component: 'RelationshipSearchStrategy',
+          operation: 'validateStrategyConfiguration',
+          defaultMaxDepth: this.relationshipConfig.defaultMaxDepth,
+        });
+        return false;
+      }
+
+      if (this.relationshipConfig.maxTraversalDepth < this.relationshipConfig.defaultMaxDepth) {
+        logError('RelationshipSearchStrategy configuration invalid: maxTraversalDepth below defaultMaxDepth', {
+          component: 'RelationshipSearchStrategy',
+          operation: 'validateStrategyConfiguration',
+          maxTraversalDepth: this.relationshipConfig.maxTraversalDepth,
+          defaultMaxDepth: this.relationshipConfig.defaultMaxDepth,
+        });
+        return false;
+      }
+
+      if (this.relationshipConfig.minRelationshipStrength < 0 || this.relationshipConfig.minRelationshipStrength > 1) {
+        logError('RelationshipSearchStrategy configuration invalid: minRelationshipStrength out of range', {
+          component: 'RelationshipSearchStrategy',
+          operation: 'validateStrategyConfiguration',
+          minRelationshipStrength: this.relationshipConfig.minRelationshipStrength,
+        });
+        return false;
+      }
+
+      if (this.relationshipConfig.minRelationshipConfidence < 0 || this.relationshipConfig.minRelationshipConfidence > 1) {
+        logError('RelationshipSearchStrategy configuration invalid: minRelationshipConfidence out of range', {
+          component: 'RelationshipSearchStrategy',
+          operation: 'validateStrategyConfiguration',
+          minRelationshipConfidence: this.relationshipConfig.minRelationshipConfidence,
+        });
+        return false;
+      }
+
+      if (Math.abs(this.relationshipConfig.strengthWeight + this.relationshipConfig.confidenceWeight - 1.0) > 0.01) {
+        logError('RelationshipSearchStrategy configuration invalid: weights must sum to 1.0', {
+          component: 'RelationshipSearchStrategy',
+          operation: 'validateStrategyConfiguration',
+          strengthWeight: this.relationshipConfig.strengthWeight,
+          confidenceWeight: this.relationshipConfig.confidenceWeight,
+        });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      logError('RelationshipSearchStrategy configuration validation failed', {
+        component: 'RelationshipSearchStrategy',
+        operation: 'validateStrategyConfiguration',
+        error: error instanceof Error ? error.message : String(error),
+      });
       return false;
     }
+  }
 
-    // Validate weight distribution
-    if (Math.abs(this.relationshipConfig.strengthWeight + this.relationshipConfig.confidenceWeight - 1.0) > 0.01) {
-      return false;
-    }
+  private static mergeConfig(config?: Partial<SearchStrategyConfig>): SearchStrategyConfig {
+    const defaults: SearchStrategyConfig = {
+      strategyName: SearchStrategy.RELATIONSHIP,
+      enabled: true,
+      priority: 9,
+      timeout: 5000,
+      maxResults: 100,
+      minScore: 0,
+    };
 
-    return true;
+    return {
+      ...defaults,
+      ...config,
+      strategyName: config?.strategyName ?? defaults.strategyName,
+    };
+  }
+
+  static createDefaultConfig(overrides: Partial<SearchStrategyConfig> = {}): SearchStrategyConfig {
+    return RelationshipSearchStrategy.mergeConfig(overrides);
   }
 }

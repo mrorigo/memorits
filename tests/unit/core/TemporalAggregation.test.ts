@@ -1,7 +1,7 @@
-import { TemporalAggregation } from "@/core/domain/search/filtering/temporal/TemporalAggregation";
+import { TemporalService } from "@/core/domain/search/temporal/TemporalService";
 
-describe('TemporalAggregation', () => {
-  describe('aggregateByPeriod()', () => {
+describe('TemporalService', () => {
+  describe('aggregate()', () => {
     const mockResults = [
       {
         id: '1',
@@ -35,7 +35,7 @@ describe('TemporalAggregation', () => {
 
     it('should aggregate results by day period', () => {
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'day', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod(mockResults, period);
+      const result = TemporalService.aggregate(mockResults, period);
 
       expect(result.buckets.length).toBeGreaterThan(0);
       expect(result.summary.totalMemories).toBe(4);
@@ -44,7 +44,7 @@ describe('TemporalAggregation', () => {
 
     it('should aggregate results by hour period', () => {
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'hour', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod(mockResults, period);
+      const result = TemporalService.aggregate(mockResults, period);
 
       expect(result.buckets.length).toBeGreaterThan(0);
       expect(result.summary.totalMemories).toBe(4);
@@ -52,7 +52,7 @@ describe('TemporalAggregation', () => {
 
     it('should handle empty results array', () => {
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'day', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod([], period);
+      const result = TemporalService.aggregate([], period);
 
       expect(result.buckets.length).toBe(0);
       expect(result.summary.totalMemories).toBe(0);
@@ -60,7 +60,7 @@ describe('TemporalAggregation', () => {
 
     it('should include trends when requested', () => {
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'day', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod(mockResults, period, {
+      const result = TemporalService.aggregate(mockResults, period, {
         includeTrends: true
       });
 
@@ -72,7 +72,7 @@ describe('TemporalAggregation', () => {
 
     it('should select correct representative strategy', () => {
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'day', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod(mockResults, period, {
+      const result = TemporalService.aggregate(mockResults, period, {
         representativeStrategy: 'highest_score'
       });
 
@@ -95,7 +95,7 @@ describe('TemporalAggregation', () => {
       }));
 
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'hour', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod(manyResults, period, {
+      const result = TemporalService.aggregate(manyResults, period, {
         maxBuckets: 10
       });
 
@@ -110,7 +110,7 @@ describe('TemporalAggregation', () => {
         { timestamp: new Date('2023-12-25T14:00:00Z') }
       ];
 
-      const period = TemporalAggregation.getOptimalPeriod(results, 50);
+      const period = TemporalService.getOptimalPeriod(results, 50);
 
       expect(period.type).toBe('hour'); // Should choose smaller period for short span
     });
@@ -121,13 +121,13 @@ describe('TemporalAggregation', () => {
         { timestamp: new Date('2023-01-01T00:00:00Z') }
       ];
 
-      const period = TemporalAggregation.getOptimalPeriod(results, 50);
+      const period = TemporalService.getOptimalPeriod(results, 50);
 
       expect(period.type).toBe('year'); // Should choose larger period for long span
     });
 
     it('should handle empty results array', () => {
-      const period = TemporalAggregation.getOptimalPeriod([], 50);
+      const period = TemporalService.getOptimalPeriod([], 50);
 
       expect(period.type).toBe('day');
       expect(period.count).toBe(1);
@@ -138,7 +138,7 @@ describe('TemporalAggregation', () => {
         timestamp: new Date(2020 + i, 0, 1)
       }));
 
-      const period = TemporalAggregation.getOptimalPeriod(results, 5);
+      const period = TemporalService.getOptimalPeriod(results, 5);
 
       expect(period.count).toBeLessThanOrEqual(5);
     });
@@ -146,13 +146,13 @@ describe('TemporalAggregation', () => {
 
   describe('mergeAggregationResults()', () => {
     it('should return null for empty results array', () => {
-      const result = TemporalAggregation.mergeAggregationResults([]);
+      const result = TemporalService.mergeAggregationResults([]);
       expect(result).toBeNull();
     });
 
     it('should return single result as-is', () => {
       const period = { type: 'day' as const, count: 1 };
-      const singleResult = TemporalAggregation.aggregateByPeriod([
+      const singleResult = TemporalService.aggregate([
         {
           id: '1',
           content: 'Test',
@@ -162,14 +162,14 @@ describe('TemporalAggregation', () => {
         }
       ], period);
 
-      const merged = TemporalAggregation.mergeAggregationResults([singleResult]);
+      const merged = TemporalService.mergeAggregationResults([singleResult]);
       expect(merged).toEqual(singleResult);
     });
 
     it('should merge multiple aggregation results', () => {
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'day', count: 1 };
 
-      const result1 = TemporalAggregation.aggregateByPeriod([
+      const result1 = TemporalService.aggregate([
         {
           id: '1',
           content: 'Memory 1',
@@ -179,7 +179,7 @@ describe('TemporalAggregation', () => {
         }
       ], period);
 
-      const result2 = TemporalAggregation.aggregateByPeriod([
+      const result2 = TemporalService.aggregate([
         {
           id: '2',
           content: 'Memory 2',
@@ -189,7 +189,7 @@ describe('TemporalAggregation', () => {
         }
       ], period);
 
-      const merged = TemporalAggregation.mergeAggregationResults([result1, result2]);
+      const merged = TemporalService.mergeAggregationResults([result1, result2]);
 
       expect(merged).toBeDefined();
       expect(merged!.summary.totalMemories).toBe(2);
@@ -200,7 +200,7 @@ describe('TemporalAggregation', () => {
   describe('exportForVisualization()', () => {
     it('should export data for visualization', () => {
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'day', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod([
+      const result = TemporalService.aggregate([
         {
           id: '1',
           content: 'Memory 1',
@@ -217,7 +217,7 @@ describe('TemporalAggregation', () => {
         }
       ], period);
 
-      const exported = TemporalAggregation.exportForVisualization(result);
+      const exported = TemporalService.exportForVisualization(result);
 
       expect(exported.timeSeries.length).toBeGreaterThan(0);
       expect(exported.summary.totalDataPoints).toBe(result.buckets.length);
@@ -240,7 +240,7 @@ describe('TemporalAggregation', () => {
         }
       };
 
-      const exported = TemporalAggregation.exportForVisualization(mockResult);
+      const exported = TemporalService.exportForVisualization(mockResult);
 
       expect(exported.timeSeries.length).toBe(0);
       expect(exported.summary.totalDataPoints).toBe(0);
@@ -258,7 +258,7 @@ describe('TemporalAggregation', () => {
       }];
 
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'day', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod(singleResult, period);
+      const result = TemporalService.aggregate(singleResult, period);
 
       expect(result.summary.totalMemories).toBe(1);
       expect(result.buckets.length).toBe(1);
@@ -284,7 +284,7 @@ describe('TemporalAggregation', () => {
       ];
 
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'hour', count: 1 };
-      const result = TemporalAggregation.aggregateByPeriod(sameTimeResults, period);
+      const result = TemporalService.aggregate(sameTimeResults, period);
 
       expect(result.summary.totalMemories).toBe(2);
       expect(result.buckets.length).toBeGreaterThan(0);
@@ -302,7 +302,7 @@ describe('TemporalAggregation', () => {
       const period: { type: 'day' | 'hour' | 'minute' | 'second' | 'week' | 'month' | 'year'; count: number } = { type: 'hour', count: 1 };
       const startTime = Date.now();
 
-      const result = TemporalAggregation.aggregateByPeriod(largeDataset, period, {
+      const result = TemporalService.aggregate(largeDataset, period, {
         maxBuckets: 100
       });
 

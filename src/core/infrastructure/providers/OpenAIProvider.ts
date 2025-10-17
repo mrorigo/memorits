@@ -1,19 +1,18 @@
 import OpenAI from 'openai';
-import { UnifiedLLMProvider } from './UnifiedLLMProvider';
+import { MemoryCapableProvider } from './MemoryCapableProvider';
 import { IProviderConfig } from './IProviderConfig';
 import { ProviderType } from './ProviderType';
 import { ChatCompletionParams } from './types/ChatCompletionParams';
 import { ChatCompletionResponse } from './types/ChatCompletionResponse';
 import { EmbeddingParams } from './types/EmbeddingParams';
 import { EmbeddingResponse } from './types/EmbeddingResponse';
-import { ProviderDiagnostics } from './types/ProviderDiagnostics';
 
 /**
- * OpenAI provider implementation using unified architecture
- * Extends UnifiedLLMProvider to integrate performance optimizations and memory capabilities
+ * OpenAI provider implementation using memory-capable architecture.
  */
-export class OpenAIProvider extends UnifiedLLMProvider {
+export class OpenAIProvider extends MemoryCapableProvider {
   private model: string;
+  private client: OpenAI | null = null;
 
   constructor(config: IProviderConfig) {
     super(config);
@@ -39,13 +38,16 @@ export class OpenAIProvider extends UnifiedLLMProvider {
   protected async disposeClient(): Promise<void> {
     // OpenAI client doesn't require explicit disposal
     // But we can clear the reference if needed
-    this.client = null as any;
+    this.client = null;
   }
 
   /**
    * Check if the OpenAI client is healthy
    */
   protected async checkClientHealth(): Promise<boolean> {
+    if (!this.client) {
+      return false;
+    }
     try {
       // Simple health check - try to list models
       await this.client.models.list();
@@ -88,6 +90,9 @@ export class OpenAIProvider extends UnifiedLLMProvider {
    * Get the OpenAI client (for backward compatibility)
    */
   getClient(): OpenAI {
+    if (!this.client) {
+      throw new Error('OpenAI client not initialized');
+    }
     return this.client;
   }
 

@@ -154,7 +154,7 @@ export class SearchService implements ISearchService {
     const config = this.strategyConfigs.get(SearchStrategy.FTS5);
 
     if (config?.enabled) {
-      const ftsStrategy = new SQLiteFTSStrategy(this.dbManager);
+      const ftsStrategy = new SQLiteFTSStrategy(config, this.dbManager);
 
       // Apply FTS5-specific configuration
       if (config.strategySpecific) {
@@ -285,7 +285,7 @@ export class SearchService implements ISearchService {
     const config = this.strategyConfigs.get(SearchStrategy.SEMANTIC);
 
     if (config?.enabled) {
-      const semanticStrategy = new SemanticSearchStrategy();
+      const semanticStrategy = new SemanticSearchStrategy(config, this.dbManager);
 
       // Apply semantic-specific configuration
       if (config.strategySpecific) {
@@ -399,45 +399,50 @@ export class SearchService implements ISearchService {
   }
 
   /**
-    * Initialize Relationship strategy with configuration
-    */
-   private async initializeRelationshipStrategy(): Promise<void> {
-     const config = this.strategyConfigs.get(SearchStrategy.RELATIONSHIP);
+   * Initialize Relationship strategy with configuration
+   */
+  private async initializeRelationshipStrategy(): Promise<void> {
+    const config = this.strategyConfigs.get(SearchStrategy.RELATIONSHIP);
 
-     if (config?.enabled) {
-       const relationshipStrategy = new RelationshipSearchStrategy(this.dbManager);
+    if (config?.enabled) {
+      const relationshipStrategy = new RelationshipSearchStrategy(config, this.dbManager);
 
-       // Apply relationship-specific configuration
-       if (config.strategySpecific) {
-         const relationshipConfig = config.strategySpecific as Record<string, unknown>;
+      // Apply relationship-specific configuration
+      if (config.strategySpecific) {
+        const relationshipConfig = config.strategySpecific as Record<string, unknown>;
 
-         // Update relationship configuration with type safety
-         if (typeof relationshipConfig.maxDepth === 'number') {
-           (relationshipStrategy as unknown as { maxDepth?: number }).maxDepth = relationshipConfig.maxDepth;
-         }
-         if (typeof relationshipConfig.minRelationshipStrength === 'number') {
-           (relationshipStrategy as unknown as { minRelationshipStrength?: number }).minRelationshipStrength = relationshipConfig.minRelationshipStrength;
-         }
-         if (typeof relationshipConfig.minRelationshipConfidence === 'number') {
-           (relationshipStrategy as unknown as { minRelationshipConfidence?: number }).minRelationshipConfidence = relationshipConfig.minRelationshipConfidence;
-         }
-         if (typeof relationshipConfig.includeRelationshipPaths === 'boolean') {
-           (relationshipStrategy as unknown as { includeRelationshipPaths?: boolean }).includeRelationshipPaths = relationshipConfig.includeRelationshipPaths;
-         }
-         if (typeof relationshipConfig.traversalStrategy === 'string') {
-           (relationshipStrategy as unknown as { traversalStrategy?: string }).traversalStrategy = relationshipConfig.traversalStrategy;
-         }
-       }
+        // Update relationship configuration with type safety
+        if (typeof relationshipConfig.maxDepth === 'number') {
+          (relationshipStrategy as unknown as { maxDepth?: number }).maxDepth = relationshipConfig.maxDepth;
+        }
+        if (typeof relationshipConfig.minRelationshipStrength === 'number') {
+          (relationshipStrategy as unknown as { minRelationshipStrength?: number }).minRelationshipStrength = relationshipConfig.minRelationshipStrength;
+        }
+        if (typeof relationshipConfig.minRelationshipConfidence === 'number') {
+          (relationshipStrategy as unknown as { minRelationshipConfidence?: number }).minRelationshipConfidence = relationshipConfig.minRelationshipConfidence;
+        }
+        if (typeof relationshipConfig.includeRelationshipPaths === 'boolean') {
+          (relationshipStrategy as unknown as { includeRelationshipPaths?: boolean }).includeRelationshipPaths = relationshipConfig.includeRelationshipPaths;
+        }
+        if (typeof relationshipConfig.traversalStrategy === 'string') {
+          (relationshipStrategy as unknown as { traversalStrategy?: string }).traversalStrategy = relationshipConfig.traversalStrategy;
+        }
+      }
 
-       this.strategies.set(SearchStrategy.RELATIONSHIP, relationshipStrategy);
-     }
+      this.strategies.set(SearchStrategy.RELATIONSHIP, relationshipStrategy);
+    }
    }
 
   /**
    * Fallback strategy initialization (when configuration loading fails)
    */
   private initializeStrategiesFallback(): void {
-    this.strategies.set(SearchStrategy.FTS5, new SQLiteFTSStrategy(this.dbManager));
+    const defaultFtsConfig = this.strategyConfigs.get(SearchStrategy.FTS5) ||
+      this.configManager.getDefaultConfiguration(SearchStrategy.FTS5);
+    this.strategies.set(
+      SearchStrategy.FTS5,
+      new SQLiteFTSStrategy(defaultFtsConfig, this.dbManager)
+    );
     this.strategies.set(SearchStrategy.LIKE, new LikeSearchStrategy(this.dbManager));
     this.strategies.set(SearchStrategy.RECENT, new RecentMemoriesStrategy({
       strategyName: SearchStrategy.RECENT,
@@ -447,7 +452,12 @@ export class SearchService implements ISearchService {
       maxResults: 100,
       minScore: 0.1
     }, this.dbManager));
-    this.strategies.set(SearchStrategy.SEMANTIC, new SemanticSearchStrategy());
+    const defaultSemanticConfig = this.strategyConfigs.get(SearchStrategy.SEMANTIC) ||
+      this.configManager.getDefaultConfiguration(SearchStrategy.SEMANTIC);
+    this.strategies.set(
+      SearchStrategy.SEMANTIC,
+      new SemanticSearchStrategy(defaultSemanticConfig, this.dbManager)
+    );
 
     // Add Category Filter Strategy
     this.strategies.set(SearchStrategy.CATEGORY_FILTER, new CategoryFilterStrategy({
@@ -501,7 +511,12 @@ export class SearchService implements ISearchService {
     }, this.dbManager));
 
     // Add Relationship Search Strategy
-    this.strategies.set(SearchStrategy.RELATIONSHIP, new RelationshipSearchStrategy(this.dbManager));
+    const relationshipConfig = this.strategyConfigs.get(SearchStrategy.RELATIONSHIP) ||
+      this.configManager.getDefaultConfiguration(SearchStrategy.RELATIONSHIP);
+    this.strategies.set(
+      SearchStrategy.RELATIONSHIP,
+      new RelationshipSearchStrategy(relationshipConfig, this.dbManager)
+    );
   }
 
   /**

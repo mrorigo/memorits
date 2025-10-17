@@ -106,18 +106,13 @@ export class MemoryAgent {
   }
 
   /**
-    * Create a clean provider for memory analysis that doesn't trigger memory processing
-    * This prevents infinite recursion when the MemoryAgent analyzes conversations
-    *
-    * Since all providers now extend UnifiedLLMProvider, we can simply use the base provider
-    * directly - the UnifiedLLMProvider handles memory processing at the wrapper level, not
-    * at the individual provider level, so there's no recursion risk.
-    */
-   private createAnalysisProvider(baseProvider: ILLMProvider): ILLMProvider {
-     // Simply return the base provider - UnifiedLLMProvider architecture prevents recursion
-     // by handling memory processing at the MemoryEnabledLLMProvider wrapper level
-     return baseProvider;
-   }
+   * Create a clean provider for memory analysis that doesn't trigger memory processing.
+   * MemoryCapableProvider delegates MemoryAgent analysis directly to the underlying
+   * execution methods, so returning the base provider is safe.
+   */
+  private createAnalysisProvider(baseProvider: ILLMProvider): ILLMProvider {
+    return baseProvider;
+  }
 
   /**
    * Set database manager for state tracking

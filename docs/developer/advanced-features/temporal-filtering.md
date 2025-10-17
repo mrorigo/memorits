@@ -49,14 +49,12 @@ DateTimeNormalizer.normalize('the day before yesterday');
 DateTimeNormalizer.normalize('3 weeks from now');
 ```
 
-### TimeRangeProcessor
+### TemporalService (Time Range Utilities)
 
 Processes complex time range queries and operations:
 
 ```typescript
-import { TimeRangeProcessor, TimeRange } from 'memorits';
-
-const processor = new TimeRangeProcessor();
+import { TemporalService, TimeRange } from 'memorits';
 
 // Define time ranges
 const ranges: TimeRange[] = [
@@ -72,25 +70,27 @@ const query = {
   operation: 'INTERSECTION', // UNION, INTERSECTION, DIFFERENCE
   granularity: 'day'
 };
+
+const processed = TemporalService.processTimeRangeQuery(query);
 ```
 
 #### Range Operations
 
 ```typescript
 // Union of multiple ranges
-const unionRanges = TimeRangeProcessor.union([
+const unionRanges = TemporalService.unionRanges([
   { start: date1, end: date2 },
   { start: date3, end: date4 }
 ]);
 
 // Intersection of overlapping ranges
-const intersectionRanges = TimeRangeProcessor.intersection([
+const intersectionRanges = TemporalService.intersectRanges([
   { start: date1, end: date4 },
   { start: date2, end: date3 }
 ]);
 
 // Expand ranges by duration
-const expandedRange = TimeRangeProcessor.expand(
+const expandedRange = TemporalService.expandTimeRange(
   { start: date1, end: date2 },
   { hours: 2 } // Expand by 2 hours
 );
@@ -127,12 +127,12 @@ const patterns = TemporalPatternMatcher.extractPatterns(
 // - Confidence scores
 ```
 
-### TemporalAggregation
+### TemporalService (Aggregation)
 
 Groups and aggregates memories by time periods:
 
 ```typescript
-import { TemporalAggregation, TemporalAggregationPeriod } from 'memorits';
+import { TemporalService, TemporalAggregationPeriod } from 'memorits';
 
 const memories = [
   { id: '1', timestamp: new Date('2024-01-01'), score: 0.8 },
@@ -141,9 +141,9 @@ const memories = [
 ];
 
 // Aggregate by day
-const aggregated = TemporalAggregation.aggregateByPeriod(
+const aggregated = TemporalService.aggregate(
   memories,
-  'day',
+  { type: 'day', count: 1 } satisfies TemporalAggregationPeriod,
   {
     includeTrends: true,
     maxBuckets: 30,

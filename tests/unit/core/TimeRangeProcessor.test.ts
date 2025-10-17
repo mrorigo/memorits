@@ -1,14 +1,13 @@
-import { TimeRangeProcessor } from "@/core/domain/search/filtering";
-import { TimeRange, TimeRangeQuery } from "@/core/domain/search/filtering/temporal/TimeRangeProcessor";
+import { TemporalService, TimeRange, TimeRangeQuery } from "@/core/domain/search/temporal/TemporalService";
 
-describe('TimeRangeProcessor', () => {
+describe('TemporalService time range utilities', () => {
   describe('processTimeRange()', () => {
     it('should process valid time range correctly', () => {
       const start = new Date('2023-12-25T10:00:00Z');
       const end = new Date('2023-12-25T14:00:00Z');
       const range: TimeRange = { start, end };
 
-      const result = TimeRangeProcessor.processTimeRange(range);
+      const result = TemporalService.processTimeRange(range);
 
       expect(result.isValid).toBe(true);
       expect(result.originalRange).toEqual(range);
@@ -23,7 +22,7 @@ describe('TimeRangeProcessor', () => {
       const end = new Date('2023-12-25T10:00:00Z');
       const range: TimeRange = { start, end };
 
-      const result = TimeRangeProcessor.processTimeRange(range);
+      const result = TemporalService.processTimeRange(range);
 
       expect(result.isValid).toBe(true);
       expect(result.normalizedRange.start.getTime()).toBe(end.getTime());
@@ -35,7 +34,7 @@ describe('TimeRangeProcessor', () => {
       const end = new Date('2023-12-25T10:00:00.999Z'); // 999ms - less than 1 second
       const range: TimeRange = { start, end };
 
-      const result = TimeRangeProcessor.processTimeRange(range);
+      const result = TemporalService.processTimeRange(range);
 
       expect(result.isValid).toBe(true);
       expect(result.warnings).toContain('Time range is very short (999ms). Consider if this is intentional.');
@@ -46,7 +45,7 @@ describe('TimeRangeProcessor', () => {
       const end = new Date('2025-01-01T00:00:00Z'); // 5 years
       const range: TimeRange = { start, end };
 
-      const result = TimeRangeProcessor.processTimeRange(range);
+      const result = TemporalService.processTimeRange(range);
 
       expect(result.isValid).toBe(true);
       expect(result.warnings.some((w: string) => w.includes('very large'))).toBe(true);
@@ -58,7 +57,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const result = TimeRangeProcessor.processTimeRange(range);
+      const result = TemporalService.processTimeRange(range);
 
       expect(result.isValid).toBe(false);
       expect(result.warnings[0]).toContain('Invalid date values provided');
@@ -69,7 +68,7 @@ describe('TimeRangeProcessor', () => {
       const end = new Date('2023-12-25T10:00:00Z');
       const range: TimeRange = { start, end };
 
-      const result = TimeRangeProcessor.processTimeRange(range);
+      const result = TemporalService.processTimeRange(range);
 
       expect(result.isValid).toBe(true);
       // Should be normalized with start before end
@@ -79,7 +78,7 @@ describe('TimeRangeProcessor', () => {
 
   describe('intersectRanges()', () => {
     it('should return null for empty ranges array', () => {
-      const result = TimeRangeProcessor.intersectRanges([]);
+      const result = TemporalService.intersectRanges([]);
       expect(result).toBeNull();
     });
 
@@ -89,7 +88,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const result = TimeRangeProcessor.intersectRanges([range]);
+      const result = TemporalService.intersectRanges([range]);
       expect(result).toEqual(range);
     });
 
@@ -103,7 +102,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T16:00:00Z')
       };
 
-      const result = TimeRangeProcessor.intersectRanges([range1, range2]);
+      const result = TemporalService.intersectRanges([range1, range2]);
 
       expect(result).toBeDefined();
       expect(result!.start.getTime()).toBe(range2.start.getTime());
@@ -120,14 +119,14 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T16:00:00Z')
       };
 
-      const result = TimeRangeProcessor.intersectRanges([range1, range2]);
+      const result = TemporalService.intersectRanges([range1, range2]);
       expect(result).toBeNull();
     });
   });
 
   describe('unionRanges()', () => {
     it('should return empty array for empty input', () => {
-      const result = TimeRangeProcessor.unionRanges([]);
+      const result = TemporalService.unionRanges([]);
       expect(result).toEqual([]);
     });
 
@@ -137,7 +136,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const result = TimeRangeProcessor.unionRanges([range]);
+      const result = TemporalService.unionRanges([range]);
       expect(result).toEqual([range]);
     });
 
@@ -151,7 +150,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T16:00:00Z')
       };
 
-      const result = TimeRangeProcessor.unionRanges([range1, range2]);
+      const result = TemporalService.unionRanges([range1, range2]);
 
       expect(result).toHaveLength(1);
       expect(result[0].start.getTime()).toBe(range1.start.getTime());
@@ -168,7 +167,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T16:00:00Z')
       };
 
-      const result = TimeRangeProcessor.unionRanges([range1, range2]);
+      const result = TemporalService.unionRanges([range1, range2]);
 
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual(range1);
@@ -176,14 +175,14 @@ describe('TimeRangeProcessor', () => {
     });
   });
 
-  describe('createTimeBuckets()', () => {
+  describe('createBuckets()', () => {
     it('should create correct buckets for day granularity', () => {
       const range: TimeRange = {
         start: new Date('2023-12-25T00:00:00Z'),
         end: new Date('2023-12-28T00:00:00Z') // 3 days
       };
 
-      const buckets = TimeRangeProcessor.createTimeBuckets(range, 'day');
+      const buckets = TemporalService.createBuckets(range, 'day');
 
       expect(buckets).toHaveLength(3);
       expect(buckets[0].start.getTime()).toBe(new Date('2023-12-25T00:00:00Z').getTime());
@@ -197,7 +196,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z') // 4 hours
       };
 
-      const buckets = TimeRangeProcessor.createTimeBuckets(range, 'hour');
+      const buckets = TemporalService.createBuckets(range, 'hour');
 
       expect(buckets).toHaveLength(4);
       expect(buckets[0].label).toBe('2023-12-25 10');
@@ -210,7 +209,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const buckets = TimeRangeProcessor.createTimeBuckets(range, 'day');
+      const buckets = TemporalService.createBuckets(range, 'day');
       expect(buckets).toEqual([]);
     });
   });
@@ -222,7 +221,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const expanded = TimeRangeProcessor.expandTimeRange(range, {
+      const expanded = TemporalService.expandTimeRange(range, {
         before: 2 * 60 * 60 * 1000 // 2 hours
       });
 
@@ -236,7 +235,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const expanded = TimeRangeProcessor.expandTimeRange(range, {
+      const expanded = TemporalService.expandTimeRange(range, {
         after: 60 * 60 * 1000 // 1 hour
       });
 
@@ -250,7 +249,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const expanded = TimeRangeProcessor.expandTimeRange(range, {
+      const expanded = TemporalService.expandTimeRange(range, {
         before: 60 * 60 * 1000, // 1 hour
         after: 60 * 60 * 1000   // 1 hour
       });
@@ -267,7 +266,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const contracted = TimeRangeProcessor.contractTimeRange(range, {
+      const contracted = TemporalService.contractTimeRange(range, {
         before: 60 * 60 * 1000 // 1 hour
       });
 
@@ -281,7 +280,7 @@ describe('TimeRangeProcessor', () => {
         end: new Date('2023-12-25T14:00:00Z')
       };
 
-      const contracted = TimeRangeProcessor.contractTimeRange(range, {
+      const contracted = TemporalService.contractTimeRange(range, {
         after: 60 * 60 * 1000 // 1 hour
       });
 
@@ -296,7 +295,7 @@ describe('TimeRangeProcessor', () => {
       };
 
       expect(() => {
-        TimeRangeProcessor.contractTimeRange(range, {
+        TemporalService.contractTimeRange(range, {
           before: 30 * 60 * 1000, // 30 minutes
           after: 30 * 60 * 1000   // 30 minutes
         });
@@ -318,17 +317,17 @@ describe('TimeRangeProcessor', () => {
 
     it('should return true for date in first range', () => {
       const date = new Date('2023-12-25T11:00:00Z');
-      expect(TimeRangeProcessor.dateInRanges(date, ranges)).toBe(true);
+      expect(TemporalService.dateInRanges(date, ranges)).toBe(true);
     });
 
     it('should return true for date in second range', () => {
       const date = new Date('2023-12-25T15:00:00Z');
-      expect(TimeRangeProcessor.dateInRanges(date, ranges)).toBe(true);
+      expect(TemporalService.dateInRanges(date, ranges)).toBe(true);
     });
 
     it('should return false for date not in any range', () => {
       const date = new Date('2023-12-25T13:00:00Z');
-      expect(TimeRangeProcessor.dateInRanges(date, ranges)).toBe(false);
+      expect(TemporalService.dateInRanges(date, ranges)).toBe(false);
     });
 
     it('should handle exclusive end dates correctly', () => {
@@ -341,7 +340,7 @@ describe('TimeRangeProcessor', () => {
       ];
 
       const date = new Date('2023-12-25T12:00:00Z');
-      expect(TimeRangeProcessor.dateInRanges(date, exclusiveRanges)).toBe(false);
+      expect(TemporalService.dateInRanges(date, exclusiveRanges)).toBe(false);
     });
   });
 
@@ -358,7 +357,7 @@ describe('TimeRangeProcessor', () => {
         }
       ];
 
-      const stats = TimeRangeProcessor.getRangeStatistics(ranges);
+      const stats = TemporalService.getRangeStatistics(ranges);
 
       expect(stats.rangeCount).toBe(2);
       expect(stats.totalDuration).toBe(6 * 60 * 60 * 1000); // 6 hours
@@ -369,7 +368,7 @@ describe('TimeRangeProcessor', () => {
     });
 
     it('should handle empty ranges array', () => {
-      const stats = TimeRangeProcessor.getRangeStatistics([]);
+      const stats = TemporalService.getRangeStatistics([]);
 
       expect(stats.rangeCount).toBe(0);
       expect(stats.totalDuration).toBe(0);
@@ -391,7 +390,7 @@ describe('TimeRangeProcessor', () => {
         }
       ];
 
-      const stats = TimeRangeProcessor.getRangeStatistics(ranges);
+      const stats = TemporalService.getRangeStatistics(ranges);
 
       expect(stats.totalDuration).toBe(9 * 60 * 60 * 1000); // 9 hours total (5+4)
       expect(stats.coverage).toBeLessThan(1); // Union should be 6 hours, so coverage = 6/9 = 0.67
@@ -415,7 +414,7 @@ describe('TimeRangeProcessor', () => {
         granularity: 'hour'
       };
 
-      const results = TimeRangeProcessor.processTimeRangeQuery(query);
+      const results = TemporalService.processTimeRangeQuery(query);
 
       expect(results).toHaveLength(2);
       expect(results[0].isValid).toBe(true);
@@ -429,7 +428,7 @@ describe('TimeRangeProcessor', () => {
         granularity: 'day'
       };
 
-      const results = TimeRangeProcessor.processTimeRangeQuery(query);
+      const results = TemporalService.processTimeRangeQuery(query);
       expect(results).toEqual([]);
     });
   });

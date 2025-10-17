@@ -10,7 +10,8 @@ import { MemoryImportanceLevel, MemoryClassification, ProcessedLongTermMemory } 
 import { logInfo, logError } from '../../infrastructure/config/Logger';
 import { DatabaseContext } from './DatabaseContext';
 import { MemoryProcessingState, StateManager } from './StateManager';
-import { containsDangerousPatterns, SanitizationError, sanitizeString, sanitizeNamespace, ValidationError } from '../config/SanitizationUtils';
+import { SanitizationError, ValidationError } from '../config/SanitizationUtils';
+import { BaseDatabaseService } from './BaseDatabaseService';
 
 /**
  * Memory manager configuration interface
@@ -50,8 +51,7 @@ export interface MemoryDeletionOptions {
 /**
  * Dedicated manager for long-term memory operations
  */
-export class MemoryManager {
-  private databaseContext: DatabaseContext;
+export class MemoryManager extends BaseDatabaseService {
   private stateManager: StateManager;
   private config: Required<MemoryManagerConfig>;
 
@@ -59,7 +59,7 @@ export class MemoryManager {
     databaseContext: DatabaseContext,
     config: MemoryManagerConfig = {},
   ) {
-    this.databaseContext = databaseContext;
+    super(databaseContext);
     this.stateManager = new StateManager(databaseContext, {
       enableHistoryTracking: true,
       enableMetrics: true,
@@ -109,7 +109,7 @@ export class MemoryManager {
       // The strict security checks are more appropriate for user inputs, not AI-generated content
 
       // Store the memory using Prisma
-      const result = await this.databaseContext.getPrismaClient().longTermMemory.create({
+      const result = await this.prisma.longTermMemory.create({
         data: {
           originalChatId: sanitizedData.chatId,
           processedData: sanitizedData.memoryData,
@@ -207,14 +207,14 @@ export class MemoryManager {
       });
 
       // Sanitize inputs
-      const sanitizedId = sanitizeString(id, {
+      const sanitizedId = this.sanitizeString(id, {
         fieldName: 'memoryId',
         maxLength: 100,
         allowNewlines: false,
       });
 
       const sanitizedNamespace = namespace
-        ? sanitizeNamespace(namespace, { fieldName: 'namespace' })
+        ? this.sanitizeNamespace(namespace, { fieldName: 'namespace' })
         : this.config.defaultNamespace;
 
       // Build where clause with namespace filtering
@@ -223,7 +223,7 @@ export class MemoryManager {
         whereClause.namespace = sanitizedNamespace;
       }
 
-      const memory = await this.databaseContext.getPrismaClient().longTermMemory.findFirst({
+      const memory = await this.prisma.longTermMemory.findFirst({
         where: whereClause,
       });
 
@@ -290,14 +290,14 @@ export class MemoryManager {
       });
 
       // Sanitize inputs
-      const sanitizedId = sanitizeString(id, {
+      const sanitizedId = this.sanitizeString(id, {
         fieldName: 'memoryId',
         maxLength: 100,
         allowNewlines: false,
       });
 
       const sanitizedNamespace = namespace
-        ? sanitizeNamespace(namespace, { fieldName: 'namespace' })
+        ? this.sanitizeNamespace(namespace, { fieldName: 'namespace' })
         : this.config.defaultNamespace;
 
       // Validate updates if enabled
@@ -312,7 +312,7 @@ export class MemoryManager {
       }
 
       // Check if memory exists
-      const existingMemory = await this.databaseContext.getPrismaClient().longTermMemory.findFirst({
+      const existingMemory = await this.prisma.longTermMemory.findFirst({
         where: whereClause,
       });
 
@@ -325,7 +325,7 @@ export class MemoryManager {
       let hasUpdates = false;
 
       if (updates.content !== undefined) {
-        updateData.searchableContent = sanitizeString(updates.content, {
+        updateData.searchableContent = this.sanitizeString(updates.content, {
           fieldName: 'content',
           maxLength: this.config.maxContentLength,
         });
@@ -333,7 +333,7 @@ export class MemoryManager {
       }
 
       if (updates.summary !== undefined) {
-        updateData.summary = sanitizeString(updates.summary, {
+        updateData.summary = this.sanitizeString(updates.summary, {
           fieldName: 'summary',
           maxLength: 2000,
         });
@@ -352,7 +352,7 @@ export class MemoryManager {
       }
 
       if (updates.topic !== undefined) {
-        updateData.topic = updates.topic ? sanitizeString(updates.topic, {
+        updateData.topic = updates.topic ? this.sanitizeString(updates.topic, {
           fieldName: 'topic',
           maxLength: 500,
         }) : null;
@@ -375,7 +375,7 @@ export class MemoryManager {
       }
 
       if (updates.classificationReason !== undefined) {
-        updateData.classificationReason = sanitizeString(updates.classificationReason, {
+        updateData.classificationReason = this.sanitizeString(updates.classificationReason, {
           fieldName: 'classificationReason',
           maxLength: 1000,
         });
@@ -385,7 +385,7 @@ export class MemoryManager {
       if (hasUpdates) {
         updateData.extractionTimestamp = new Date(); // Update timestamp for modifications
 
-        await this.databaseContext.getPrismaClient().longTermMemory.update({
+        await this.prisma.longTermMemory.update({
           where: { id: sanitizedId },
           data: updateData,
         });
@@ -463,14 +463,14 @@ export class MemoryManager {
       });
 
       // Sanitize inputs
-      const sanitizedId = sanitizeString(id, {
+      const sanitizedId = this.sanitizeString(id, {
         fieldName: 'memoryId',
         maxLength: 100,
         allowNewlines: false,
       });
 
       const sanitizedNamespace = namespace
-        ? sanitizeNamespace(namespace, { fieldName: 'namespace' })
+        ? this.sanitizeNamespace(namespace, { fieldName: 'namespace' })
         : this.config.defaultNamespace;
 
       // Build where clause with namespace filtering
@@ -480,7 +480,7 @@ export class MemoryManager {
       }
 
       // Check if memory exists
-      const existingMemory = await this.databaseContext.getPrismaClient().longTermMemory.findFirst({
+      const existingMemory = await this.prisma.longTermMemory.findFirst({
         where: whereClause,
       });
 
@@ -494,7 +494,7 @@ export class MemoryManager {
       }
 
       // Delete the memory
-      await this.databaseContext.getPrismaClient().longTermMemory.delete({
+      await this.prisma.longTermMemory.delete({
         where: { id: sanitizedId },
       });
 
@@ -555,11 +555,11 @@ export class MemoryManager {
       });
 
       // Sanitize inputs
-      const sanitizedNamespace = sanitizeNamespace(namespace, { fieldName: 'namespace' });
+      const sanitizedNamespace = this.sanitizeNamespace(namespace, { fieldName: 'namespace' });
       const limit = Math.min(options.limit || 50, 1000); // Cap at 1000 for security
       const offset = options.offset || 0;
 
-      const memories = await this.databaseContext.getPrismaClient().longTermMemory.findMany({
+      const memories = await this.prisma.longTermMemory.findMany({
         where: {
           namespace: sanitizedNamespace === 'default' ? undefined : sanitizedNamespace,
         },
@@ -622,7 +622,7 @@ export class MemoryManager {
 
       // Sanitize inputs
       const sanitizedNamespace = namespace
-        ? sanitizeNamespace(namespace, { fieldName: 'namespace' })
+        ? this.sanitizeNamespace(namespace, { fieldName: 'namespace' })
         : this.config.defaultNamespace;
 
       const minScore = this.calculateImportanceScore(minImportance);
@@ -636,7 +636,7 @@ export class MemoryManager {
         whereClause.namespace = sanitizedNamespace;
       }
 
-      const memories = await this.databaseContext.getPrismaClient().longTermMemory.findMany({
+      const memories = await this.prisma.longTermMemory.findMany({
         where: whereClause,
         take: limit,
         orderBy: { importanceScore: 'desc' },
@@ -703,48 +703,48 @@ export class MemoryManager {
     namespace: string;
   }> {
     // Sanitize chat ID
-    const sanitizedChatId = sanitizeString(chatId, {
+    const sanitizedChatId = this.sanitizeString(chatId, {
       fieldName: 'chatId',
       maxLength: 100,
       allowNewlines: false,
     });
 
     // Sanitize namespace
-    const sanitizedNamespace = sanitizeNamespace(namespace, {
+    const sanitizedNamespace = this.sanitizeNamespace(namespace, {
       fieldName: 'namespace',
     });
 
     // Sanitize memory data
     const sanitizedMemoryData: ProcessedLongTermMemory = {
-      content: sanitizeString(memoryData.content, {
+      content: this.sanitizeString(memoryData.content, {
         fieldName: 'content',
         maxLength: this.config.maxContentLength,
       }),
-      summary: sanitizeString(memoryData.summary, {
+      summary: this.sanitizeString(memoryData.summary, {
         fieldName: 'summary',
         maxLength: 2000,
       }),
       classification: memoryData.classification,
       importance: memoryData.importance,
       conversationId: '', // Will be set by the calling function
-      topic: memoryData.topic ? sanitizeString(memoryData.topic, {
+      topic: memoryData.topic ? this.sanitizeString(memoryData.topic, {
         fieldName: 'topic',
         maxLength: 500,
       }) : undefined,
       entities: Array.isArray(memoryData.entities)
-        ? memoryData.entities.map(entity => sanitizeString(entity, {
+        ? memoryData.entities.map(entity => this.sanitizeString(entity, {
           fieldName: 'entity',
           maxLength: 200,
         }))
         : [],
       keywords: Array.isArray(memoryData.keywords)
-        ? memoryData.keywords.map(keyword => sanitizeString(keyword, {
+        ? memoryData.keywords.map(keyword => this.sanitizeString(keyword, {
           fieldName: 'keyword',
           maxLength: 100,
         }))
         : [],
       confidenceScore: memoryData.confidenceScore,
-      classificationReason: sanitizeString(memoryData.classificationReason, {
+      classificationReason: this.sanitizeString(memoryData.classificationReason, {
         fieldName: 'classificationReason',
         maxLength: 1000,
       }),
