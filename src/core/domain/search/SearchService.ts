@@ -286,41 +286,15 @@ export class SearchService implements ISearchService {
 
   /**
    * Initialize Metadata Filter strategy with configuration
-   */
-  private async initializeMetadataFilterStrategy(): Promise<void> {
+  */
+ private async initializeMetadataFilterStrategy(): Promise<void> {
     const config = this.strategyConfigs.get(SearchStrategy.METADATA_FILTER);
 
     if (config?.enabled) {
-      const fieldsConfig = config.strategySpecific?.fields || {};
-      const validationConfig = config.strategySpecific?.validation || {};
-      const metadataPerformanceConfig = config.strategySpecific?.performance || {};
-
-      const metadataConfig = {
-        fields: {
-          enableNestedAccess: true,
-          maxDepth: 5,
-          enableTypeValidation: true,
-          enableFieldDiscovery: true,
-          ...fieldsConfig,
-        },
-        validation: {
-          strictValidation: false,
-          enableCustomValidators: true,
-          failOnInvalidMetadata: false,
-          ...validationConfig,
-        },
-        performance: {
-          enableQueryOptimization: true,
-          enableResultCaching: true,
-          maxExecutionTime: 10000,
-          batchSize: 100,
-          cacheSize: 100,
-          ...metadataPerformanceConfig,
-        },
-      };
-
-      const metadataStrategy = new MetadataFilterStrategy(metadataConfig, this.dbManager);
-      this.strategies.set(SearchStrategy.METADATA_FILTER, metadataStrategy);
+      this.strategies.set(
+        SearchStrategy.METADATA_FILTER,
+        new MetadataFilterStrategy(config, this.dbManager),
+      );
     }
   }
 
@@ -405,26 +379,12 @@ export class SearchService implements ISearchService {
     );
 
     // Add Metadata Filter Strategy
-    this.strategies.set(SearchStrategy.METADATA_FILTER, new MetadataFilterStrategy({
-      fields: {
-        enableNestedAccess: true,
-        maxDepth: 5,
-        enableTypeValidation: true,
-        enableFieldDiscovery: true,
-      },
-      validation: {
-        strictValidation: false,
-        enableCustomValidators: true,
-        failOnInvalidMetadata: false,
-      },
-      performance: {
-        enableQueryOptimization: true,
-        enableResultCaching: true,
-        maxExecutionTime: 10000,
-        batchSize: 100,
-        cacheSize: 100
-      },
-    }, this.dbManager));
+    const defaultMetadataConfig = this.strategyConfigs.get(SearchStrategy.METADATA_FILTER) ||
+      this.configManager.getDefaultConfiguration(SearchStrategy.METADATA_FILTER);
+    this.strategies.set(
+      SearchStrategy.METADATA_FILTER,
+      new MetadataFilterStrategy(defaultMetadataConfig, this.dbManager),
+    );
 
     // Add Relationship Search Strategy
     const relationshipConfig = this.strategyConfigs.get(SearchStrategy.RELATIONSHIP) ||

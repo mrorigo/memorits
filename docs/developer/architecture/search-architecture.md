@@ -227,34 +227,27 @@ class TemporalFilterStrategy extends BaseSearchStrategy {
 **Advanced metadata-based queries with complex filtering.**
 
 ```typescript
-class MetadataFilterStrategy implements ISearchStrategy {
+class MetadataFilterStrategy extends BaseSearchStrategy {
   readonly name = SearchStrategy.METADATA_FILTER;
-  readonly priority = 9;
-  readonly capabilities = [SearchCapability.FILTERING, SearchCapability.METADATA_SEARCH];
+  readonly capabilities = [
+    SearchCapability.FILTERING,
+    SearchCapability.RELEVANCE_SCORING,
+  ] as const;
 
-  async search(query: SearchQuery): Promise<SearchResult[]> {
-    const metadataQuery = query as MetadataFilterQuery;
+  protected async executeSearch(query: SearchQuery): Promise<SearchResult[]> {
+    const metadataQuery = this.parseMetadataQuery(query as MetadataFilterQuery);
+    const sql = this.buildMetadataSQL(query, metadataQuery);
+    const rows = await this.databaseManager.getPrismaClient().$queryRawUnsafe(sql);
 
-    // Build complex metadata conditions
-    const metadataConditions = metadataQuery.metadataFilters.fields.map(field =>
-      this.buildMetadataCondition(field)
-    );
-
-    const sql = `
-      SELECT *,
-        ${this.buildMetadataRelevanceCalculation(metadataQuery)} as metadata_relevance
-      FROM long_term_memory
-      WHERE namespace = ?
-        AND (${metadataConditions.join(' AND ')})
-      ORDER BY metadata_relevance DESC, importanceScore DESC
-      LIMIT ?
-    `;
-
-    return this.executeQuery(sql, [
-      query.namespace,
-      query.limit || 20
-    ]);
+    return rows.map(row => this.createSearchResult(
+      row.memory_id,
+      row.searchable_content,
+      this.extractMetadata(row.metadata),
+      this.calculateMetadataRelevance(metadataQuery.fields, metadataQuery, query),
+    ));
   }
+
+  // Additional helper methods handle sanitisation, validation, aggregation, and caching.
 }
 ```
 

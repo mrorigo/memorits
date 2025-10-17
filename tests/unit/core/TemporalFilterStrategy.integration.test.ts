@@ -134,9 +134,6 @@ describe('Temporal Strategy Integration Tests', () => {
                     text: 'Show me what happened yesterday afternoon'
                 };
 
-                // Enable pattern matching for this test
-                (temporalStrategy as any).config.naturalLanguage.enablePatternMatching = true;
-
                 expect(temporalStrategy.canHandle(query)).toBe(true);
             });
 
@@ -164,7 +161,12 @@ describe('Temporal Strategy Integration Tests', () => {
                     }
                 };
 
-                const temporalQuery = (temporalStrategy as any).buildTemporalQuery(query);
+                const normalized = (temporalStrategy as any).normalizeQuery(query);
+                const temporalQuery = (temporalStrategy as any).buildTemporalQuery(normalized, {
+                    patterns: [],
+                    overallConfidence: 0,
+                    requiresContext: false,
+                });
 
                 expect(temporalQuery.ranges).toBeDefined();
                 // Should have at least the time range we provided
@@ -183,7 +185,12 @@ describe('Temporal Strategy Integration Tests', () => {
                     }
                 };
 
-                const temporalQuery = (temporalStrategy as any).buildTemporalQuery(query);
+                const normalized = (temporalStrategy as any).normalizeQuery(query);
+                const temporalQuery = (temporalStrategy as any).buildTemporalQuery(normalized, {
+                    patterns: [],
+                    overallConfidence: 0,
+                    requiresContext: false,
+                });
 
                 // Should have processed at least some of the expressions into time ranges
                 // Note: Some expressions might fail parsing, but we should get some ranges
@@ -222,7 +229,7 @@ describe('Temporal Strategy Integration Tests', () => {
 
                 // The calculation should contain the base temporal relevance logic
                 expect(calculation).toContain('EXP'); // Exponential decay function
-                expect(calculation).toContain('604800000'); // 7 days in milliseconds
+                expect(calculation).toContain('604800'); // 7 days in seconds
                 expect(calculation).toContain('CASE'); // SQL CASE statement
                 expect(calculation).toContain('created_at'); // The field being used
             });
@@ -230,35 +237,27 @@ describe('Temporal Strategy Integration Tests', () => {
 
         describe('Temporal Relevance Scoring', () => {
             it('should calculate temporal relevance for recent memories', () => {
-                const recentTime = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
-                const queryTime = new Date();
-                const query: SearchQuery = {
-                    text: 'test',
-                    filters: {
-                        temporalFilters: {
-                            timeRanges: [{
-                                start: new Date(Date.now() - 24 * 60 * 60 * 1000),
-                                end: new Date()
-                            }]
-                        }
-                    }
+                const recentRow = {
+                    created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+                    importance_score: 0.8,
                 };
                 const patterns = { patterns: [], overallConfidence: 0, requiresContext: false };
 
                 const relevance = (temporalStrategy as any).calculateTemporalRelevance(
-                    recentTime,
-                    queryTime,
-                    query,
-                    patterns
+                    recentRow,
+                    patterns,
+                    new Date()
                 );
 
-                expect(relevance).toBeGreaterThan(0.5); // Should be highly relevant
+                expect(relevance).toBeGreaterThan(0.5);
                 expect(relevance).toBeLessThanOrEqual(1);
             });
 
             it('should apply range boost for memories in specified ranges', () => {
-                const memoryTime = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
-                const queryTime = new Date();
+                const memoryRow = {
+                    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+                    importance_score: 0.6,
+                };
                 const query: SearchQuery = {
                     text: 'test',
                     filters: {
@@ -273,10 +272,9 @@ describe('Temporal Strategy Integration Tests', () => {
                 const patterns = { patterns: [], overallConfidence: 0, requiresContext: false };
 
                 const relevance = (temporalStrategy as any).calculateTemporalRelevance(
-                    memoryTime,
-                    queryTime,
-                    query,
-                    patterns
+                    memoryRow,
+                    patterns,
+                    new Date()
                 );
 
                 // Should be boosted because memory is in the specified range
@@ -314,7 +312,12 @@ describe('Temporal Strategy Integration Tests', () => {
 
                 // Should not throw error, just log warning
                 expect(() => {
-                    (temporalStrategy as any).buildTemporalQuery(query);
+                    const normalized = (temporalStrategy as any).normalizeQuery(query);
+                    (temporalStrategy as any).buildTemporalQuery(normalized, {
+                        patterns: [],
+                        overallConfidence: 0,
+                        requiresContext: false,
+                    });
                 }).not.toThrow();
             });
 
@@ -335,7 +338,7 @@ describe('Temporal Strategy Integration Tests', () => {
                 const mockPrismaClient = (mockDbManager as any).prisma;
                 mockPrismaClient.$queryRawUnsafe.mockRejectedValueOnce(new Error('Database error'));
 
-                await expect(temporalStrategy.search(query)).rejects.toThrow('Temporal filter strategy failed');
+                await expect(temporalStrategy.search(query)).rejects.toThrow('Database error in temporal_filter');
             });
         });
     });
@@ -568,7 +571,7 @@ describe('Temporal Strategy Integration Tests', () => {
 
             expect(results).toBeDefined();
             expect(results.length).toBeGreaterThan(0);
-            expect(results[0].metadata.searchStrategy).toBe(SearchStrategy.TEMPORAL_FILTER);
+            expect(results[0].strategy).toBe(SearchStrategy.TEMPORAL_FILTER);
         });
 
         it('should handle recent memories scenario with freshness boosting', async () => {

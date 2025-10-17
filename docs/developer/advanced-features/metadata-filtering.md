@@ -20,35 +20,41 @@ The metadata filtering system provides:
 The `MetadataFilterStrategy` is the main component that handles all metadata-based filtering operations:
 
 ```typescript
-import { MetadataFilterStrategy, MetadataFilterStrategyConfig } from 'memorits';
+import { MetadataFilterStrategy } from 'memorits/core/domain/search/filtering/MetadataFilterStrategy';
+import { SearchStrategy } from 'memorits/core/domain/search/types';
 
-const config: MetadataFilterStrategyConfig = {
-  fields: {
-    enableNestedAccess: true,
-    maxDepth: 5,
-    enableTypeValidation: true,
-    enableFieldDiscovery: true
+const strategy = new MetadataFilterStrategy({
+  strategyName: SearchStrategy.METADATA_FILTER,
+  enabled: true,
+  priority: 9,
+  timeout: 5000,
+  maxResults: 200,
+  strategySpecific: {
+    fields: {
+      enableNestedAccess: true,
+      maxDepth: 5,
+      enableTypeValidation: true,
+      enableFieldDiscovery: true,
+    },
+    aggregation: {
+      enableAggregation: true,
+      maxGroupFields: 10,
+      enableComplexAggregation: true,
+    },
+    validation: {
+      strictValidation: false,
+      enableCustomValidators: true,
+      failOnInvalidMetadata: false,
+    },
+    performance: {
+      enableQueryOptimization: true,
+      enableResultCaching: true,
+      maxExecutionTime: 10000,
+      batchSize: 100,
+      cacheSize: 100,
+    },
   },
-  aggregation: {
-    enableAggregation: true,
-    maxGroupFields: 10,
-    enableComplexAggregation: true
-  },
-  validation: {
-    strictValidation: false,
-    enableCustomValidators: true,
-    failOnInvalidMetadata: false
-  },
-  performance: {
-    enableQueryOptimization: true,
-    enableResultCaching: true,
-    maxExecutionTime: 10000,
-    batchSize: 100,
-    cacheSize: 100
-  }
-};
-
-const strategy = new MetadataFilterStrategy(config, databaseManager);
+}, databaseManager);
 ```
 
 ## Metadata Field Filtering

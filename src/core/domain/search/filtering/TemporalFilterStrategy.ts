@@ -290,8 +290,12 @@ export class TemporalFilterStrategy extends BaseSearchStrategy {
       text: this.sanitizeSearchText(query.text ?? ''),
     };
 
-    if (temporalQuery.temporalFilters) {
-      normalized.temporalFilters = this.normalizeTemporalFilters(temporalQuery.temporalFilters);
+    const filters =
+      temporalQuery.temporalFilters ||
+      ((query.filters as { temporalFilters?: TemporalFiltersInput } | undefined)?.temporalFilters);
+
+    if (filters) {
+      normalized.temporalFilters = this.normalizeTemporalFilters(filters);
     }
 
     return normalized;
@@ -367,7 +371,9 @@ export class TemporalFilterStrategy extends BaseSearchStrategy {
 
   private hasTemporalFilters(query: SearchQuery): boolean {
     const temporalQuery = query as TemporalFilterQuery;
-    const filters = temporalQuery.temporalFilters || (query.filters as TemporalFiltersInput | undefined);
+    const filters =
+      temporalQuery.temporalFilters ||
+      ((query.filters as { temporalFilters?: TemporalFiltersInput } | undefined)?.temporalFilters);
 
     if (!filters) {
       return false;
@@ -406,7 +412,15 @@ export class TemporalFilterStrategy extends BaseSearchStrategy {
     query: NormalizedTemporalQuery,
     patternAnalysis: PatternMatchResult,
   ): TimeRangeQuery {
-    const filters = query.temporalFilters || {};
+    const filters =
+      query.temporalFilters ||
+      ((query.filters as { temporalFilters?: TemporalFiltersInput } | undefined)?.temporalFilters) ||
+      {};
+    const safePatternAnalysis = patternAnalysis ?? {
+      patterns: [],
+      overallConfidence: 0,
+      requiresContext: false,
+    };
     const ranges: TimeRange[] = [];
 
     if (filters.timeRanges) {
@@ -431,8 +445,8 @@ export class TemporalFilterStrategy extends BaseSearchStrategy {
       });
     }
 
-    if (patternAnalysis.patterns.length > 0) {
-      patternAnalysis.patterns.forEach(pattern => {
+    if (safePatternAnalysis.patterns.length > 0) {
+      safePatternAnalysis.patterns.forEach(pattern => {
         if (pattern.normalized.start) {
           ranges.push({
             start: pattern.normalized.start,
@@ -510,6 +524,11 @@ export class TemporalFilterStrategy extends BaseSearchStrategy {
     patterns: PatternMatchResult,
   ): string {
     const conditions: string[] = [];
+    const safePatterns = patterns ?? {
+      patterns: [],
+      overallConfidence: 0,
+      requiresContext: false,
+    };
 
     if ((this.databaseManager as unknown as { currentNamespace?: string }).currentNamespace) {
       const namespace = (this.databaseManager as unknown as { currentNamespace?: string }).currentNamespace ?? '';
@@ -527,8 +546,8 @@ export class TemporalFilterStrategy extends BaseSearchStrategy {
       conditions.push(`(${rangeConditions.join(' OR ')})`);
     }
 
-    if (patterns.patterns.length > 0) {
-      const patternConditions = patterns.patterns
+    if (safePatterns.patterns.length > 0) {
+      const patternConditions = safePatterns.patterns
         .filter(pattern => pattern.normalized.start)
         .map(pattern => {
           const start = pattern.normalized.start!;
@@ -621,22 +640,28 @@ export class TemporalFilterStrategy extends BaseSearchStrategy {
   ): SearchResult[] {
     const processed: SearchResult[] = [];
     const now = new Date();
+    const safePatterns = patterns ?? {
+      patterns: [],
+      overallConfidence: 0,
+      requiresContext: false,
+    };
 
     for (const raw of results) {
       const row = raw as Partial<DatabaseQueryResult & { temporal_relevance_score?: number }>;
 
       try {
-        if (!row.memory_id) {
-          throw new Error('Missing memory_id');
+        const memoryId = row.memory_id ?? (row as Record<string, unknown>).id;
+        if (!memoryId) {
+          throw new Error('Missing memory identifier');
         }
 
         const importanceScore = row.importance_score ?? 0.5;
         const createdAt = row.created_at ? new Date(row.created_at) : new Date();
         const baseMetadata = this.parseMetadata(row.metadata ?? '{}');
-        const temporalScore = this.calculateTemporalRelevance(row, patterns, now);
+        const temporalScore = this.calculateTemporalRelevance(row, safePatterns, now);
 
         processed.push({
-          id: row.memory_id,
+          id: String(memoryId),
           content: row.searchable_content ?? '',
           metadata: query.includeMetadata ? {
             summary: row.summary ?? '',
@@ -681,15 +706,17 @@ export class TemporalFilterStrategy extends BaseSearchStrategy {
   private calculateTemporalRelevance(
     row: Partial<DatabaseQueryResult & { temporal_relevance_score?: number }>,
     patterns: PatternMatchResult,
-    now: Date,
+    now: Date | number,
   ): number {
-    const createdAt = row.created_at ? new Date(row.created_at) : now;
-    const timeDelta = Math.max(0, now.getTime() - createdAt.getTime());
+    const nowDate = now instanceof Date ? now : new Date(now);
+    const createdAt = row.created_at ? new Date(row.created_at) : nowDate;
+    const timeDelta = Math.max(0, nowDate.getTime() - createdAt.getTime());
     const recencyScore = Math.exp(-timeDelta / (7 * 24 * 60 * 60 * 1000)); // 7-day half-life
 
     let patternBoost = 1;
-    if (patterns.patterns.length > 0) {
-      const hasMatchingPattern = patterns.patterns.some(pattern => {
+    const safePatterns = patterns ?? { patterns: [], overallConfidence: 0, requiresContext: false };
+    if (safePatterns.patterns.length > 0) {
+      const hasMatchingPattern = safePatterns.patterns.some(pattern => {
         if (!pattern.normalized.start) {
           return false;
         }

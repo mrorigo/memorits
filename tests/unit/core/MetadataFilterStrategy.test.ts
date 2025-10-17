@@ -1,35 +1,94 @@
 import { MetadataField, MetadataFilterStrategy } from '../../../src/core/domain/search/filtering/MetadataFilterStrategy';
+import type { MetadataFilterStrategyConfig } from '../../../src/core/domain/search/filtering/MetadataFilterStrategy';
 import { DatabaseManager } from '../../../src/core/infrastructure/database/DatabaseManager';
 import { SearchQuery } from '../../../src/index';
+import { SearchStrategyConfig } from '../../../src/core/domain/search/SearchStrategy';
+import { SearchStrategy } from '../../../src/core/domain/search/types';
 
 describe('MetadataFilterStrategy', () => {
     let strategy: MetadataFilterStrategy;
     let mockDbManager: jest.Mocked<DatabaseManager>;
+    let mockPrisma: any;
 
-    const defaultConfig = {
-        fields: {
-            enableNestedAccess: true,
-            maxDepth: 5,
-            enableTypeValidation: true,
-            enableFieldDiscovery: true,
-        },
-        validation: {
-            strictValidation: false,
-            enableCustomValidators: true,
-            failOnInvalidMetadata: false,
-        },
+    const defaultConfig: SearchStrategyConfig = {
+        strategyName: SearchStrategy.METADATA_FILTER,
+        enabled: true,
+        priority: 9,
+        timeout: 5000,
+        maxResults: 100,
         performance: {
-            enableQueryOptimization: true,
-            enableResultCaching: false,
-            maxExecutionTime: 10000,
-            batchSize: 100,
-            cacheSize: 100,
+            enableMetrics: true,
+            enableCaching: true,
+            cacheSize: 200,
+            enableParallelExecution: false,
+        },
+        scoring: {
+            baseWeight: 0.6,
+            recencyWeight: 0.2,
+            importanceWeight: 0.4,
+            relationshipWeight: 0.1,
+        },
+        strategySpecific: {
+            fields: {
+                enableNestedAccess: true,
+                maxDepth: 5,
+                enableTypeValidation: true,
+                enableFieldDiscovery: true,
+            },
+            validation: {
+                strictValidation: false,
+                enableCustomValidators: true,
+                failOnInvalidMetadata: false,
+            },
+            performance: {
+                enableQueryOptimization: true,
+                enableResultCaching: false,
+                maxExecutionTime: 10000,
+                batchSize: 100,
+                cacheSize: 100,
+            },
         },
     };
 
+    type MetadataStrategyOverrides = {
+        fields?: Partial<MetadataFilterStrategyConfig['fields']>;
+        aggregation?: Partial<MetadataFilterStrategyConfig['aggregation']>;
+        validation?: Partial<MetadataFilterStrategyConfig['validation']>;
+        performance?: Partial<MetadataFilterStrategyConfig['performance']>;
+    };
+
+    const buildConfig = (overrides: MetadataStrategyOverrides = {}): SearchStrategyConfig => ({
+        ...defaultConfig,
+        strategySpecific: {
+            ...defaultConfig.strategySpecific,
+            ...overrides,
+            fields: {
+                ...(defaultConfig.strategySpecific as MetadataFilterStrategyConfig | undefined)?.fields,
+                ...overrides.fields,
+            },
+            aggregation: {
+                ...(defaultConfig.strategySpecific as MetadataFilterStrategyConfig | undefined)?.aggregation,
+                ...overrides.aggregation,
+            },
+            validation: {
+                ...(defaultConfig.strategySpecific as MetadataFilterStrategyConfig | undefined)?.validation,
+                ...overrides.validation,
+            },
+            performance: {
+                ...(defaultConfig.strategySpecific as MetadataFilterStrategyConfig | undefined)?.performance,
+                ...overrides.performance,
+            },
+        },
+    });
+
     beforeEach(() => {
+        mockPrisma = {
+            $queryRawUnsafe: jest.fn(),
+        } as any;
+
         mockDbManager = {
             $queryRawUnsafe: jest.fn(),
+            getPrismaClient: jest.fn(() => mockPrisma),
         } as any;
 
         strategy = new MetadataFilterStrategy(defaultConfig, mockDbManager);
@@ -158,7 +217,7 @@ describe('MetadataFilterStrategy', () => {
             const searchText = 'hello world';
             const condition = (strategy as any).buildTextSearchCondition(searchText);
 
-            expect(condition).toContain('searchable_content LIKE');
+            expect(condition).toContain('searchableContent LIKE');
             expect(condition).toContain('hello');
             expect(condition).toContain('world');
         });
@@ -246,8 +305,8 @@ describe('MetadataFilterStrategy', () => {
             const grouped = (strategy as any).groupResultsByFields(mockResults, ['category']);
 
             expect(grouped.size).toBe(2);
-            expect(grouped.get('category:work')).toHaveLength(2);
-            expect(grouped.get('category:personal')).toHaveLength(1);
+            expect(grouped.get('category:work')?.length).toBe(2);
+            expect(grouped.get('category:personal')?.length).toBe(1);
         });
 
         it('should create aggregated results', () => {
@@ -273,29 +332,26 @@ describe('MetadataFilterStrategy', () => {
                 groupBy: ['category']
             };
 
-            const aggregatedResult = (strategy as any).createAggregatedResult('work', mockGroup, aggregation);
+            const aggregatedResult = (strategy as any).createAggregatedResult('category:work', mockGroup, aggregation);
 
             expect(aggregatedResult.metadata.aggregated).toBe(true);
             expect(aggregatedResult.metadata.statistics.count).toBe(2);
             expect(aggregatedResult.metadata.statistics.averageScore).toBeCloseTo(0.85, 10);
+            expect(aggregatedResult.metadata.groupKey).toBe('category:work');
         });
     });
 
     describe('Configuration Validation', () => {
         it('should validate strategy configuration', () => {
-            const validConfig = {
-                ...defaultConfig,
-                fields: { ...defaultConfig.fields, maxDepth: 5 },
-                performance: { ...defaultConfig.performance, maxExecutionTime: 5000 }
-            };
-
             const result = (strategy as any).validateStrategyConfiguration();
             expect(result).toBe(true);
         });
 
         it('should reject invalid maxDepth', () => {
             const invalidStrategy = new MetadataFilterStrategy(
-                { ...defaultConfig, fields: { ...defaultConfig.fields, maxDepth: 15 } },
+                buildConfig({
+                    fields: { maxDepth: 25 },
+                }),
                 mockDbManager
             );
 
@@ -325,12 +381,11 @@ describe('MetadataFilterStrategy', () => {
             const now = Date.now();
 
             // Add expired entry
-            cache.set('expired', { result: [], timestamp: now - 60000 });
+            cache.set('expired', { result: [], timestamp: now - 10 * 60 * 1000 });
             // Add valid entry
             cache.set('valid', { result: [], timestamp: now });
 
             (strategy as any).cache = cache;
-            (strategy as any).CACHE_TTL = 30000; // 30 seconds
 
             const initialSize = cache.size;
             (strategy as any).cleanupCache();
@@ -350,9 +405,10 @@ describe('MetadataFilterStrategy', () => {
                 }
             } as any;
 
-            (mockDbManager as any).$queryRawUnsafe.mockRejectedValue(new Error('Database error'));
+            const prisma = mockDbManager.getPrismaClient() as any;
+            prisma.$queryRawUnsafe.mockRejectedValue(new Error('Database error'));
 
-            await expect(strategy.search(query)).rejects.toThrow('Metadata filter strategy failed');
+            await expect(strategy.search(query)).rejects.toThrow('metadata_filter');
         });
 
         it('should handle invalid metadata gracefully', () => {
