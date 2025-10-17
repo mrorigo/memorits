@@ -38,14 +38,20 @@ Boolean values such as `MEMORI_AUTO_INGEST` are parsed with safe `true`/`false` 
 
 ## 3. Prepare the database
 
-Memorits persists to SQLite via Prisma. Run the migration setup once before interacting with the library:
+Memorits persists to SQLite via Prisma. Run the bundled CLI once before interacting with the library:
+
+```bash
+npx memorits init-db --url file:./memori.db
+```
+
+The command wraps `prisma db push` using the schema shipped with the package and generates the Prisma client automatically. If you prefer running Prisma manually you can still execute:
 
 ```bash
 npm run prisma:push
 npm run prisma:generate
 ```
 
-Both steps are required—the first synchronises the schema, the second emits the Prisma client used throughout `src/core/infrastructure/database`.
+Both steps are required when running Prisma directly—the first synchronises the schema, the second emits the Prisma client used throughout `src/core/infrastructure/database`.
 
 ## 4. Create your first MemoriAI instance
 

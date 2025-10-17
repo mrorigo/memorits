@@ -92,6 +92,14 @@ const memories = await memori.searchMemories('TypeScript', {
 console.log(`Found ${memories.length} relevant memories`);
 ```
 
+### Initialize the database
+
+Run the bundled CLI once to push the Prisma schema to your SQLite db:
+
+```bash
+npx memorits init-db --url file:./memori.db
+```
+
 ### OpenAI Drop-in Replacement with Memory Processing
 
 **Transform your OpenAI code with zero breaking changes and integrated memory processing:**
