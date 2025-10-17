@@ -10,7 +10,6 @@ describe('PrismaConsolidationRepository (Optimized)', () => {
   let testContext: Awaited<ReturnType<typeof beforeEachTest>>;
 
   beforeEach(async () => {
-    // 🚀 OPTIMIZED: Use shared database instead of creating per-test files
     testContext = await beforeEachTest('unit', 'PrismaConsolidationRepository');
     prisma = testContext.prisma;
 
@@ -687,7 +686,7 @@ describe('PrismaConsolidationRepository (Optimized)', () => {
 
       expect(result.updated).toBe(1);
       expect(result.errors.length).toBe(1);
-      expect(result.errors[0]).toContain('No record was found for an update');
+      expect(result.errors[0]).toContain('Memory not found: non-existent-memory');
     });
 
     it('should handle empty updates array', async () => {

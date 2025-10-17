@@ -709,6 +709,24 @@ export class PrismaConsolidationRepository {
       let updated = 0;
       const errors: string[] = [];
 
+      // Get all memory IDs to check existence first
+      const memoryIds = updates.map(u => sanitizeString(u.memoryId, {
+        fieldName: 'memoryId',
+        maxLength: 100,
+        allowNewlines: false,
+      }));
+
+      const targetNamespace = namespace || 'default';
+      const existingMemories = await this.prisma.longTermMemory.findMany({
+        where: {
+          id: { in: memoryIds },
+          namespace: targetNamespace
+        },
+        select: { id: true }
+      });
+
+      const existingIds = new Set(existingMemories.map(m => m.id));
+
       // Process each update
       for (const update of updates) {
         try {
@@ -731,10 +749,16 @@ export class PrismaConsolidationRepository {
             markedAsDuplicateAt: update.markedAsDuplicateAt,
           };
 
+          // Check if memory exists before attempting update
+          if (!existingIds.has(sanitizedUpdate.memoryId)) {
+            errors.push(`Memory not found: ${sanitizedUpdate.memoryId}`);
+            continue;
+          }
+
           await this.prisma.longTermMemory.update({
             where: {
               id: sanitizedUpdate.memoryId,
-              namespace: namespace || 'default'
+              namespace: targetNamespace
             },
             data: {
               duplicateOf: sanitizedUpdate.duplicateOf,
