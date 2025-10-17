@@ -557,13 +557,13 @@ export class RelationshipManager {
           OR: [
             {
               relatedMemoriesJson: {
-                path: ['targetMemoryId'],
+                path: 'targetMemoryId',
                 equals: sanitizedMemoryId,
               } as any,
             },
             {
               supersedesJson: {
-                path: ['targetMemoryId'],
+                path: 'targetMemoryId',
                 equals: sanitizedMemoryId,
               } as any,
             },

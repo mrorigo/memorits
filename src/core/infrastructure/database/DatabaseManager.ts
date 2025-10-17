@@ -403,6 +403,9 @@ export class DatabaseManager {
 
 
   async close(): Promise<void> {
+    // Stop consolidation scheduling to clear intervals
+    this.stopConsolidationScheduling();
+
     // Cleanup search index manager
     if (this.searchIndexManager) {
       this.searchIndexManager.cleanup();

@@ -83,7 +83,18 @@ export class SearchManager extends BaseDatabaseService {
 
       // Use SearchService if available for enhanced search capabilities
       if (this.searchService) {
-        results = await this.searchWithSearchService(query, normalizedOptions, startTime);
+        try {
+          results = await this.searchWithSearchService(query, normalizedOptions, startTime);
+        } catch (searchServiceError) {
+          logError('SearchService failed, falling back to FTS coordination', {
+            component: 'SearchManager',
+            error: searchServiceError instanceof Error ? searchServiceError.message : String(searchServiceError),
+            queryLength: query.length,
+          });
+
+          // Fallback to FTS coordination when SearchService fails
+          results = await this.searchWithFTSCoordination(query, normalizedOptions, startTime);
+        }
       } else {
         // Fallback to direct FTSManager coordination
         results = await this.searchWithFTSCoordination(query, normalizedOptions, startTime);
@@ -132,58 +143,77 @@ export class SearchManager extends BaseDatabaseService {
       throw new Error('SearchService not available');
     }
 
-    // Convert SearchOptions to SearchQuery
-    const searchQuery: SearchQuery = {
-      text: query,
-      limit: options.limit,
-      offset: 0, // Not directly supported in SearchOptions, default to 0
-      includeMetadata: options.includeMetadata,
-      filters: options.minImportance || options.categories || options.temporalFilters ? {
-        minImportance: options.minImportance,
-        categories: options.categories,
-        ...(options.temporalFilters && { temporalFilters: options.temporalFilters }),
-      } : undefined,
-      filterExpression: options.filterExpression,
-    };
+    try {
+      // Convert SearchOptions to SearchQuery
+      const searchQuery: SearchQuery = {
+        text: query,
+        limit: options.limit,
+        offset: 0, // Not directly supported in SearchOptions, default to 0
+        includeMetadata: options.includeMetadata,
+        filters: options.minImportance || options.categories || options.temporalFilters ? {
+          minImportance: options.minImportance,
+          categories: options.categories,
+          ...(options.temporalFilters && { temporalFilters: options.temporalFilters }),
+        } : undefined,
+        filterExpression: options.filterExpression,
+      };
 
-    // Execute search using SearchService
-    const searchResults = await this.searchService.search(searchQuery);
+      // Execute search using SearchService
+      const searchResults = await this.searchService.search(searchQuery);
 
-    // Transform SearchResult[] to MemorySearchResult[]
-    const results = searchResults.map((result: SearchResult) => ({
-      id: result.id,
-      content: result.content,
-      summary: result.metadata?.summary as string || '',
-      classification: (result.metadata?.category as string || 'unknown') as MemoryClassification,
-      importance: (result.metadata?.importance as string || 'medium') as MemoryImportanceLevel,
-      topic: result.metadata?.category as string || undefined,
-      entities: [],
-      keywords: [],
-      confidenceScore: result.score,
-      classificationReason: result.strategy,
-      metadata: options.includeMetadata ? {
-        searchScore: result.score,
-        searchStrategy: result.strategy,
-        memoryType: result.metadata?.memoryType as string || 'long_term',
-        category: result.metadata?.category as string,
-        importanceScore: result.metadata?.importanceScore as number || 0.5,
-      } : undefined,
-    }));
+      // Transform SearchResult[] to MemorySearchResult[]
+      const results = searchResults.map((result: SearchResult) => ({
+        id: result.id,
+        content: result.content,
+        summary: result.metadata?.summary as string || '',
+        classification: (result.metadata?.category as string || 'unknown') as MemoryClassification,
+        importance: (result.metadata?.importance as string || 'medium') as MemoryImportanceLevel,
+        topic: result.metadata?.category as string || undefined,
+        entities: [],
+        keywords: [],
+        confidenceScore: result.score,
+        classificationReason: result.strategy,
+        metadata: options.includeMetadata ? {
+          searchScore: result.score,
+          searchStrategy: result.strategy,
+          memoryType: result.metadata?.memoryType as string || 'long_term',
+          category: result.metadata?.category as string,
+          importanceScore: result.metadata?.importanceScore as number || 0.5,
+        } : undefined,
+      }));
 
-    const latency = Date.now() - startTime;
+      const latency = Date.now() - startTime;
 
-    // Update statistics
-    this.updateSearchStatistics('search_service', latency, true);
+      // Update statistics
+      this.updateSearchStatistics('search_service', latency, true);
 
-    logInfo('Search completed using SearchService', {
-      component: 'SearchManager',
-      strategy: 'search_service',
-      resultCount: results.length,
-      latency,
-      queryLength: query.length,
-    });
+      logInfo('Search completed using SearchService', {
+        component: 'SearchManager',
+        strategy: 'search_service',
+        resultCount: results.length,
+        latency,
+        queryLength: query.length,
+      });
 
-    return results;
+      return results;
+
+    } catch (error) {
+      const latency = Date.now() - startTime;
+
+      logError('SearchService failed, attempting fallback', {
+        component: 'SearchManager',
+        strategy: 'search_service',
+        error: error instanceof Error ? error.message : String(error),
+        latency,
+        queryLength: query.length,
+      });
+
+      // Update statistics for failed SearchService
+      this.updateSearchStatistics('search_service', latency, false);
+
+      // Throw error to trigger fallback to FTS coordination in main method
+      throw error;
+    }
   }
 
   /**

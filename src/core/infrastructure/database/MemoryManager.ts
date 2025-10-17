@@ -87,7 +87,7 @@ export class MemoryManager extends BaseDatabaseService {
    */
   async storeLongTermMemory(
     memoryData: ProcessedLongTermMemory,
-    chatId: string,
+    chatId: string | null,
     namespace: string = this.config.defaultNamespace,
   ): Promise<string> {
     const startTime = Date.now();
@@ -218,10 +218,7 @@ export class MemoryManager extends BaseDatabaseService {
         : this.config.defaultNamespace;
 
       // Build where clause with namespace filtering
-      const whereClause: any = { id: sanitizedId };
-      if (sanitizedNamespace !== 'default') {
-        whereClause.namespace = sanitizedNamespace;
-      }
+      const whereClause: any = { id: sanitizedId, namespace: sanitizedNamespace };
 
       const memory = await this.prisma.longTermMemory.findFirst({
         where: whereClause,
@@ -306,10 +303,7 @@ export class MemoryManager extends BaseDatabaseService {
       }
 
       // Build where clause with namespace filtering
-      const whereClause: any = { id: sanitizedId };
-      if (sanitizedNamespace !== 'default') {
-        whereClause.namespace = sanitizedNamespace;
-      }
+      const whereClause: any = { id: sanitizedId, namespace: sanitizedNamespace };
 
       // Check if memory exists
       const existingMemory = await this.prisma.longTermMemory.findFirst({
@@ -474,10 +468,8 @@ export class MemoryManager extends BaseDatabaseService {
         : this.config.defaultNamespace;
 
       // Build where clause with namespace filtering
-      const whereClause: any = { id: sanitizedId };
-      if (sanitizedNamespace !== 'default') {
-        whereClause.namespace = sanitizedNamespace;
-      }
+      // Since the database schema defaults namespace to 'default', we can simplify this
+      const whereClause: any = { id: sanitizedId, namespace: sanitizedNamespace };
 
       // Check if memory exists
       const existingMemory = await this.prisma.longTermMemory.findFirst({
@@ -559,10 +551,11 @@ export class MemoryManager extends BaseDatabaseService {
       const limit = Math.min(options.limit || 50, 1000); // Cap at 1000 for security
       const offset = options.offset || 0;
 
+      // Build where clause with namespace filtering
+      const whereClause: any = { namespace: sanitizedNamespace };
+
       const memories = await this.prisma.longTermMemory.findMany({
-        where: {
-          namespace: sanitizedNamespace === 'default' ? undefined : sanitizedNamespace,
-        },
+        where: whereClause,
         take: limit,
         skip: offset,
         orderBy: { extractionTimestamp: 'desc' },
@@ -630,11 +623,8 @@ export class MemoryManager extends BaseDatabaseService {
 
       const whereClause: any = {
         importanceScore: { gte: minScore },
+        namespace: sanitizedNamespace,
       };
-
-      if (sanitizedNamespace !== 'default') {
-        whereClause.namespace = sanitizedNamespace;
-      }
 
       const memories = await this.prisma.longTermMemory.findMany({
         where: whereClause,
@@ -695,24 +685,55 @@ export class MemoryManager extends BaseDatabaseService {
    */
   private async validateAndSanitizeMemoryInput(
     memoryData: ProcessedLongTermMemory,
-    chatId: string,
+    chatId: string | null,
     namespace: string,
   ): Promise<{
     memoryData: ProcessedLongTermMemory;
-    chatId: string;
+    chatId: string | null;
     namespace: string;
   }> {
-    // Sanitize chat ID
-    const sanitizedChatId = this.sanitizeString(chatId, {
+    // Sanitize chat ID (handle null values)
+    const sanitizedChatId = chatId ? this.sanitizeString(chatId, {
       fieldName: 'chatId',
       maxLength: 100,
       allowNewlines: false,
-    });
+    }) : null;
 
     // Sanitize namespace
     const sanitizedNamespace = this.sanitizeNamespace(namespace, {
       fieldName: 'namespace',
     });
+
+    // Validate enum values before sanitization
+    const validImportanceLevels = Object.values(MemoryImportanceLevel);
+    if (!validImportanceLevels.includes(memoryData.importance)) {
+      throw new ValidationError(
+        `Invalid importance level: ${memoryData.importance}`,
+        'importance',
+        memoryData.importance,
+        'enum_validation',
+      );
+    }
+
+    const validClassifications = Object.values(MemoryClassification);
+    if (!validClassifications.includes(memoryData.classification)) {
+      throw new ValidationError(
+        `Invalid classification: ${memoryData.classification}`,
+        'classification',
+        memoryData.classification,
+        'enum_validation',
+      );
+    }
+
+    // Validate confidence score range
+    if (memoryData.confidenceScore < 0 || memoryData.confidenceScore > 1) {
+      throw new ValidationError(
+        'Confidence score must be between 0 and 1',
+        'confidenceScore',
+        memoryData.confidenceScore,
+        'range_validation',
+      );
+    }
 
     // Sanitize memory data
     const sanitizedMemoryData: ProcessedLongTermMemory = {
