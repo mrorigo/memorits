@@ -1,3 +1,9 @@
+> **🚨 Important Notice: Repository Migration**
+>
+> **Memorits has become the official `memori-typescript` repository and is now hosted at [https://github.com/GibsonAI/memori-typescript](https://github.com/GibsonAI/memori-typescript).**
+>
+> This repository will no longer be maintained. Please update your bookmarks and references to use the new official repository location.
+
 <img src="docs/memorits.jpg">
 
 # 🎯 Memorits: Memory Engine for AI Applications
