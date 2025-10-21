@@ -1,18 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorits - Enterprise Memory Engine for AI Applications</title>
-    <meta name="description"
-        content="🚀 Enterprise-grade memory management for AI applications. Scalable, secure, and reliable persistent memory with advanced search capabilities. Built for production environments.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Memorits - Memory Engine for AI Applications</title>
+    <meta name="description" content="Transform your AI into a context-aware, learning system with Memorits. TypeScript memory engine for AI conversations with structured memory management.">
+    <meta name="keywords" content="AI memory, TypeScript, OpenAI, memory management, AI conversations, enterprise AI, context awareness">
+    <meta name="author" content="Memorits">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://memorits.dev">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://memorits.dev">
+    <meta property="og:title" content="Memorits - Memory Engine for AI Applications">
+    <meta property="og:description" content="Transform your AI into a context-aware, learning system with Memorits. TypeScript memory engine for AI conversations with structured memory management.">
+    <meta property="og:image" content="/docs/memorits.jpg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://memorits.dev">
+    <meta property="twitter:title" content="Memorits - Memory Engine for AI Applications">
+    <meta property="twitter:description" content="Transform your AI into a context-aware, learning system with Memorits. TypeScript memory engine for AI conversations with structured memory management.">
+    <meta property="twitter:image" content="/docs/memorits.jpg">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Memorits",
+      "description": "TypeScript memory engine for AI conversations with structured memory management",
+      "url": "https://memorits.dev",
+      "downloadUrl": "https://npmjs.com/package/memorits",
+      "operatingSystem": "Cross-platform",
+      "applicationCategory": "DeveloperApplication",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Memorits"
+      },
+      "programmingLanguage": "TypeScript",
+      "softwareVersion": "1.0.0"
+    }
+    </script>
     <style>
         * {
             margin: 0;
@@ -20,382 +58,512 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --primary-color: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary-color: #06b6d4;
+            --accent-color: #8b5cf6;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-light: #9ca3af;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-dark: #0f172a;
+            --border-color: #e5e7eb;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+        }
+
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
-            color: #1a202c;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            min-height: 100vh;
+            color: var(--text-primary);
+            background-color: var(--bg-primary);
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 0 2rem;
+            padding: 0 20px;
+        }
+
+        /* Navigation */
+        .navbar {
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border-color);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 20px;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .cta-button {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+        }
+
+        /* Ensure nav CTA button has proper contrast */
+        .nav-links .cta-button {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .nav-links .cta-button:hover {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        .cta-button:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.3);
+        }
+
+        .cta-secondary {
+            background: transparent;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .cta-secondary:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        /* Fix secondary button colors in blue CTA section */
+        .cta-section .cta-secondary {
+            color: white;
+            border-color: white;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .cta-section .cta-secondary:hover {
+            background: white;
+            color: var(--primary-color);
+            border-color: white;
         }
 
         /* Hero Section */
         .hero {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
+            padding: 120px 0 80px;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
             position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 80%, rgba(37, 99, 235, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+        }
+
+        .hero .container {
+            position: relative;
+            z-index: 1;
         }
 
         .hero-content {
-            max-width: 1000px;
-            z-index: 2;
+            text-align: center;
+            max-width: 800px;
+            margin: 0 auto;
         }
 
         .hero h1 {
-            font-size: clamp(2.5rem, 6vw, 4.5rem);
-            font-weight: 900;
+            font-size: 3.5rem;
+            font-weight: 800;
             margin-bottom: 1.5rem;
-            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #1d4ed8 100%);
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color), var(--accent-color));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             line-height: 1.1;
         }
 
-        .hero-subtitle {
-            font-size: clamp(1.3rem, 2.5vw, 1.8rem);
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
             margin-bottom: 2rem;
-            color: #f1f5f9;
-            font-weight: 600;
-            line-height: 1.4;
+            line-height: 1.6;
         }
 
-        .hero-description {
-            font-size: clamp(1.1rem, 2vw, 1.3rem);
-            margin-bottom: 3rem;
-            color: #cbd5e1;
-            line-height: 1.7;
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        /* Enterprise Features */
-        .enterprise-highlights {
+        .hero-cta {
             display: flex;
+            gap: 1rem;
             justify-content: center;
-            gap: 2rem;
-            margin: 3rem 0;
+            align-items: center;
+            margin-bottom: 3rem;
             flex-wrap: wrap;
         }
 
-        .enterprise-badge {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            border-radius: 50px;
-            padding: 0.75rem 1.5rem;
-            color: #60a5fa;
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .enterprise-badge i {
-            color: #10b981;
-        }
-
-        /* Code Showcase */
-        .code-showcase {
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            border-radius: 20px;
-            padding: 1.5rem;
-            margin: 2rem 0;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        .code-comparison {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-            margin: 1.5rem 0;
-        }
-
-        .code-comparison * {
-            text-align: left !important;
-        }
-
-        .code-block {
-            background: rgba(0, 0, 0, 0.6);
+        .code-preview {
+            background: var(--bg-dark);
             border-radius: 12px;
-            padding: 1.2rem;
-            border-left: 4px solid #3b82f6;
-            text-align: left;
-        }
-
-        .code-block:before {
-            content: attr(data-title);
-            display: block;
-            color: #60a5fa;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-            text-align: left;
-        }
-
-        .code-block code {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-            color: #e2e8f0;
-            line-height: 1.4;
-            text-align: left;
-            display: block;
-            white-space: pre;
-        }
-
-        .highlight {
-            color: #60a5fa;
-            font-weight: 600;
-        }
-
-        .enterprise-highlight {
-            color: #10b981;
-            font-weight: 600;
-        }
-
-        /* CTA Buttons */
-        .cta-buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            align-items: center;
-            margin: 3rem 0;
-        }
-
-        .cta-button {
-            padding: 1.2rem 2.5rem;
-            border-radius: 12px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            min-width: 200px;
-            justify-content: center;
-            border: 2px solid transparent;
-        }
-
-        .cta-primary {
-            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-            color: white;
-            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4);
-        }
-
-        .cta-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 40px rgba(59, 130, 246, 0.6);
-        }
-
-        .cta-secondary {
-            background: rgba(16, 185, 129, 0.1);
-            color: #10b981;
-            border: 2px solid rgba(16, 185, 129, 0.3);
-        }
-
-        .cta-secondary:hover {
-            background: rgba(16, 185, 129, 0.2);
-            transform: translateY(-2px);
-        }
-
-        /* Enterprise Features */
-        .enterprise-features {
-            padding: 6rem 0;
-            background: rgba(15, 23, 42, 0.5);
-        }
-
-        .section-title {
-            text-align: center;
-            color: white;
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-            font-weight: 800;
-        }
-
-        .section-subtitle {
-            text-align: center;
-            color: #cbd5e1;
-            font-size: 1.2rem;
-            margin-bottom: 4rem;
+            padding: 2rem;
+            margin: 2rem auto;
             max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: left;
+        }
+
+        .code-preview::before {
+            content: '📝 Quick Start';
+            position: absolute;
+            top: -10px;
+            left: 20px;
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .code-preview pre {
+            background: transparent;
+            padding: 0;
+            margin: 0;
+            color: #e5e7eb;
+            font-family: 'Fira Code', 'Monaco', 'Menlo', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            overflow-x: auto;
+        }
+
+        .comment {
+            color: #6b7280;
+        }
+
+        .keyword {
+            color: #c084fc;
+        }
+
+        .string {
+            color: #34d399;
+        }
+
+        .function {
+            color: #60a5fa;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 80px 0;
+            background: var(--bg-primary);
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-header h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .section-header p {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
         }
 
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 2rem;
-            margin-top: 3rem;
         }
 
         .feature-card {
-            background: rgba(30, 41, 59, 0.8);
-            padding: 2.5rem;
+            background: var(--bg-secondary);
+            padding: 2rem;
             border-radius: 16px;
-            border: 1px solid rgba(59, 130, 246, 0.2);
+            border: 1px solid var(--border-color);
             transition: all 0.3s ease;
-            text-align: left;
         }
 
         .feature-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(59, 130, 246, 0.4);
-            box-shadow: 0 20px 60px rgba(59, 130, 246, 0.1);
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            border-color: var(--primary-color);
         }
 
         .feature-icon {
             width: 60px;
             height: 60px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             border-radius: 12px;
-            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-            margin-bottom: 1.5rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
-        }
-
-        .feature-title {
-            font-size: 1.4rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            color: white;
-        }
-
-        .feature-description {
-            color: #cbd5e1;
-            line-height: 1.6;
-            font-size: 0.95rem;
-        }
-
-        /* Enterprise Metrics */
-        .enterprise-metrics {
-            padding: 4rem 0;
-            background: rgba(0, 0, 0, 0.3);
-            border-top: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 2rem;
-        }
-
-        .metric-item {
-            text-align: center;
-            padding: 2rem;
-            background: rgba(30, 41, 59, 0.6);
-            border-radius: 16px;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .metric-number {
-            font-size: 3rem;
-            font-weight: 900;
-            color: #10b981;
-            margin-bottom: 0.5rem;
-        }
-
-        .metric-label {
-            color: #94a3b8;
-            font-size: 0.9rem;
-            font-weight: 600;
-        }
-
-        .metric-description {
-            color: #64748b;
-            font-size: 0.8rem;
-            margin-top: 0.5rem;
-        }
-
-        /* Integration Showcase */
-        .integration-showcase {
-            padding: 6rem 0;
-            background: rgba(15, 23, 42, 0.5);
-        }
-
-        .integration-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 3rem;
-            align-items: center;
-        }
-
-        .integration-visual {
-            background: rgba(30, 41, 59, 0.8);
-            padding: 2rem;
-            border-radius: 16px;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .integration-visual h3 {
-            color: white;
             margin-bottom: 1.5rem;
-            font-size: 1.3rem;
+            font-size: 1.5rem;
+            color: white;
         }
 
-        .integration-diagram {
-            background: rgba(0, 0, 0, 0.6);
-            border-radius: 12px;
-            padding: 1.5rem;
-            font-family: 'JetBrains Mono', monospace;
-            color: #e2e8f0;
-            font-size: 0.85rem;
-            line-height: 1.8;
+        .feature-card h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
         }
 
-        .integration-benefits {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
+        .feature-card p {
+            color: var(--text-secondary);
+            line-height: 1.6;
         }
 
-        .integration-benefit {
+        /* Architecture Section */
+        .architecture {
+            padding: 80px 0;
+            background: var(--bg-secondary);
+        }
+
+        .architecture-diagram {
+            background: var(--bg-primary);
+            border-radius: 16px;
+            padding: 3rem;
+            margin: 3rem 0;
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .arch-item {
             display: flex;
             align-items: center;
             gap: 1rem;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
         }
 
-        .benefit-icon {
+        .arch-icon {
             width: 40px;
             height: 40px;
+            background: var(--primary-color);
             border-radius: 8px;
-            background: rgba(16, 185, 129, 0.2);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #10b981;
-        }
-
-        .benefit-text h4 {
             color: white;
-            font-size: 1.1rem;
-            margin-bottom: 0.25rem;
+            font-weight: bold;
         }
 
-        .benefit-text p {
-            color: #cbd5e1;
-            font-size: 0.9rem;
+        /* Use Cases */
+        .use-cases {
+            padding: 80px 0;
+            background: var(--bg-primary);
+        }
+
+        .use-case-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .use-case-card:hover {
+            border-color: var(--secondary-color);
+            transform: translateY(-4px);
+        }
+
+        .code-example {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: left;
+        }
+
+        .code-example pre {
+            color: #e5e7eb;
+            font-family: 'Fira Code', 'Monaco', 'Menlo', monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+        /* Installation Section */
+        .installation {
+            padding: 80px 0;
+            background: var(--bg-secondary);
+        }
+
+        .install-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .tab-button {
+            padding: 1rem 1.5rem;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        .tab-content {
+            display: none;
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Technical Specs */
+        .tech-specs {
+            padding: 80px 0;
+            background: var(--bg-primary);
+        }
+
+        .spec-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+
+        .spec-item {
+            text-align: center;
+            padding: 2rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .spec-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .spec-label {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            padding: 80px 0;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            text-align: center;
+        }
+
+        .cta-section h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .cta-section p {
+            font-size: 1.125rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
         }
 
         /* Footer */
         .footer {
-            padding: 3rem 0;
+            background: var(--bg-dark);
+            color: white;
+            padding: 40px 0;
             text-align: center;
-            border-top: 1px solid rgba(59, 130, 246, 0.2);
         }
 
         .footer-links {
@@ -406,472 +574,487 @@
             flex-wrap: wrap;
         }
 
-        .footer-link {
-            color: #94a3b8;
+        .footer-links a {
+            color: var(--text-light);
             text-decoration: none;
             transition: color 0.3s ease;
-            font-weight: 500;
         }
 
-        .footer-link:hover {
-            color: #60a5fa;
+        .footer-links a:hover {
+            color: var(--primary-color);
         }
 
-        .footer-text {
-            color: #64748b;
-            font-size: 0.9rem;
+        /* Performance optimizations */
+        .hero-content, .feature-card, .use-case-card, .spec-item {
+            will-change: transform;
         }
 
-        /* Responsive */
+        /* Reduce motion for users who prefer it */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Responsive Design */
         @media (max-width: 768px) {
-            .container {
-                padding: 0 1rem;
+            .hero h1 {
+                font-size: 2.5rem;
             }
 
-            .enterprise-highlights {
+            .hero-cta {
                 flex-direction: column;
-                align-items: center;
-                gap: 1rem;
+                align-items: stretch;
+            }
+
+            .nav-links {
+                display: none;
             }
 
             .features-grid {
                 grid-template-columns: 1fr;
-                gap: 1.5rem;
             }
 
-            .integration-grid {
+            .spec-grid {
                 grid-template-columns: 1fr;
-                gap: 2rem;
             }
 
-            .metrics-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 1.5rem;
+            .hero {
+                padding: 100px 0 60px;
+            }
+
+            .container {
+                padding: 0 16px;
+            }
+
+            .navbar {
+                background: rgba(255, 255, 255, 0.98);
             }
         }
 
         @media (max-width: 480px) {
             .hero h1 {
-                font-size: 2.5rem;
+                font-size: 2rem;
             }
 
-            .hero-subtitle {
-                font-size: 1.2rem;
+            .hero p {
+                font-size: 1.125rem;
             }
 
-            .enterprise-badge {
-                padding: 0.5rem 1rem;
-                font-size: 0.8rem;
+            .feature-card, .use-case-card {
+                padding: 1.5rem;
             }
 
-            .metrics-grid {
-                grid-template-columns: 1fr;
+            .code-preview {
+                padding: 1.5rem;
+                margin: 1rem auto;
             }
 
-            .metric-number {
-                font-size: 2.5rem;
+            .cta-button, .cta-secondary {
+                padding: 1rem 1.5rem;
+                font-size: 0.9rem;
             }
         }
+
+        /* High contrast mode support */
+        @media (prefers-contrast: high) {
+            :root {
+                --border-color: #000000;
+                --text-secondary: #000000;
+            }
+
+            .feature-card, .use-case-card, .spec-item {
+                border-width: 2px;
+            }
+        }
+
+        /* Print styles */
+        @media print {
+            .navbar, .cta-section {
+                display: none;
+            }
+
+            .hero, .features, .architecture, .use-cases {
+                page-break-inside: avoid;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in-up {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        /* Loading animation for code examples */
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        /* Syntax highlighting for code blocks */
+        .hljs-keyword { color: #c084fc; }
+        .hljs-string { color: #34d399; }
+        .hljs-comment { color: #6b7280; }
+        .hljs-function { color: #60a5fa; }
+        .hljs-number { color: #fbbf24; }
+        .hljs-operator { color: #e5e7eb; }
     </style>
 </head>
-
 <body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <div class="logo-icon">M</div>
+                <span>Memorits</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#architecture">Architecture</a>
+                <a href="#use-cases">Use Cases</a>
+                <a href="#installation">Installation</a>
+                <a href="#docs" class="cta-button">Get Started</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
     <section class="hero">
         <div class="container">
-            <div class="hero-content">
-                <h1>Enterprise Memory Engine</h1>
-                <p class="hero-subtitle">Production-Ready Persistent Memory for AI Applications</p>
-                <p class="hero-description">
-                    Scalable, secure, and reliable memory management designed for production AI deployments.
-                    Advanced search capabilities, enterprise-grade architecture, and seamless integration with existing systems.
-                </p>
+            <div class="hero-content animate-fade-in-up">
+                <h1>Memory Engine for AI Applications</h1>
+                <p>Transform your AI into a context-aware, learning system that remembers conversations, builds relationships between memories, and maintains context across sessions.</p>
 
-                <div class="enterprise-highlights">
-                    <span class="enterprise-badge">
-                        <i class="fas fa-code"></i>
-                        Production Ready
-                    </span>
-                    <span class="enterprise-badge">
-                        <i class="fas fa-expand-arrows-alt"></i>
-                        Auto-Scaling
-                    </span>
-                    <span class="enterprise-badge">
-                        <i class="fas fa-lock"></i>
-                        Enterprise Security
-                    </span>
-                    <span class="enterprise-badge">
-                        <i class="fas fa-chart-line"></i>
-                        High Performance
-                    </span>
+                <div class="hero-cta">
+                    <a href="#installation" class="cta-button">Start Free</a>
+                    <a href="#demo" class="cta-secondary">View Demo</a>
                 </div>
 
-                <div class="code-showcase">
-                    <div class="code-comparison">
-                        <div class="code-block" data-title="Enterprise Integration">
-                            <code><span class="highlight">import { MemoriOpenAI } from 'memorits/integrations/openai-dropin/client';</span><br/><br/>
-const client = new MemoriOpenAI(process.env.OPENAI_API_KEY, {<br/>
-  <span class="enterprise-highlight">enableChatMemory: true,</span><br/>
-  <span class="enterprise-highlight">autoInitialize: true,</span><br/>
-  <span class="enterprise-highlight">namespace: 'enterprise-app',</span><br/>
-  <span class="enterprise-highlight">enableRelationshipExtraction: true,</span><br/>
-  <span class="enterprise-highlight">enableConsolidation: true</span><br/>
-});<br/><br/>
-<span style="color: #10b981;">// Enterprise-grade memory with zero code changes</span></code>
-                        </div>
-                    </div>
-                </div>
+                <!-- Code Preview -->
+                <div class="code-preview animate-fade-in-up">
+                    <pre><code><span class="comment">// Replace OpenAI client - zero breaking changes</span>
+<span class="keyword">const</span> client = <span class="keyword">new</span> <span class="function">MemoriOpenAI</span>({
+  apiKey: process.env.OPENAI_API_KEY!,
+  memory: { enableChatMemory: <span class="string">true</span>, sessionId: <span class="string">'my-app'</span> }
+});
 
-                <div class="cta-buttons">
-                    <a href="#enterprise-features" class="cta-button cta-primary">
-                        <i class="fas fa-building"></i>
-                        Enterprise Features
-                    </a>
-                    <a href="https://github.com/mrorigo/memorits/tree/main/examples" class="cta-button cta-secondary">
-                        <i class="fab fa-github"></i>
-                        Production Examples
-                    </a>
-                </div>
-
-                <p style="color: #cbd5e1; margin-top: 2rem; font-size: 0.9rem;">
-                    <i class="fas fa-info-circle"></i> Zero breaking changes • Production-ready architecture • Enterprise-scale capable
-                </p>
-            </div>
-        </div>
-    </section>
-
-    <section class="enterprise-metrics">
-        <div class="container">
-            <div class="metrics-grid">
-                <div class="metric-item">
-                    <div class="metric-number"><10ms</div>
-                    <div class="metric-label">Query Response</div>
-                    <div class="metric-description">Fast search performance for enterprise applications</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-number">SQLite</div>
-                    <div class="metric-label">Primary Backend</div>
-                    <div class="metric-description">Reliable, zero-config database with FTS5 support</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-number">TypeScript</div>
-                    <div class="metric-label">100% Coverage</div>
-                    <div class="metric-description">Complete type safety with compile-time validation</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-number">Enterprise</div>
-                    <div class="metric-label">Architecture</div>
-                    <div class="metric-description">Production-ready design for scalable applications</div>
+<span class="comment">// Use exactly like OpenAI SDK - memory is automatic</span>
+<span class="keyword">const</span> response = <span class="keyword">await</span> client.chat.completions.create({...});
+<span class="keyword">const</span> memories = <span class="keyword">await</span> client.memory.searchMemories(<span class="string">'previous context'</span>);</code></pre>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="enterprise-features" id="enterprise-features">
+    <!-- Features Section -->
+    <section id="features" class="features">
         <div class="container">
-            <h2 class="section-title">Enterprise-Grade Capabilities</h2>
-            <p class="section-subtitle">
-                Built for production environments with enterprise-grade architecture and comprehensive capabilities
-            </p>
+            <div class="section-header animate-fade-in-up">
+                <h2>Powerful Memory Management for AI</h2>
+                <p>Enterprise-grade features designed for production AI applications that need to remember, learn, and adapt.</p>
+            </div>
 
             <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-shield-alt" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Security & Compliance</h3>
-                    <div class="feature-description">
-                        Built with enterprise security in mind with data sanitization, input validation, and audit trails.
-                        Designed to meet compliance requirements for healthcare, finance, and regulated industries.
-                    </div>
+                <div class="feature-card animate-fade-in-up">
+                    <div class="feature-icon">🧠</div>
+                    <h3>MemoryAgent Integration</h3>
+                    <p>LLM-powered conversation analysis for automatic memory extraction with smart classification (ESSENTIAL, CONTEXTUAL, CONVERSATIONAL) and importance scoring.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-chart-line" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Performance Monitoring</h3>
-                    <div class="feature-description">
-                        Real-time dashboards, performance analytics, and health monitoring with alerting.
-                        Track memory usage, search performance, and system optimization metrics.
-                    </div>
+                <div class="feature-card animate-fade-in-up">
+                    <div class="feature-icon">🔄</div>
+                    <h3>OpenAI Drop-in Replacement</h3>
+                    <p>Zero code changes required. Existing OpenAI code works unchanged with automatic memory recording during conversations.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-expand-arrows-alt" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Auto-Scaling Architecture</h3>
-                    <div class="feature-description">
-                        Horizontal scaling with load balancing, connection pooling, and intelligent resource management.
-                        Scales from prototype to millions of memories seamlessly.
-                    </div>
+                <div class="feature-card animate-fade-in-up">
+                    <div class="feature-icon">🔍</div>
+                    <h3>Advanced Search System</h3>
+                    <p>Multiple search strategies including FTS5, LIKE, SEMANTIC, RELATIONSHIP, and TEMPORAL with sophisticated filtering and relationship traversal.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-network-wired" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Advanced Integration</h3>
-                    <div class="feature-description">
-                        REST APIs, webhook support, and native integrations with enterprise systems.
-                        Single sign-on, LDAP integration, and custom authentication providers.
-                    </div>
+                <div class="feature-card animate-fade-in-up">
+                    <div class="feature-icon">🏢</div>
+                    <h3>Enterprise Features</h3>
+                    <p>Conscious memory processing, consolidation with duplicate detection, performance monitoring, background processing, and comprehensive logging.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-database" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Multi-Tenant Architecture</h3>
-                    <div class="feature-description">
-                        Namespace isolation with configurable quotas, usage tracking, and tenant-specific policies.
-                        Secure data separation for SaaS applications and multi-client deployments.
-                    </div>
+                <div class="feature-card animate-fade-in-up">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Multi-Provider Support</h3>
+                    <p>Full compatibility with OpenAI, Anthropic, Ollama, and custom providers through extensible architecture.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-code-branch" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Intelligent Consolidation</h3>
-                    <div class="feature-description">
-                        Automated duplicate detection and merging with quality scoring and rollback capabilities.
-                        Advanced similarity algorithms for maintaining clean, optimized memory stores.
-                    </div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-layer-group" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Multi-Strategy Search</h3>
-                    <div class="feature-description">
-                        FTS5, LIKE, recent, semantic, temporal, and metadata filtering strategies.
-                        Automatic strategy selection based on query characteristics and performance optimization.
-                    </div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-project-diagram" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Memory Relationships</h3>
-                    <div class="feature-description">
-                        LLM-powered relationship extraction and graph analysis for enhanced context understanding.
-                        Multi-hop relationship traversal with confidence scoring and path optimization.
-                    </div>
+                <div class="feature-card animate-fade-in-up">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Type-Safe & Performant</h3>
+                    <p>Built with TypeScript 5.9+ and Zod validation, featuring connection pooling, caching, and optimized memory operations.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="integration-showcase">
+    <!-- Architecture Section -->
+    <section id="architecture" class="architecture">
         <div class="container">
-            <div class="integration-grid">
-                <div class="integration-visual">
-                    <h3>Enterprise Integration Architecture</h3>
-                    <div class="integration-diagram">
-                        <svg viewBox="0 0 600 400" style="width: 100%; height: auto; max-width: 100%;">
-                            <defs>
-                                <linearGradient id="enterpriseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:0.9" />
-                                    <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.9" />
-                                </linearGradient>
-                                <linearGradient id="engineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#10b981;stop-opacity:0.9" />
-                                    <stop offset="100%" style="stop-color:#059669;stop-opacity:0.9" />
-                                </linearGradient>
-                                <marker id="arrowhead" markerWidth="10" markerHeight="7"
-                                        refX="9" refY="3.5" orient="auto">
-                                    <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
-                                </marker>
-                            </defs>
+            <div class="section-header animate-fade-in-up">
+                <h2>Clean Architecture & Enterprise Design</h2>
+                <p>Built with modern TypeScript patterns, domain-driven design, and enterprise-grade infrastructure.</p>
+            </div>
 
-                            <!-- Enterprise Systems Layer -->
-                            <ellipse cx="300" cy="60" rx="250" ry="30"
-                                     fill="url(#enterpriseGradient)" stroke="#60a5fa" stroke-width="2"/>
-                            <text x="300" y="68" text-anchor="middle" fill="white" font-size="16" font-weight="bold">
-                                Enterprise Systems
-                            </text>
-
-                            <!-- Enterprise System Components in a row -->
-                            <g id="enterprise-components">
-                                <circle cx="150" cy="110" r="16" fill="#10b981" opacity="0.9"/>
-                                <text x="150" y="140" text-anchor="middle" fill="#10b981" font-size="12" font-weight="bold">CRM</text>
-
-                                <circle cx="250" cy="110" r="16" fill="#f59e0b" opacity="0.9"/>
-                                <text x="250" y="140" text-anchor="middle" fill="#f59e0b" font-size="12" font-weight="bold">ERP</text>
-
-                                <circle cx="350" cy="110" r="16" fill="#8b5cf6" opacity="0.9"/>
-                                <text x="350" y="140" text-anchor="middle" fill="#8b5cf6" font-size="12" font-weight="bold">Analytics</text>
-
-                                <circle cx="450" cy="110" r="16" fill="#ef4444" opacity="0.9"/>
-                                <text x="450" y="140" text-anchor="middle" fill="#ef4444" font-size="12" font-weight="bold">HR</text>
-                            </g>
-
-                            <!-- Connection Arrow and Text -->
-                            <path d="M 300 140 Q 300 170 300 190" stroke="#64748b" stroke-width="2"
-                                  fill="none" marker-end="url(#arrowhead)" stroke-dasharray="3,3"/>
-                            <text x="300" y="185" text-anchor="middle" fill="#64748b" font-size="11">
-                                REST API / Webhooks
-                            </text>
-
-                            <!-- Memorits Engine Layer -->
-                            <ellipse cx="300" cy="220" rx="200" ry="30"
-                                     fill="url(#engineGradient)" stroke="#10b981" stroke-width="2"/>
-                            <text x="300" y="228" text-anchor="middle" fill="white" font-size="16" font-weight="bold">
-                                Memorits Engine
-                            </text>
-
-                            <!-- Engine Components in a row -->
-                            <g id="engine-components">
-                                <circle cx="170" cy="260" r="12" fill="#10b981" opacity="0.9"/>
-                                <text x="170" y="288" text-anchor="middle" fill="#10b981" font-size="11" font-weight="bold">Memory</text>
-
-                                <circle cx="250" cy="260" r="12" fill="#f59e0b" opacity="0.9"/>
-                                <text x="250" y="288" text-anchor="middle" fill="#f59e0b" font-size="11" font-weight="bold">Search</text>
-
-                                <circle cx="330" cy="260" r="12" fill="#8b5cf6" opacity="0.9"/>
-                                <text x="330" y="288" text-anchor="middle" fill="#8b5cf6" font-size="11" font-weight="bold">Analytics</text>
-
-                                <circle cx="410" cy="260" r="12" fill="#ef4444" opacity="0.9"/>
-                                <text x="410" y="288" text-anchor="middle" fill="#ef4444" font-size="11" font-weight="bold">Monitoring</text>
-                            </g>
-
-                            <!-- Connection Arrow and Database Text -->
-                            <path d="M 300 280 Q 300 310 300 330" stroke="#64748b" stroke-width="2"
-                                  fill="none" marker-end="url(#arrowhead)" stroke-dasharray="3,3"/>
-                            <text x="300" y="337" text-anchor="middle" fill="#64748b" font-size="11">
-                                SQLite
-                            </text>
-
-                            <!-- Bottom Label with dashed border -->
-                            <ellipse cx="300" cy="365" rx="150" ry="20"
-                                     fill="none" stroke="#10b981" stroke-width="1" stroke-dasharray="5,5"/>
-                            <text x="300" y="372" text-anchor="middle" fill="#10b981" font-size="13" font-weight="bold">
-                                Zero-Code Memory Integration
-                            </text>
-                        </svg>
+            <div class="architecture-diagram animate-fade-in-up">
+                <div class="arch-item">
+                    <div class="arch-icon">🏛️</div>
+                    <div>
+                        <strong>Clean Architecture</strong> - Domain-driven design with clear separation of concerns
                     </div>
                 </div>
-
-                <div class="integration-benefits">
-                    <div class="integration-benefit">
-                        <div class="benefit-icon">
-                            <i class="fas fa-plug"></i>
-                        </div>
-                        <div class="benefit-text">
-                            <h4>Zero-Code Integration</h4>
-                            <p>Add memory to existing OpenAI applications with a single import change</p>
-                        </div>
+                <div class="arch-item">
+                    <div class="arch-icon">📦</div>
+                    <div>
+                        <strong>SQLite Backend</strong> - Prisma ORM with optimized queries and connection pooling
                     </div>
-
-                    <div class="integration-benefit">
-                        <div class="benefit-icon">
-                            <i class="fas fa-shield-alt"></i>
-                        </div>
-                        <div class="benefit-text">
-                            <h4>Enterprise Security</h4>
-                            <p>End-to-end encryption, audit trails, and compliance-ready architecture</p>
-                        </div>
+                </div>
+                <div class="arch-item">
+                    <div class="arch-icon">🔍</div>
+                    <div>
+                        <strong>Advanced Search</strong> - FTS5 integration with memory relationships and temporal filtering
                     </div>
-
-                    <div class="integration-benefit">
-                        <div class="benefit-icon">
-                            <i class="fas fa-tachometer-alt"></i>
-                        </div>
-                        <div class="benefit-text">
-                            <h4>Performance Optimized</h4>
-                            <p>Sub-millisecond queries with intelligent caching and optimization</p>
-                        </div>
-                    </div>
-
-                    <div class="integration-benefit">
-                        <div class="benefit-icon">
-                            <i class="fas fa-expand-arrows-alt"></i>
-                        </div>
-                        <div class="benefit-text">
-                            <h4>Auto-Scaling</h4>
-                            <p>Horizontal scaling with load balancing and resource optimization</p>
-                        </div>
+                </div>
+                <div class="arch-item">
+                    <div class="arch-icon">🤖</div>
+                    <div>
+                        <strong>Multi-Provider</strong> - OpenAI, Anthropic, Ollama support with extensible interfaces
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="enterprise-features">
+    <!-- Use Cases Section -->
+    <section id="use-cases" class="use-cases">
         <div class="container">
-            <h2 class="section-title">Built for Enterprise Workloads</h2>
-            <p class="section-subtitle">
-                From prototype to production, Memorits scales with your business and maintains reliability at any scale
-            </p>
+            <div class="section-header animate-fade-in-up">
+                <h2>Real-World Applications</h2>
+                <p>See how Memorits transforms AI applications across different domains and use cases.</p>
+            </div>
 
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-layer-group" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Multi-Strategy Search</h3>
-                    <div class="feature-description">
-                        FTS5, LIKE, recent, semantic, temporal, and metadata filtering strategies.
-                        Automatic strategy selection based on query characteristics and performance optimization.
-                    </div>
+            <div class="use-case-card animate-fade-in-up">
+                <h3>🤖 AI Coding Assistant</h3>
+                <p>Your AI assistant remembers every discussion about your codebase, building exponential value as it accumulates knowledge about projects, preferences, and patterns.</p>
+                <div class="code-example">
+                    <pre><code><span class="keyword">const</span> architectureDecisions = <span class="keyword">await</span> memori.searchMemories(<span class="string">'database schema decisions'</span>);
+<span class="keyword">const</span> stylePreferences = <span class="keyword">await</span> memori.searchMemories(<span class="string">'coding style preferences'</span>);
+<span class="keyword">const</span> previousDiscussions = <span class="keyword">await</span> memori.searchMemories(<span class="string">'authentication system'</span>);</code></pre>
                 </div>
+            </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-compress-alt" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Intelligent Consolidation</h3>
-                    <div class="feature-description">
-                        Automated duplicate detection with quality scoring, safe merging, and rollback capabilities.
-                        Advanced similarity algorithms for maintaining clean, optimized memory stores.
-                    </div>
+            <div class="use-case-card animate-fade-in-up">
+                <h3>💬 Customer Support AI</h3>
+                <p>Remembers customer history across sessions, understands context from previous interactions, and learns from resolution patterns.</p>
+                <div class="code-example">
+                    <pre><code><span class="keyword">const</span> customerHistory = <span class="keyword">await</span> memori.searchMemories(customerId, {
+  categories: [<span class="string">'support'</span>, <span class="string">'technical'</span>],
+  temporalFilters: { relativeExpressions: [<span class="string">'last 30 days'</span>] }
+});</code></pre>
                 </div>
+            </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-project-diagram" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Memory Relationships</h3>
-                    <div class="feature-description">
-                        LLM-powered relationship extraction and graph analysis for enhanced context understanding.
-                        Multi-hop relationship traversal with confidence scoring and path optimization.
-                    </div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-chart-bar" style="color: white;"></i>
-                    </div>
-                    <h3 class="feature-title">Advanced Analytics</h3>
-                    <div class="feature-description">
-                        Comprehensive performance monitoring, usage analytics, and system health dashboards.
-                        Real-time metrics, alerting, and optimization recommendations for production environments.
-                    </div>
+            <div class="use-case-card animate-fade-in-up">
+                <h3>🏢 Enterprise Knowledge Base</h3>
+                <p>Captures institutional knowledge from AI interactions, builds memory relationships between related topics, and provides context-aware responses.</p>
+                <div class="code-example">
+                    <pre><code><span class="keyword">const</span> relatedTopics = <span class="keyword">await</span> memori.searchMemories(<span class="string">'urgent issues'</span>, {
+  limit: <span class="number">20</span>,
+  minImportance: <span class="string">'high'</span>,
+  categories: [<span class="string">'essential'</span>, <span class="string">'contextual'</span>]
+});</code></pre>
                 </div>
             </div>
         </div>
     </section>
 
+    <!-- Installation Section -->
+    <section id="installation" class="installation">
+        <div class="container">
+            <div class="section-header animate-fade-in-up">
+                <h2>Quick Start in 3 Lines</h2>
+                <p>Get up and running with Memorits in minutes, not hours. Zero breaking changes to existing code.</p>
+            </div>
+
+            <div class="install-tabs animate-fade-in-up">
+                <button class="tab-button active" onclick="showTab('basic')">Basic Usage</button>
+                <button class="tab-button" onclick="showTab('advanced')">Advanced Setup</button>
+                <button class="tab-button" onclick="showTab('config')">Configuration</button>
+            </div>
+
+            <div id="basic" class="tab-content active">
+                <h3>🚀 Drop-in Replacement</h3>
+                <div class="code-example">
+                    <pre><code><span class="keyword">import</span> { MemoriOpenAI } <span class="keyword">from</span> <span class="string">'memorits'</span>;
+
+<span class="comment">// Replace OpenAI client - zero breaking changes</span>
+<span class="keyword">const</span> client = <span class="keyword">new</span> <span class="function">MemoriOpenAI</span>({
+  apiKey: process.env.OPENAI_API_KEY!,
+  memory: { enableChatMemory: <span class="string">true</span>, sessionId: <span class="string">'my-app'</span> }
+});
+
+<span class="comment">// Use exactly like OpenAI SDK - memory is automatic</span>
+<span class="keyword">const</span> response = <span class="keyword">await</span> client.chat.completions.create({...});
+<span class="keyword">const</span> memories = <span class="keyword">await</span> client.memory.searchMemories(<span class="string">'previous context'</span>);</code></pre>
+                </div>
+            </div>
+
+            <div id="advanced" class="tab-content">
+                <h3>⚡ Advanced Integration</h3>
+                <div class="code-example">
+                    <pre><code><span class="keyword">import</span> { Memori } <span class="keyword">from</span> <span class="string">'memorits'</span>;
+
+<span class="keyword">const</span> memori = <span class="keyword">new</span> <span class="function">Memori</span>({ databaseUrl: <span class="string">'sqlite:./memories.db'</span> });
+<span class="keyword">await</span> memori.enable();
+
+<span class="comment">// Record conversations with rich metadata</span>
+<span class="keyword">const</span> chatId = <span class="keyword">await</span> memori.recordConversation(userInput, aiOutput, {
+  model: <span class="string">'gpt-4o-mini'</span>,
+  importance: <span class="string">'high'</span>,
+  category: <span class="string">'technical-decision'</span>
+});
+
+<span class="comment">// Search with advanced filtering</span>
+<span class="keyword">const</span> memories = <span class="keyword">await</span> memori.searchMemories(<span class="string">'urgent issues'</span>, {
+  limit: <span class="number">20</span>,
+  minImportance: <span class="string">'high'</span>,
+  categories: [<span class="string">'essential'</span>, <span class="string">'contextual'</span>],
+  temporalFilters: { relativeExpressions: [<span class="string">'last week'</span>] }
+});</code></pre>
+                </div>
+            </div>
+
+            <div id="config" class="tab-content">
+                <h3>🔧 Factory Patterns</h3>
+                <div class="code-example">
+                    <pre><code><span class="keyword">import</span> {
+  MemoriOpenAIFromConfig,
+  MemoriOpenAIFromEnv,
+  MemoriOpenAIFromDatabase
+} <span class="keyword">from</span> <span class="string">'memorits'</span>;
+
+<span class="comment">// From configuration object</span>
+<span class="keyword">const</span> client1 = <span class="keyword">await</span> MemoriOpenAIFromConfig({
+  apiKey: <span class="string">'your-key'</span>,
+  databaseUrl: <span class="string">'sqlite:./memories.db'</span>
+});
+
+<span class="comment">// From environment variables</span>
+<span class="keyword">const</span> client2 = <span class="keyword">await</span> MemoriOpenAIFromEnv();
+
+<span class="comment">// From existing database</span>
+<span class="keyword">const</span> client3 = <span class="keyword">await</span> MemoriOpenAIFromDatabase({
+  databaseUrl: <span class="string">'your-db-url'</span>
+});</code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technical Specifications -->
+    <section id="tech-specs" class="tech-specs">
+        <div class="container">
+            <div class="section-header animate-fade-in-up">
+                <h2>Technical Excellence</h2>
+                <p>Built for enterprise production environments with performance, reliability, and scalability in mind.</p>
+            </div>
+
+            <div class="spec-grid">
+                <div class="spec-item animate-fade-in-up">
+                    <span class="spec-value">5.9+</span>
+                    <span class="spec-label">TypeScript Version</span>
+                </div>
+                <div class="spec-item animate-fade-in-up">
+                    <span class="spec-value">SQLite</span>
+                    <span class="spec-label">Database Backend</span>
+                </div>
+                <div class="spec-item animate-fade-in-up">
+                    <span class="spec-value">FTS5</span>
+                    <span class="spec-label">Search Engine</span>
+                </div>
+                <div class="spec-item animate-fade-in-up">
+                    <span class="spec-value">Zod</span>
+                    <span class="spec-label">Runtime Validation</span>
+                </div>
+                <div class="spec-item animate-fade-in-up">
+                    <span class="spec-value">4</span>
+                    <span class="spec-label">Provider Support</span>
+                </div>
+                <div class="spec-item animate-fade-in-up">
+                    <span class="spec-value">0</span>
+                    <span class="spec-label">Breaking Changes</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <h2>Ready to Transform Your AI?</h2>
+            <p>Join developers worldwide who are building smarter, more context-aware AI applications with Memorits.</p>
+            <div class="hero-cta">
+                <a href="https://npmjs.com/package/memorits" class="cta-button">Install Now</a>
+                <a href="https://github.com/mrorigo/memorits" class="cta-secondary">View on GitHub</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
     <footer class="footer">
         <div class="container">
             <div class="footer-links">
-                <a href="https://github.com/mrorigo/memorits" class="footer-link">GitHub</a>
-                <a href="https://npmjs.com/package/memorits" class="footer-link">NPM</a>
-                <a href="./developer/" class="footer-link">Documentation</a>
-                <a href="https://github.com/mrorigo/memorits/blob/main/LICENSE" class="footer-link">License</a>
+                <a href="https://memorits.dev">Documentation</a>
+                <a href="https://github.com/mrorigo/memorits">GitHub</a>
+                <a href="https://npmjs.com/package/memorits">NPM</a>
+                <a href="#api">API Reference</a>
+                <a href="#examples">Examples</a>
             </div>
-            <p class="footer-text">
-                © 2025 Memorits. Production-ready memory management for AI applications.
-                Built for scale and reliability in enterprise environments.
-            </p>
+            <p>&copy; 2025 Memorits. Built with ❤️ for AI developers.</p>
         </div>
     </footer>
 
     <script>
-        // Simple smooth scrolling for anchor links
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Remove active class from all tab buttons
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+
+            // Add active class to clicked button
+            event.target.classList.add('active');
+        }
+
+        // Smooth scrolling for navigation links
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
                 e.preventDefault();
@@ -885,19 +1068,132 @@ const client = new MemoriOpenAI(process.env.OPENAI_API_KEY, {<br/>
             });
         });
 
-        // Add subtle hover effects
-        document.addEventListener('DOMContentLoaded', () => {
-            const cards = document.querySelectorAll('.feature-card');
-            cards.forEach(card => {
-                card.addEventListener('mouseenter', () => {
-                    card.style.transform = 'translateY(-5px) scale(1.02)';
+        // Add scroll effect to navbar
+        window.addEventListener('scroll', function() {
+            const navbar = document.querySelector('.navbar');
+            if (window.scrollY > 100) {
+                navbar.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
+            } else {
+                navbar.style.boxShadow = 'none';
+            }
+        });
+
+        // Animate elements on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('animate-fade-in-up');
+                }
+            });
+        }, observerOptions);
+
+        // Observe all feature cards and sections
+        document.querySelectorAll('.feature-card, .use-case-card, .spec-item').forEach(el => {
+            observer.observe(el);
+        });
+
+        // Add loading animation to code blocks
+        document.querySelectorAll('.code-example').forEach(block => {
+            block.style.opacity = '0';
+            block.style.transform = 'translateY(20px)';
+
+            setTimeout(() => {
+                block.style.transition = 'all 0.6s ease';
+                block.style.opacity = '1';
+                block.style.transform = 'translateY(0)';
+            }, Math.random() * 500 + 200);
+        });
+
+        // Mobile menu toggle (if needed for responsive)
+        const mobileMenuButton = document.createElement('button');
+        mobileMenuButton.classList.add('mobile-menu-button');
+        mobileMenuButton.innerHTML = '☰';
+        mobileMenuButton.style.display = 'none';
+        mobileMenuButton.style.background = 'none';
+        mobileMenuButton.style.border = 'none';
+        mobileMenuButton.style.fontSize = '1.5rem';
+        mobileMenuButton.style.cursor = 'pointer';
+
+        // Add to navbar if screen is small
+        function checkScreenSize() {
+            const navLinks = document.querySelector('.nav-links');
+            if (window.innerWidth <= 768) {
+                if (!document.querySelector('.mobile-menu-button')) {
+                    document.querySelector('.navbar .container').appendChild(mobileMenuButton);
+                    navLinks.style.display = 'none';
+                }
+            } else {
+                if (document.querySelector('.mobile-menu-button')) {
+                    document.querySelector('.mobile-menu-button').remove();
+                    navLinks.style.display = 'flex';
+                }
+            }
+        }
+
+        window.addEventListener('resize', checkScreenSize);
+        checkScreenSize();
+
+        // Performance monitoring
+        function measurePerformance() {
+            if ('performance' in window) {
+                window.addEventListener('load', function() {
+                    setTimeout(function() {
+                        const perfData = performance.getEntriesByType('navigation')[0];
+                        if (perfData) {
+                            const loadTime = perfData.loadEventEnd - perfData.loadEventStart;
+                            console.log('Page load time:', loadTime + 'ms');
+                        }
+                    }, 0);
                 });
-                card.addEventListener('mouseleave', () => {
-                    card.style.transform = 'translateY(0) scale(1)';
+            }
+        }
+
+        measurePerformance();
+
+        // Lazy load non-critical elements
+        function lazyLoad() {
+            const images = document.querySelectorAll('img[data-src]');
+            const imageObserver = new IntersectionObserver(function(entries, observer) {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        img.src = img.dataset.src;
+                        img.classList.remove('lazy');
+                        observer.unobserve(img);
+                    }
                 });
             });
-        });
+
+            images.forEach(img => imageObserver.observe(img));
+        }
+
+        // Initialize lazy loading
+        if ('IntersectionObserver' in window) {
+            lazyLoad();
+        }
+
+        // Preload critical resources
+        function preloadCriticalResources() {
+            const criticalFonts = [
+                // Add any critical font URLs here
+            ];
+
+            criticalFonts.forEach(font => {
+                const link = document.createElement('link');
+                link.rel = 'preload';
+                link.href = font;
+                link.as = 'font';
+                link.crossOrigin = 'anonymous';
+                document.head.appendChild(link);
+            });
+        }
+
+        preloadCriticalResources();
     </script>
 </body>
-
 </html>
